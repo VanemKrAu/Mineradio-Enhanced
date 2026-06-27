@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Mineradio Tauri Rewrite",
         "width": 1280,
         "height": 720,
