@@ -48,3 +48,40 @@ export type {
 	ListAnimateOptions,
 	CreateControlConsoleMotionOptions,
 } from "./control/control-console-motion";
+
+export { createAudioReactivity } from "./audio/audio-reactivity";
+export type {
+	AudioSnapshot,
+	AudioFrameBytes,
+	AudioFrameSource,
+	BeatHandler,
+	AudioReactivityOptions,
+	AudioReactivityEngine,
+} from "./audio/audio-snapshot";
+export { createPeakFollower } from "./audio/peak-followers";
+export type { PeakFollower, PeakFollowerParams } from "./audio/peak-followers";
+export {
+	analyzeMainFrame,
+	analyzeBeatFrame,
+	beatBandRms,
+	DEFAULT_BIN_RANGES,
+	DEFAULT_BEAT_BAND_HZ,
+} from "./audio/frequency-bands";
+export type {
+	MainBinRanges,
+	MainBandAverages,
+	BeatBandHz,
+	BeatBandSamples,
+} from "./audio/frequency-bands";
+export {
+	createBeatEngine,
+	DEFAULT_BEAT_ENGINE_OPTS,
+} from "./audio/beat-engine";
+export type {
+	BeatSamples,
+	BeatEngineFrame,
+	BeatEngineOpts,
+	BeatEngine,
+	BeatOnsetCallback,
+	RtStateView,
+} from "./audio/beat-engine";

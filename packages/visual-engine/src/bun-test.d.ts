@@ -11,6 +11,9 @@ declare module "bun:test" {
     toBeLessThan(expected: number): void;
     toBeLessThanOrEqual(expected: number): void;
     toContain(expected: unknown): void;
+    toBeCloseTo(expected: number, precision?: number): void;
+    toBeTruthy(): void;
+    toBeFalsy(): void;
   }
   export interface ExpectWithNot extends ExpectBase {
     readonly not: Pick<ExpectBase, "toBe" | "toEqual" | "toBeNull" | "toContain">;
