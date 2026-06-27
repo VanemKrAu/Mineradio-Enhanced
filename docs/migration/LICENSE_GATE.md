@@ -53,21 +53,29 @@
 
 | Project | URL | License | Active | Usage | Copy Code? | Risk | Decision |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 待补充 | 待补充 | 待补充 | 待补充 | 协议参考 / 依赖 / 代码移植 | 待补充 | 待补充 | 待补充 |
+| jsososo/QQMusicApi | https://github.com/jsososo/QQMusicApi | GPL-3.0 | 是（1.6k stars） | 依赖（npm 包 `qq-music-api`），接入 search/songUrl/lyric/playlist/loginStatus/logout | 否（依赖调用，不拷代码） | 与本项目同 GPL-3.0，无歧义 | 接入 |
+| sansenjian/qq-music-api | https://github.com/sansenjian/qq-music-api | MIT 文件 + README 「不可商业用途」附加 | 是（fork of Rain120） | 评估候选 | 否 | MIT 附加非商业条款与 GPL-3.0 「no further restrictions」冲突，组合作品不可在 GPL-3.0 下分发 | 不接入 |
 
 ## Dependency Audit 表
 
 | Dependency | Ecosystem | License | Purpose | Distribution Risk | Decision |
 | --- | --- | --- | --- | --- | --- |
-| Tauri 2 | Rust | 待审核 | 桌面壳 | 待审核 | 待审核 |
-| Bun | Runtime | 待审核 | sidecar runtime/workspace | 待审核 | 待审核 |
-| Vite | npm | 待审核 | 前端构建 | 待审核 | 待审核 |
-| React | npm | 待审核 | UI | 待审核 | 待审核 |
-| Zustand | npm | 待审核 | 状态管理 | 待审核 | 待审核 |
-| zod | npm | 待审核 | schema validation | 待审核 | 待审核 |
-| NeteaseCloudMusicApi | npm | 待审核 | 网易云 provider | 待审核 | 待审核 |
-| Three.js | npm/vendor | 待审核 | 3D/WebGL | 待审核 | 待审核 |
-| GSAP | npm/vendor | 待审核 | animation | 标准功能可用性待确认 | 待审核 |
+| Tauri 2 | Rust (crate) | MIT/Apache-2.0 | 桌面壳 + updater + window/sidecar 能力 | 待审（Rust crate license 待逐个核对） | 待审核 |
+| Bun | Runtime | MIT | sidecar runtime/workspace | MIT 兼容 | 通过 |
+| Vite | npm | MIT | 前端构建 | MIT 兼容 | 通过 |
+| React | npm | MIT | UI | MIT 兼容 | 通过 |
+| Zustand | npm | MIT | 状态管理 | MIT 兼容 | 通过 |
+| zod | npm | MIT | schema validation | MIT 兼容 | 通过 |
+| @tauri-apps/api | npm | MIT/Apache-2.0 | Tauri 前端 IPC | 兼容 | 通过 |
+| dirs (crate) | Rust (crate) | MIT | app data/log 路径解析 | MIT 兼容 | 通过 |
+| hana-music-api | npm | MIT | Netease provider（主用） | MIT 兼容；极新 2 stars/v1.1.1，parity 风险见 DECISIONS.md A8 | 通过（带 parity 风险） |
+| NeteaseCloudMusicApi | npm | ISC | Netease provider（回退） | ISC 兼容；维护人历史有争议 | 通过（回退路径保留） |
+| Three.js | npm/vendor | MIT | 3D/WebGL | MIT 兼容 | 待审核（引入时再核） |
+| GSAP | npm/vendor | 标准功能 MIT/合规模型 | animation | 会员/闭源插件禁用 | 待审核（仅用标准功能） |
+| jsososo/qq-music-api（npm `qq-music-api`） | npm | GPL-3.0 | QQ provider | 与本项目同 GPL-3.0，组合作品可分发 | 通过 |
+| hono | npm (hana 依赖) | MIT | HTTP 框架 | MIT 兼容 | 通过 |
+| music-metadata | npm (hana 依赖) | MIT | 音频元数据 | MIT 兼容 | 通过 |
+| qrcode | npm (hana 依赖) | MIT/BSD-3-Clause | QR 登录 | 兼容 | 通过 |
 
 ## 通过标准
 
