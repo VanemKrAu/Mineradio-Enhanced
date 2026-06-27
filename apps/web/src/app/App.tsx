@@ -47,6 +47,7 @@ export function App(): ReactElement {
 	const [splashActive, setSplashActive] = useState<boolean>(SHOW_SPLASH);
 
 	const currentTrack = usePlaybackStore((s) => s.currentTrack);
+	const queue = usePlaybackStore((s) => s.queue);
 	const isPlaying = usePlaybackStore((s) => s.isPlaying);
 	const positionMs = usePlaybackStore((s) => s.positionMs);
 	const status = useProviderStore((s) => s.status);
@@ -255,6 +256,8 @@ export function App(): ReactElement {
 				lyricsPayload={lyricsPayload}
 				positionMs={positionMs}
 				isPlaying={isPlaying}
+				queue={queue}
+				currentTrack={currentTrack}
 				coverResolution={1.55}
 				splashActive={splashActive}
 			/>

@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import {
 	createAudioReactivity,
 	createCinemaCamera,
+	createConnectorParticles,
 	createHomeVisual,
 	createRenderLoop,
 	createRenderer,
@@ -18,7 +19,9 @@ import {
 	type LyricLine as VisualLyricLine,
 	type RendererHandle,
 	type RenderLoop,
+	type ConnectorParticles,
 	type ShelfManager,
+	type ShelfItem,
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
 
@@ -28,6 +31,8 @@ export interface VisualEngineRefs {
 	positionRef: RefObject<number>;
 	isPlayingRef: RefObject<boolean>;
 	lyricLinesRef: RefObject<VisualLyricLine[]>;
+	shelfItemsRef: RefObject<ShelfItem[]>;
+	shelfItemsVersionRef: RefObject<number>;
 	splashActiveRef: RefObject<boolean>;
 	lifecycleRef: RefObject<StageLyricsLifecycle | null>;
 	coverResolution: number;
@@ -40,6 +45,7 @@ interface MountedHandles {
 	cinema: CinemaCamera;
 	homeVisual: HomeVisual;
 	shelfManager: ShelfManager;
+	connectorParticles: ConnectorParticles;
 	lifecycle: StageLyricsLifecycle;
 	renderLoop: RenderLoop;
 	audioContext: AudioContext | null;
@@ -199,6 +205,10 @@ function disposeHandles(handles: MountedHandles | null): void {
 	} catch {
 	}
 	try {
+		handles.connectorParticles.dispose();
+	} catch {
+	}
+	try {
 		handles.cinema.dispose();
 	} catch {
 	}
@@ -274,6 +284,22 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				renderer.dispose();
 				return;
 			}
+			const connectorParticles = await createConnectorParticles({
+				scene: renderer.scene,
+			});
+			if (connectorParticles.object) {
+				connectorParticles.object.visible = false;
+				connectorParticles.object.renderOrder = 49;
+			}
+			if (cancelled || disposedRef.current) {
+				connectorParticles.dispose();
+				shelfManager.dispose();
+				homeVisual.dispose();
+				audioEngine.dispose();
+				cinema.dispose();
+				renderer.dispose();
+				return;
+			}
 			const lifecycle = createStageLyricsLifecycle({
 				scene: renderer.scene,
 				currentTimeSupplier: () => refs.positionRef.current / 1000,
@@ -283,15 +309,8 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				pixelScale: 1,
 				reduceMotion: prefersReducedMotion,
 			});
-			shelfManager.setData([
-				{
-					type: "playlist",
-					title: "Mineradio",
-					sub: "Tauri shelf host fixture",
-					tag: "PLAYLIST",
-					playlistId: "fixture",
-				},
-			]);
+			let syncedShelfItemsVersion = refs.shelfItemsVersionRef.current;
+			shelfManager.setData(refs.shelfItemsRef.current);
 			shelfManager.setShelfVisibility(0);
 			void lifecycle.mount(renderer.scene);
 			refs.lifecycleRef.current = lifecycle;
@@ -318,7 +337,23 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			const offCamera = renderLoop.registerStep(RenderStepSlot.CameraCinematic, (ctx) => {
 				cinema.update(ctx);
 			});
-			const offShelf = renderLoop.registerStep(RenderStepSlot.Shelf, createShelfStep(shelfManager));
+			const shelfStep = createShelfStep(shelfManager);
+			const offShelf = renderLoop.registerStep(RenderStepSlot.Shelf, (ctx) => {
+				if (syncedShelfItemsVersion !== refs.shelfItemsVersionRef.current) {
+					syncedShelfItemsVersion = refs.shelfItemsVersionRef.current;
+					shelfManager.setData(refs.shelfItemsRef.current);
+				}
+				shelfStep(ctx);
+				const connectorVisible =
+					shelfManager.getMode() === "stage" &&
+					shelfManager.getShelfVisibility() > 0 &&
+					shelfManager.getData().length > 0;
+				if (connectorParticles.object) {
+					connectorParticles.object.visible = connectorVisible;
+				}
+				connectorParticles.setIntensity(connectorVisible ? shelfManager.getShelfVisibility() : 0);
+				connectorParticles.update(ctx);
+			});
 			const offLyrics = renderLoop.registerStep(RenderStepSlot.StageLyrics, (ctx) => {
 				lifecycle.update(ctx);
 			});
@@ -331,6 +366,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				cinema,
 				homeVisual,
 				shelfManager,
+				connectorParticles,
 				lifecycle,
 				renderLoop,
 				audioContext: null,
@@ -351,5 +387,5 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			handles = null;
 			refs.lifecycleRef.current = null;
 		};
-	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.splashActiveRef, refs.lifecycleRef, refs.coverResolution, refs.fxDefaults]);
+	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.lifecycleRef, refs.coverResolution, refs.fxDefaults]);
 }

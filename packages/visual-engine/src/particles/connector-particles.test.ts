@@ -89,6 +89,14 @@ test("createConnectorParticles adds Points to scene; frustumCulled=false; materi
 	expect(mat.blending).toBe(2);
 });
 
+test("createConnectorParticles starts hidden at shelf connector render order", async () => {
+	const scene = makeFakeScene();
+	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
+	const obj = cp.object as unknown as { visible: boolean; renderOrder: number };
+	expect(obj.visible).toBe(false);
+	expect(obj.renderOrder).toBe(49);
+});
+
 test("uniforms match baseline connector/shelf-center names (uTime/uEnergy/uIntensity/uColorMix/uPixel/uTrackScale=1)", async () => {
 	const scene = makeFakeScene();
 	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
@@ -101,6 +109,14 @@ test("uniforms match baseline connector/shelf-center names (uTime/uEnergy/uInten
 	expect(uniforms.uTrackScale.value).toBe(1);
 	expect(uniforms.uPixel.value).toBe(1);
 	expect(uniforms.uIntensity.value).toBe(0);
+});
+
+test("fragment shader multiplies particle alpha by uIntensity for shelf fade", async () => {
+	const scene = makeFakeScene();
+	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
+	const shader = (cp.object as unknown as { material: { fragmentShader: string } }).material.fragmentShader;
+	expect(shader).toContain("uniform float uIntensity;");
+	expect(shader).toContain("* uIntensity");
 });
 
 test("update(ctx) flows snapshot.energy into uEnergy and reads uTime from ctx.uniforms.uTime.value", async () => {

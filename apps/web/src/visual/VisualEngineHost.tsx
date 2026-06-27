@@ -1,12 +1,14 @@
-import { useEffect, useRef, type ReactElement, type RefObject } from "react";
-import type { LyricPayload, LyricLine as SharedLyricLine } from "@mineradio/shared";
+import { useEffect, useMemo, useRef, type ReactElement, type RefObject } from "react";
+import type { LyricPayload, LyricLine as SharedLyricLine, Track } from "@mineradio/shared";
 import {
 	type FxState,
 	type LyricLine as VisualLyricLine,
+	type ShelfItem,
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
 import { useVisualEngine } from "./useVisualEngine";
 import { PlayerController } from "../audio/player-controller";
+import { mapQueueToShelfItems } from "./shelf-items";
 
 export interface VisualEngineHostProps {
 	audioElementRef: RefObject<HTMLAudioElement | null>;
@@ -14,6 +16,8 @@ export interface VisualEngineHostProps {
 	lyricsPayload: LyricPayload | null;
 	positionMs: number;
 	isPlaying: boolean;
+	queue?: Track[];
+	currentTrack?: Track | null;
 	coverResolution?: number;
 	fxDefaults?: Partial<FxState>;
 	splashActive?: boolean;
@@ -32,12 +36,24 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const positionRef = useRef<number>(props.positionMs);
 	const isPlayingRef = useRef<boolean>(props.isPlaying);
 	const lyricLinesRef = useRef<VisualLyricLine[]>(mapLyricPayload(props.lyricsPayload));
+	const shelfItemsRef = useRef<ShelfItem[]>([]);
+	const shelfItemsVersionRef = useRef<number>(0);
 	const splashActiveRef = useRef<boolean>(props.splashActive ?? false);
 	const lifecycleRef = useRef<StageLyricsLifecycle | null>(null);
 
 	positionRef.current = props.positionMs;
 	isPlayingRef.current = props.isPlaying;
 	splashActiveRef.current = props.splashActive ?? false;
+
+	const nextShelfItems = useMemo(
+		() => mapQueueToShelfItems(props.queue ?? [], props.currentTrack ?? null),
+		[props.queue, props.currentTrack],
+	);
+
+	useEffect(() => {
+		shelfItemsRef.current = nextShelfItems;
+		shelfItemsVersionRef.current += 1;
+	}, [nextShelfItems]);
 
 	useEffect(() => {
 		lyricLinesRef.current = mapLyricPayload(props.lyricsPayload);
@@ -56,6 +72,8 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		positionRef,
 		isPlayingRef,
 		lyricLinesRef,
+		shelfItemsRef,
+		shelfItemsVersionRef,
 		splashActiveRef,
 		lifecycleRef,
 		coverResolution: props.coverResolution ?? 1.55,

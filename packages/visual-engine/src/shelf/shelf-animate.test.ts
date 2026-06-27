@@ -44,6 +44,33 @@ test("ShelfManager.setShelfPane tracks pane memory and switches shelfPane", () =
 	expect(m.getState().paneMemory.mine).toBe(2);
 });
 
+test("ShelfManager.setShelfPane restores remembered target, overshoots by pane direction, and timestamps switch", () => {
+	const m = createShelfManager({});
+	m.setData(Array.from({ length: 8 }, (_, i) => ({ type: "queue", title: `Q${i}` })));
+	m.getState().centerTarget = 2.4;
+	m.getState().paneMemory.fav = 5;
+
+	m.setShelfPane("fav", 12.5);
+
+	expect(m.getShelfPane()).toBe("fav");
+	expect(m.getState().paneMemory.mine).toBe(2);
+	expect(m.getState().centerTarget).toBe(5);
+	expect(m.getState().centerIdx).toBe(5);
+	expect(m.getState().centerSmooth).toBeCloseTo(6.85, 5);
+	expect(m.getState().paneSwitchDir).toBe(1);
+	expect(m.getState().paneSwitchAt).toBe(12.5);
+	expect(m.getState().shelfOpenAnimAt).toBe(12.5);
+
+	m.getState().paneMemory.mine = 1;
+	m.setShelfPane("mine", 13.25);
+	expect(m.getState().centerTarget).toBe(1);
+	expect(m.getState().centerIdx).toBe(1);
+	expect(m.getState().centerSmooth).toBeCloseTo(0, 5);
+	expect(m.getState().paneSwitchDir).toBe(-1);
+	expect(m.getState().paneSwitchAt).toBe(13.25);
+	expect(m.getState().shelfOpenAnimAt).toBe(13.25);
+});
+
 test("ShelfManager.setMode switches state.mode", () => {
 	const m = createShelfManager({});
 	m.setMode("stage");

@@ -42,12 +42,13 @@ void main(){
 
 const CONNECTOR_FRAGMENT_SHADER = `
 precision mediump float;
+uniform float uIntensity;
 varying float vT;
 varying float vRand;
 void main(){
 	vec2 d = gl_PointCoord - 0.5;
 	float r = length(d);
-	float a = smoothstep(0.5, 0.0, r) * (0.35 + vRand * 0.65);
+	float a = smoothstep(0.5, 0.0, r) * (0.35 + vRand * 0.65) * uIntensity;
 	vec3 c = mix(vec3(0.72, 0.55, 0.30), vec3(0.95, 0.85, 0.65), vT);
 	gl_FragColor = vec4(c, a);
 }
@@ -117,7 +118,8 @@ export async function createConnectorParticles(
 	});
 	const points = new THREE.Points(geo, material);
 	points.frustumCulled = false;
-	points.renderOrder = 0;
+	points.renderOrder = 49;
+	points.visible = false;
 	opts.scene.add(points);
 
 	let currentSeed = 0;

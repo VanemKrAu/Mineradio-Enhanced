@@ -59,7 +59,7 @@ export interface ShelfManager {
 	getMode(): ShelfMode;
 	setSelectedIdx(idx: number): void;
 	getSelectedIdx(): number;
-	setShelfPane(pane: ShelfPane): void;
+	setShelfPane(pane: ShelfPane, nowSeconds?: number): void;
 	getShelfPane(): ShelfPane;
 	setShelfVisibility(v: number): void;
 	getShelfVisibility(): number;
@@ -160,11 +160,24 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		getSelectedIdx() {
 			return state.selectedIdx;
 		},
-		setShelfPane(pane) {
+		setShelfPane(pane, nowSeconds) {
 			if (pane === state.shelfPane) return;
+			const max = Math.max(0, data.length - 1);
 			const remembered = Math.max(0, Math.round(state.centerTarget));
 			state.paneMemory[state.shelfPane] = remembered;
 			state.shelfPane = pane;
+			const target = clampInt(state.paneMemory[pane] ?? 0, 0, max);
+			state.centerTarget = target;
+			state.centerIdx = target;
+			state.centerSmooth = clampInt(
+				target + (pane === "fav" ? 1.85 : -1.85),
+				0,
+				max,
+			);
+			state.paneSwitchDir = pane === "fav" ? 1 : -1;
+			const now = nowSeconds ?? nowFn() / 1000;
+			state.paneSwitchAt = now;
+			state.shelfOpenAnimAt = now;
 		},
 		getShelfPane() {
 			return state.shelfPane;
