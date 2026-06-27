@@ -1,0 +1,29 @@
+{
+  "capturedAt": "",
+  "repositoryCommit": "",
+  "baselineTag": "",
+  "branch": "",
+  "electronVersion": "",
+  "appVersion": "",
+  "windowSizes": ["1280x720", "1920x1080"],
+  "displayScale": "",
+  "baselineStoragePath": "",
+  "testTrack": {
+    "provider": "",
+    "id": "",
+    "title": "",
+    "artists": [],
+    "album": "",
+    "coverSource": "",
+    "lyricSource": ""
+  },
+  "visualArchive": {
+    "name": "",
+    "source": "",
+    "notes": ""
+  },
+  "captures": {
+    "screenshots": [],
+    "recordings": []
+  }
+}

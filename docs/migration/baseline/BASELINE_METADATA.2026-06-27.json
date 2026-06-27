@@ -1,0 +1,72 @@
+{
+  "capturedAt": "2026-06-27",
+  "repositoryCommit": "ced5ec61ce5241371da36abd82cbebec2868e92c",
+  "baselineTag": "electron-baseline-2026-06-27",
+  "branch": "codex/tauri-migration",
+  "electronVersion": "^42.4.1",
+  "appVersion": "1.1.1",
+  "windowSizes": ["1280x720", "1920x1080"],
+  "displayScale": "100% (AppliedDPI=96)",
+  "baselineStoragePath": "verification\\baseline\\2026-06-27-ced5ec61",
+  "detectedDisplays": [
+    {
+      "name": "通用即插即用监视器",
+      "width": 2560,
+      "height": 1600
+    }
+  ],
+  "testTrack": {
+    "provider": "",
+    "id": "",
+    "title": "",
+    "artists": [],
+    "album": "",
+    "coverSource": "",
+    "lyricSource": ""
+  },
+  "visualArchive": {
+    "name": "",
+    "source": "",
+    "notes": ""
+  },
+  "captures": {
+    "screenshots": [
+      {
+        "kind": "home-idle",
+        "windowSize": "1920x1080",
+        "path": "verification\\baseline\\2026-06-27-ced5ec61\\home-idle-window.png",
+        "captureMethod": "Windows screenshot helper by window handle",
+        "verifiedNonBlank": true
+      },
+      {
+        "kind": "home-idle",
+        "windowSize": "1280x720",
+        "path": "verification\\baseline\\2026-06-27-ced5ec61\\home-idle-1280x720.png",
+        "captureMethod": "SetWindowPos to 1280x720, then Windows screenshot helper by window handle",
+        "verifiedNonBlank": true
+      },
+      {
+        "kind": "login-modal",
+        "windowSize": "1280x720",
+        "path": "verification\\baseline\\2026-06-27-ced5ec61\\main-ui-1280x720.png",
+        "captureMethod": "CDP click through startup, then Windows screenshot helper by window handle",
+        "verifiedNonBlank": true
+      },
+      {
+        "kind": "main-ui",
+        "windowSize": "1280x720",
+        "path": "verification\\baseline\\2026-06-27-ced5ec61\\main-ui-no-modal-1280x720.png",
+        "captureMethod": "CDP Escape to close login modal, then Windows screenshot helper by window handle",
+        "verifiedNonBlank": true
+      },
+      {
+        "kind": "visual-console-open",
+        "windowSize": "1280x720",
+        "path": "verification\\baseline\\2026-06-27-ced5ec61\\visual-console-panel-1280x720.png",
+        "captureMethod": "CDP clicks for DIY and visual console panel, then Windows screenshot helper by window handle",
+        "verifiedNonBlank": true
+      }
+    ],
+    "recordings": []
+  }
+}
