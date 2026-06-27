@@ -11,6 +11,8 @@ test("createShelfState seeds centerIdx/centerTarget/centerSmooth at 0", () => {
 test("createShelfState default mode is side and shelfPane is mine", () => {
 	const s = createShelfState();
 	expect(s.mode).toBe("side");
+	expect(s.presence).toBe("always");
+	expect(s.appRevealed).toBe(true);
 	expect(s.shelfPane).toBe("mine");
 });
 

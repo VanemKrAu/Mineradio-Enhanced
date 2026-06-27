@@ -43,6 +43,7 @@ export interface VisualEngineRefs {
 	shelfItemsRef: RefObject<ShelfItem[]>;
 	shelfItemsVersionRef: RefObject<number>;
 	splashActiveRef: RefObject<boolean>;
+	shelfModeRef?: RefObject<string>;
 	shelfCameraModeRef?: RefObject<string>;
 	shelfPresenceRef?: RefObject<string>;
 	wallpaperSafeRef?: RefObject<boolean>;
@@ -350,7 +351,6 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			});
 			let syncedShelfItemsVersion = refs.shelfItemsVersionRef.current;
 			shelfManager.setData(refs.shelfItemsRef.current);
-			shelfManager.setShelfVisibility(0);
 			void lifecycle.mount(renderer.scene);
 			refs.lifecycleRef.current = lifecycle;
 			try {
@@ -376,7 +376,11 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			const offCamera = renderLoop.registerStep(RenderStepSlot.CameraCinematic, (ctx) => {
 				cinema.update(ctx);
 			});
-			const shelfStep = createShelfStep(shelfManager);
+			const shelfStep = createShelfStep(shelfManager, {
+				getShelfMode: () => refs.shelfModeRef?.current ?? refs.fxDefaults?.shelf ?? "side",
+				getShelfPresence: () => refs.shelfPresenceRef?.current ?? refs.fxDefaults?.shelfPresence ?? "always",
+				getSplashActive: () => refs.splashActiveRef.current,
+			});
 			const offShelf = renderLoop.registerStep(RenderStepSlot.Shelf, (ctx) => {
 				if (syncedShelfItemsVersion !== refs.shelfItemsVersionRef.current) {
 					syncedShelfItemsVersion = refs.shelfItemsVersionRef.current;
@@ -486,5 +490,5 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			handles = null;
 			refs.lifecycleRef.current = null;
 		};
-	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.onShelfPlayQueueIndexRef, refs.lifecycleRef, refs.coverResolution]);
+	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.onShelfPlayQueueIndexRef, refs.lifecycleRef, refs.coverResolution]);
 }

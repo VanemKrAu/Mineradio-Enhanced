@@ -242,6 +242,7 @@ export {
 } from "./shelf/shelf-state";
 export type {
 	ShelfMode,
+	ShelfPresence,
 	ShelfPane,
 	ShelfState,
 } from "./shelf/shelf-state";
@@ -288,6 +289,7 @@ export type {
 	ShelfPrimaryHit,
 } from "./shelf/shelf-activation";
 export { createShelfStep, SHELF_RENDER_STEP_SLOT } from "./shelf/shelf-step";
+export type { ShelfStepOptions } from "./shelf/shelf-step";
 export {
 	SHELF_CARD_CANVAS_WIDTH,
 	SHELF_CARD_CANVAS_HEIGHT,

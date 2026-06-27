@@ -1,5 +1,7 @@
 export type ShelfMode = "side" | "stage" | "off";
 
+export type ShelfPresence = "always" | "auto";
+
 export type ShelfPane = "mine" | "fav";
 
 export interface ShelfState {
@@ -11,6 +13,8 @@ export interface ShelfState {
 	paneSwitchAt: number;
 	paneSwitchDir: number;
 	mode: ShelfMode;
+	presence: ShelfPresence;
+	appRevealed: boolean;
 	lastSig: string;
 	selectedIdx: number;
 	shelfPane: ShelfPane;
@@ -32,6 +36,8 @@ export function createShelfState(): ShelfState {
 		paneSwitchAt: -10,
 		paneSwitchDir: 1,
 		mode: "side",
+		presence: "always",
+		appRevealed: true,
 		lastSig: "",
 		selectedIdx: -1,
 		shelfPane: "mine",

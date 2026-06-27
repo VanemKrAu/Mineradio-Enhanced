@@ -10,6 +10,7 @@ function closedSnapshot() {
 		centerIdx: 0,
 		centerSmooth: 0,
 		mode: "stage" as const,
+		presence: "always" as const,
 		shelfPane: "mine" as const,
 		shelfVisibility: 1,
 		openCardIdx: -1,

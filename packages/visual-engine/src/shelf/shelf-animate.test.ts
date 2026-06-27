@@ -239,6 +239,95 @@ test("ShelfManager.setShelfVisibility stays in state for downstream consumers", 
 	expect(m.getSnapshot().shelfVisibility).toBeCloseTo(0.42, 4);
 });
 
+test("ShelfManager.update fades stage shelf with data up by baseline 0.22 on first visible frame", () => {
+	const m = createShelfManager({});
+	m.setMode("stage");
+	m.setData([{ type: "queue", title: "Stage item" }]);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getShelfVisibility()).toBeCloseTo(0.22, 5);
+});
+
+test("ShelfManager.update fades side shelf with always presence and data up by baseline 0.22", () => {
+	const m = createShelfManager({});
+	m.setMode("side");
+	m.setShelfPresence("always");
+	m.setData([{ type: "queue", title: "Side item" }]);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getShelfVisibility()).toBeCloseTo(0.22, 5);
+});
+
+test("ShelfManager.update keeps side shelf hidden for auto presence without detail content", () => {
+	const m = createShelfManager({});
+	m.setMode("side");
+	m.setShelfPresence("auto");
+	m.setData([{ type: "queue", title: "Auto item" }]);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getShelfVisibility()).toBe(0);
+});
+
+test("ShelfManager.update treats open detail as side content and fades auto presence up", () => {
+	const m = createShelfManager({});
+	m.setMode("side");
+	m.setShelfPresence("auto");
+	m.openDetail(0);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getShelfVisibility()).toBeCloseTo(0.22, 5);
+});
+
+test("ShelfManager.update fades hidden shelf down by baseline 0.18 and clamps near zero", () => {
+	const m = createShelfManager({});
+	m.setMode("off");
+	m.setShelfVisibility(1);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getShelfVisibility()).toBeCloseTo(0.82, 5);
+
+	m.setShelfVisibility(0.009);
+	m.update(makeCtx(createRuntimeUniforms(), 32));
+	expect(m.getShelfVisibility()).toBe(0);
+});
+
+test("ShelfManager.update fades side shelf with no data and no detail content toward hidden", () => {
+	const m = createShelfManager({});
+	m.setMode("side");
+	m.setShelfPresence("always");
+	m.setShelfVisibility(1);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getShelfVisibility()).toBeCloseTo(0.82, 5);
+});
+
+test("ShelfManager.update fades shelf out while app is unrevealed without changing mode", () => {
+	const m = createShelfManager({});
+	m.setMode("stage");
+	m.setData([{ type: "queue", title: "Splash fade item" }]);
+	m.setShelfVisibility(1);
+	m.setAppRevealed(false);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getMode()).toBe("stage");
+	expect(m.getShelfVisibility()).toBeCloseTo(0.82, 5);
+});
+
+test("ShelfManager.update gates group.visible with current target visibility and detail/data presence", () => {
+	const group = { visible: true } as unknown as import("three").Group;
+	const m = createShelfManager({ group });
+	m.setMode("side");
+	m.setShelfPresence("auto");
+	m.setData([{ type: "queue", title: "Hidden auto" }]);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(group.visible).toBe(false);
+
+	m.openDetail(0);
+	m.update(makeCtx(createRuntimeUniforms(), 32));
+	expect(group.visible).toBe(true);
+
+	m.setMode("off");
+	m.update(makeCtx(createRuntimeUniforms(), 48));
+	expect(group.visible).toBe(true);
+
+	m.setShelfVisibility(0.009);
+	m.update(makeCtx(createRuntimeUniforms(), 64));
+	expect(group.visible).toBe(false);
+});
+
 test("ShelfManager.openDetail + closeDetail mutate openCardIdx", () => {
 	const m = createShelfManager({});
 	m.openDetail(1);
@@ -260,6 +349,7 @@ test("ShelfManager.update advances centerSmooth toward target with baseline lerp
 test("ShelfManager.update computes a real breathPulse snapshot value", () => {
 	const m = createShelfManager({});
 	m.setShelfVisibility(1);
+	m.setData([{ type: "queue", title: "Pulse item" }]);
 	const u = createRuntimeUniforms();
 	u.uTime.value = 0;
 	m.update(makeCtx(u, 0));

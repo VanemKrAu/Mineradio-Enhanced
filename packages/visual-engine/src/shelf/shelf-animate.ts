@@ -17,6 +17,7 @@ import {
 	createShelfState,
 	type ShelfMode,
 	type ShelfPane,
+	type ShelfPresence,
 	type ShelfState,
 } from "./shelf-state";
 
@@ -44,6 +45,7 @@ export interface ShelfSnapshot {
 	centerIdx: number;
 	centerSmooth: number;
 	mode: ShelfMode;
+	presence: ShelfPresence;
 	shelfPane: ShelfPane;
 	shelfVisibility: number;
 	openCardIdx: number;
@@ -66,6 +68,9 @@ export interface ShelfManager {
 	update(ctx: FrameContext): void;
 	setMode(mode: ShelfMode): void;
 	getMode(): ShelfMode;
+	setShelfPresence(presence: ShelfPresence): void;
+	getShelfPresence(): ShelfPresence;
+	setAppRevealed(revealed: boolean): void;
 	setSelectedIdx(idx: number): void;
 	getSelectedIdx(): number;
 	clearSelected(): void;
@@ -135,6 +140,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 			if (Math.abs(state.centerSmooth - state.centerTarget) < 0.001) {
 				state.centerSmooth = state.centerTarget;
 			}
+			updateShelfVisibility();
 
 			breathPulseLast = computeBreathPulse(
 				ctx.uniforms.uTime.value,
@@ -159,10 +165,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 			}
 
 			if (group) {
-				group.visible =
-					state.shelfVisibility > 0 &&
-					data.length > 0 &&
-					state.mode !== "off";
+				group.visible = shouldShowShelfGroup();
 			}
 			rebuildRenderedWindowIfNeeded();
 			applyRenderedCardLayout(ctx);
@@ -174,6 +177,15 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		},
 		getMode() {
 			return state.mode;
+		},
+		setShelfPresence(presence) {
+			state.presence = presence;
+		},
+		getShelfPresence() {
+			return state.presence;
+		},
+		setAppRevealed(revealed) {
+			state.appRevealed = revealed;
 		},
 		setSelectedIdx(idx) {
 			state.selectedIdx = idx;
@@ -239,6 +251,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 				centerIdx: state.centerIdx,
 				centerSmooth: state.centerSmooth,
 				mode: state.mode,
+				presence: state.presence,
 				shelfPane: state.shelfPane,
 				shelfVisibility: state.shelfVisibility,
 				openCardIdx: state.openCardIdx,
@@ -307,8 +320,46 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		},
 	};
 
+	function updateShelfVisibility(): void {
+		const target = computeShelfVisibilityTarget();
+		const ease = target > state.shelfVisibility ? 0.22 : 0.18;
+		state.shelfVisibility += (target - state.shelfVisibility) * ease;
+		if (state.shelfVisibility < 0.01 && target === 0) {
+			state.shelfVisibility = 0;
+		}
+		state.shelfVisibility = clampRange(state.shelfVisibility, 0, 1);
+	}
+
+	function computeShelfVisibilityTarget(): number {
+		if (!state.appRevealed) return 0;
+		if (state.mode === "off") return 0;
+		const hasData = data.length > 0;
+		const contentOpen = state.openCardIdx >= 0;
+		if (state.mode === "stage") return hasData ? 1 : 0;
+		if (state.mode === "side") {
+			if (!hasData && !contentOpen) return 0;
+			if (contentOpen) return 1;
+			return state.presence === "always" && hasData ? 1 : 0;
+		}
+		return 0;
+	}
+
+	function shouldShowShelfGroup(): boolean {
+		if (!state.appRevealed) return false;
+		if (state.shelfVisibility <= 0) return false;
+		const hasData = data.length > 0;
+		const contentOpen = state.openCardIdx >= 0;
+		if (state.mode === "stage") return hasData;
+		return hasData || contentOpen;
+	}
+
 	function rebuildRenderedWindowIfNeeded(): void {
-		if (!group || !three || !doc || state.mode === "off" || data.length === 0) {
+		if (!group || !three || !doc || data.length === 0) {
+			disposeRenderedCards();
+			renderedWindowSig = "";
+			return;
+		}
+		if (state.mode === "off" && state.shelfVisibility <= 0) {
 			disposeRenderedCards();
 			renderedWindowSig = "";
 			return;

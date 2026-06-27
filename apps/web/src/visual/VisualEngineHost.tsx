@@ -41,6 +41,7 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const shelfItemsRef = useRef<ShelfItem[]>([]);
 	const shelfItemsVersionRef = useRef<number>(0);
 	const splashActiveRef = useRef<boolean>(props.splashActive ?? false);
+	const shelfModeRef = useRef<string>(props.fxDefaults?.shelf ?? "side");
 	const shelfCameraModeRef = useRef<string>(props.fxDefaults?.shelfCameraMode ?? "static");
 	const shelfPresenceRef = useRef<string>(props.fxDefaults?.shelfPresence ?? "always");
 	const wallpaperSafeRef = useRef<boolean>(isWallpaperSafeShelfPreset(props.fxDefaults?.preset));
@@ -50,6 +51,7 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	positionRef.current = props.positionMs;
 	isPlayingRef.current = props.isPlaying;
 	splashActiveRef.current = props.splashActive ?? false;
+	shelfModeRef.current = props.fxDefaults?.shelf ?? "side";
 	shelfCameraModeRef.current = props.fxDefaults?.shelfCameraMode ?? "static";
 	shelfPresenceRef.current = props.fxDefaults?.shelfPresence ?? "always";
 	wallpaperSafeRef.current = isWallpaperSafeShelfPreset(props.fxDefaults?.preset);
@@ -85,6 +87,7 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		shelfItemsRef,
 		shelfItemsVersionRef,
 		splashActiveRef,
+		shelfModeRef,
 		shelfCameraModeRef,
 		shelfPresenceRef,
 		wallpaperSafeRef,
