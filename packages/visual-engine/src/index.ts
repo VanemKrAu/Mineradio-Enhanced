@@ -85,3 +85,26 @@ export type {
 	BeatOnsetCallback,
 	RtStateView,
 } from "./audio/beat-engine";
+
+export { createRenderer } from "./runtime/renderer-setup";
+export type { RendererHandle, RendererSetupOptions, ThreeModule, ThreeFactory } from "./runtime/renderer-setup";
+export { createRenderLoop } from "./runtime/render-loop";
+export type { RenderLoop, RenderLoopOptions } from "./runtime/render-loop";
+export { createCinemaCamera } from "./runtime/cinema-camera";
+export type {
+	CinemaCamera,
+	CinemaCameraOptions,
+	CinemaProfile,
+	CinemaState,
+	CinemaTrackProfile,
+	BeatCamState,
+	BeatCameraEvent,
+	OrbitState,
+} from "./runtime/cinema-camera";
+export { createRuntimeUniforms } from "./runtime/uniforms";
+export type { RuntimeUniforms, UniformValue } from "./runtime/uniforms";
+export { RenderStepSlot, RENDER_STEP_ORDER } from "./runtime/render-step-slot";
+export type { RenderStepSlot as RenderStepSlotName } from "./runtime/render-step-slot";
+export { createPerfState } from "./runtime/perf-state";
+export type { PerfState, PerfStateSnapshot, RenderPerfMode } from "./runtime/perf-state";
+export type { FrameContext } from "./runtime/frame-context";
