@@ -9,6 +9,9 @@ import { useLyricsStore } from "../stores/lyrics-store";
 import { usePlaybackStore } from "../stores/playback-store";
 import { useProviderStore } from "../stores/provider-store";
 import { getRuntimeConfig, type RuntimeConfig } from "../tauri/runtime";
+import { SplashHost } from "../visual/SplashHost";
+
+const SHOW_SPLASH = import.meta.env.VITE_SPLASH !== "0";
 
 type Phase = "loading" | "connected" | "error";
 
@@ -237,7 +240,9 @@ export function App(): ReactElement {
 	}
 
 	return (
-		<main className="shell">
+		<>
+			{SHOW_SPLASH && <SplashHost autoDismissMs={1180 + 980 + 600} />}
+			<main className="shell">
 			<section className="status-panel">
 				<p className="eyebrow">Mineradio Tauri Rewrite</p>
 				<h1>Tauri Rewrite Shell</h1>
@@ -300,5 +305,6 @@ export function App(): ReactElement {
 				</dl>
 			</section>
 		</main>
+		</>
 	);
 }
