@@ -20,13 +20,15 @@ This document defines the Electron baseline capture required before Tauri rewrit
 
 ## Baseline Data
 
-- Test track title:
-- Test provider:
-- Test track id:
-- Cover source:
-- Lyric source:
-- Visual archive source:
-- Local storage state source:
+- Test track title: 待确认；当前仅记录搜索 fixture `遇见`
+- Test provider: 待确认；搜索 fixture 当前观察到 Netease (`NE`) 结果
+- Test track id: 待确认
+- Cover source: 待确认
+- Lyric source: 待确认
+- Visual archive source: `verification\baseline\2026-06-27-ced5ec61\visual-localstorage-snapshot.json`
+- Local storage state source: `verification\baseline\2026-06-27-ced5ec61\visual-localstorage-snapshot.json`
+- Search fixture: `遇见` / `All`，见 `docs/migration/baseline/TEST_FIXTURES.2026-06-27.md`
+- Baseline artifact directory: `verification\baseline\2026-06-27-ced5ec61`
 
 ## Required Screenshots
 
@@ -58,6 +60,14 @@ This document defines the Electron baseline capture required before Tauri rewrit
 - Suggested external backup folder: `D:\项目\工作区备份\Mineradio-tauri-baseline-20260627`.
 - Commit only this document and small metadata JSON.
 
-## Acceptance
+## P1 Acceptance
 
-Tauri visual parity work cannot begin until this capture protocol is filled with commit, branch, test track, visual archive, and storage location.
+Tauri migration work may proceed past P1 when commit, branch, window sizes, display scale, artifact directory, visual archive source, and code-derived animation spec are recorded.
+
+Current status on 2026-06-27: commit, branch, window sizes, display scale, artifact directory, search fixture, visual archive source, and code-derived animation spec are recorded. Fixed playback test track, cover source, and lyric source remain open. Screenshot/recording gaps are moved to pre-public-release manual parity instead of blocking P1.
+
+Code-derived animation spec: `docs/migration/baseline/BASELINE_ANIMATION_SPEC.md`.
+
+## Public Release Parity Acceptance
+
+Before public release, the Tauri line still needs fixed playback test track metadata, cover source, lyric source, and Windows/WebView2 manual parity evidence for startup animation, true playback, 3D shelf flow, desktop lyrics lock/unlock/drag, and other release gates in `docs/migration/CAPABILITY_PARITY_CHECKLIST.md`.

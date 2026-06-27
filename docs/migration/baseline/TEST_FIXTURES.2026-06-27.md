@@ -32,6 +32,12 @@
   - `skull-preset-v2`
 - 内置用户视觉存档名称：`默认测试`
 
+## 3D Shelf Static Fixture
+
+- 静态截图：`verification\baseline\2026-06-27-ced5ec61\playlist-shelf-side-1280x720.png`
+- 状态：已采集侧边 3D 歌单架静态证据。
+- 仍缺：hover、滚动、详情页、点击播放的连续录屏。
+
 ## Pending
 
 - 还未完成真实播放链路：播放、暂停、seek、下一首、ended。

@@ -22,12 +22,26 @@
     "artists": [],
     "album": "",
     "coverSource": "",
-    "lyricSource": ""
+    "lyricSource": "",
+    "status": "pending-fixed-playback-track",
+    "searchFixture": {
+      "query": "遇见",
+      "mode": "All",
+      "screenshot": "verification\\baseline\\2026-06-27-ced5ec61\\search-results-yujian-1280x720.png",
+      "observedCandidates": [
+        "遇见（纯音乐） / NE",
+        "遇见 / 月楠 / NE",
+        "遇见 / 零零 / NE",
+        "遇见（R&B） / 韩棒 / NE",
+        "遇见（陕西话） / 陕西燕子 / NE",
+        "遇见 / 孙燕姿 / NE / VIP"
+      ]
+    }
   },
   "visualArchive": {
-    "name": "",
-    "source": "",
-    "notes": ""
+    "name": "默认测试",
+    "source": "verification\\baseline\\2026-06-27-ced5ec61\\visual-localstorage-snapshot.json",
+    "notes": "localStorage snapshot includes mineradio-lyric-layout-v1, mineradio-user-fx-archives-v1, mineradio-diy-player-mode-v1, and skull-preset-v2."
   },
   "captures": {
     "screenshots": [
@@ -88,6 +102,14 @@
         "verifiedNonBlank": true
       },
       {
+        "kind": "playlist-shelf-side",
+        "windowSize": "1280x720",
+        "path": "verification\\baseline\\2026-06-27-ced5ec61\\playlist-shelf-side-1280x720.png",
+        "captureMethod": "CDP open side playlist shelf, then screenshot",
+        "verifiedNonBlank": true,
+        "notes": "Static shelf evidence only; hover, scroll, detail, and click-play recording are still pending."
+      },
+      {
         "kind": "desktop-lyrics-open",
         "windowSize": "desktop overlay",
         "path": "verification\\baseline\\2026-06-27-ced5ec61\\desktop-lyrics-open.png",
@@ -108,6 +130,14 @@
           "skull-preset-v2"
         ]
       }
+    ],
+    "pending": [
+      "startup-animation.mp4",
+      "playing-console.mp4",
+      "playlist-shelf-flow.mp4",
+      "desktop-lyrics-flow.mp4",
+      "desktop lyrics white/black background readability captures",
+      "fixed playback test track with cover and lyric source"
     ]
   }
 }
