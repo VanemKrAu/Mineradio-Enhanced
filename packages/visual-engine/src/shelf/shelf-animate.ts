@@ -50,6 +50,14 @@ export interface ShelfSnapshot {
 	breathPulse: number;
 }
 
+export interface ShelfRaycastCardHit {
+	index: number;
+	item: ShelfItem;
+	mesh: THREE.Mesh;
+	point?: THREE.Vector3;
+	uv?: THREE.Vector2;
+}
+
 export interface ShelfManager {
 	getState(): ShelfState;
 	setData(items: ShelfItem[], opts?: { asyncBuild?: boolean }): void;
@@ -68,6 +76,7 @@ export interface ShelfManager {
 	closeDetail(opts?: { immediate?: boolean }): void;
 	getSnapshot(): ShelfSnapshot;
 	getRenderedCardCount(): number;
+	raycastCards(raycaster: THREE.Raycaster): ShelfRaycastCardHit | null;
 	dispose(): void;
 }
 
@@ -210,6 +219,30 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		},
 		getRenderedCardCount() {
 			return renderedCards.size;
+		},
+		raycastCards(raycaster) {
+			if (!group || !group.visible || renderedCards.size === 0) return null;
+			const visibleMeshes: THREE.Mesh[] = [];
+			for (const card of renderedCards.values()) {
+				if (card.mesh.visible) visibleMeshes.push(card.mesh);
+			}
+			if (visibleMeshes.length === 0) return null;
+			const hits = raycaster.intersectObjects(visibleMeshes, false);
+			const first = hits[0];
+			if (!first) return null;
+			for (const [index, card] of renderedCards) {
+				if (card.mesh !== first.object) continue;
+				const item = data[index];
+				if (!item) return null;
+				return {
+					index,
+					item,
+					mesh: card.mesh,
+					point: first.point,
+					uv: first.uv,
+				};
+			}
+			return null;
 		},
 		dispose() {
 			disposeRenderedCards();

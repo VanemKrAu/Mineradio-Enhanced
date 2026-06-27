@@ -7,6 +7,7 @@ import {
 	createRenderLoop,
 	createRenderer,
 	createShelfManagerWithThree,
+	createShelfPointerRaycastFocus,
 	createShelfStep,
 	createStageLyricsLifecycle,
 	RenderStepSlot,
@@ -24,7 +25,12 @@ import {
 	type ShelfItem,
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
-import { attachShelfFocusZonePointerWiring, isWallpaperSafeShelfPreset } from "./shelf-focus-zone";
+import {
+	attachShelfFocusZonePointerWiring,
+	isQueueFocusActive,
+	isWallpaperSafeShelfPreset,
+	type QueueFocusPanelInfo,
+} from "./shelf-focus-zone";
 
 export interface VisualEngineRefs {
 	hostRef: RefObject<HTMLDivElement | null>;
@@ -163,6 +169,22 @@ function makeFallbackFrameSource(): AudioFrameSource {
 			playing: false,
 			currentTimeSeconds: 0,
 		};
+	};
+}
+
+function getPlaylistPanelFocusInfo(doc: Document): QueueFocusPanelInfo | null {
+	const panel = doc.querySelector("#playlist-panel");
+	if (!(panel instanceof HTMLElement)) return null;
+	const rect = panel.getBoundingClientRect();
+	return {
+		active: panel.classList.contains("peek") || panel.classList.contains("show"),
+		peek: panel.classList.contains("peek"),
+		rect: {
+			left: rect.left,
+			right: rect.right,
+			top: rect.top,
+			bottom: rect.bottom,
+		},
 	};
 }
 
@@ -368,6 +390,27 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			const offAudio = audioEngine.subscribeBeat((burst, isScheduled) => {
 				cinema.applyBeat(burst, isScheduled);
 			});
+			const getSideShelfFocusHit = await createShelfPointerRaycastFocus({
+				camera: renderer.camera,
+				shelfManager,
+			});
+			if (cancelled || disposedRef.current) {
+				offAudio();
+				offLyrics();
+				offShelf();
+				offCamera();
+				offHome();
+				offHomeAudio();
+				renderLoop.dispose();
+				lifecycle.dispose();
+				connectorParticles.dispose();
+				shelfManager.dispose();
+				homeVisual.dispose();
+				audioEngine.dispose();
+				cinema.dispose();
+				renderer.dispose();
+				return;
+			}
 			const offShelfFocus = attachShelfFocusZonePointerWiring({
 				target: window,
 				cinema,
@@ -376,7 +419,13 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				getShelfCameraMode: () => refs.shelfCameraModeRef?.current ?? refs.fxDefaults?.shelfCameraMode ?? "static",
 				getPortrait: () => window.innerHeight > window.innerWidth,
 				getWallpaperSafe: () => refs.wallpaperSafeRef?.current ?? isWallpaperSafeShelfPreset(refs.fxDefaults?.preset),
+				getViewportWidth: () => window.innerWidth || host.clientWidth || 0,
 				getViewportHeight: () => window.innerHeight || host.clientHeight || 0,
+				getQueueFocusActive: (pointer) => {
+					const panel = getPlaylistPanelFocusInfo(document);
+					return isQueueFocusActive(pointer, panel);
+				},
+				getSideShelfFocusHit,
 			});
 			handles = {
 				renderer,

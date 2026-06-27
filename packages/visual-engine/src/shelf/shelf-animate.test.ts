@@ -4,7 +4,7 @@ import type { FrameContext } from "../runtime/frame-context";
 import type { RuntimeUniforms } from "../runtime/uniforms";
 import { createRuntimeUniforms } from "../runtime/uniforms";
 import { SHELF_MAX_RENDER } from "./card-position";
-import { createShelfManager, type ShelfManager } from "./shelf-animate";
+import { createShelfManager, type ShelfItem, type ShelfManager } from "./shelf-animate";
 
 function makeCtx(uniforms: RuntimeUniforms, now = 0): FrameContext {
 	return {
@@ -17,6 +17,91 @@ function makeCtx(uniforms: RuntimeUniforms, now = 0): FrameContext {
 		pointerParallax: { x: 0, y: 0 },
 		pointerTarget: { x: 0, y: 0 },
 	};
+}
+
+function makeRaycastShelfDeps(): {
+	children: Array<{ visible: boolean; userData: Record<string, unknown> }>;
+	documentLike: Document;
+	three: typeof import("three");
+} {
+	const children: Array<{ visible: boolean; userData: Record<string, unknown> }> = [];
+	class FakeGroup {
+		visible = true;
+		add(obj: { visible: boolean; userData: Record<string, unknown> }) {
+			children.push(obj);
+		}
+		remove(obj: { visible: boolean; userData: Record<string, unknown> }) {
+			const idx = children.indexOf(obj);
+			if (idx >= 0) children.splice(idx, 1);
+		}
+	}
+	class FakeMesh {
+		position = { set() {} };
+		rotation = { set() {} };
+		scale = { setScalar() {} };
+		visible = true;
+		renderOrder = 0;
+		userData: Record<string, unknown> = {};
+		constructor(
+			public geometry: unknown,
+			public material: unknown,
+		) {}
+	}
+	const documentLike = {
+		createElement() {
+			return {
+				width: 0,
+				height: 0,
+				getContext() {
+					return {
+						clearRect() {},
+						fillRect() {},
+						roundRect() {},
+						beginPath() {},
+						fill() {},
+						stroke() {},
+						moveTo() {},
+						lineTo() {},
+						save() {},
+						restore() {},
+						clip() {},
+						createLinearGradient() {
+							return { addColorStop() {} };
+						},
+						measureText(text: string) {
+							return { width: text.length * 8 };
+						},
+						fillText() {},
+					};
+				},
+			};
+		},
+	} as unknown as Document;
+	const three = {
+		Group: FakeGroup,
+		Mesh: FakeMesh,
+		PlaneGeometry: class {
+			dispose() {}
+		},
+		CanvasTexture: class {
+			needsUpdate = false;
+			minFilter: unknown = null;
+			magFilter: unknown = null;
+			generateMipmaps = true;
+			dispose() {}
+		},
+		MeshBasicMaterial: class {
+			opacity = 1;
+			color = { setScalar() {} };
+			constructor(init: Record<string, unknown>) {
+				Object.assign(this, init);
+			}
+			dispose() {}
+		},
+		LinearFilter: "LinearFilter",
+		DoubleSide: "DoubleSide",
+	} as unknown as typeof import("three");
+	return { children, documentLike, three };
 }
 
 test("ShelfManager.setData stores items length in state.lastSig", () => {
@@ -431,4 +516,75 @@ test("ShelfManager clamps center and open detail indices when data shrinks", () 
 	expect(m.getState().openCardIdx).toBe(-1);
 	expect(children.length).toBe(1);
 	expect((children[0] as { visible: boolean }).visible).toBe(true);
+});
+
+test("ShelfManager.raycastCards intersects visible rendered card meshes and returns hit metadata", () => {
+	const { children, documentLike, three } = makeRaycastShelfDeps();
+	const m = createShelfManager({
+		scene: { add() {}, remove() {} } as unknown as import("three").Scene,
+		three,
+		document: documentLike,
+	});
+	const items: ShelfItem[] = [
+		{ type: "playlist", title: "Hidden", playlistId: "hidden" },
+		{ type: "playlist", title: "Hit", playlistId: "hit" },
+	];
+	m.setShelfVisibility(1);
+	m.setData(items);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	children[0].visible = false;
+
+	let intersected: unknown[] = [];
+	const point = { x: 1, y: 2, z: 3 };
+	const uv = { x: 0.25, y: 0.75 };
+	const raycaster = {
+		intersectObjects(objects: unknown[], recursive: boolean) {
+			intersected = objects;
+			expect(recursive).toBe(false);
+			return [{ object: children[1], point, uv }];
+		},
+	} as unknown as import("three").Raycaster;
+
+	const hit = m.raycastCards(raycaster);
+
+	expect(intersected).toEqual([children[1]]);
+	expect(hit).toEqual({
+		index: 1,
+		item: items[1],
+		mesh: children[1],
+		point,
+		uv,
+	});
+});
+
+test("ShelfManager.raycastCards returns null when there is no render group", () => {
+	const m = createShelfManager({});
+	const raycaster = {
+		intersectObjects() {
+			throw new Error("should not raycast without a group");
+		},
+	} as unknown as import("three").Raycaster;
+
+	expect(m.raycastCards(raycaster)).toBeNull();
+});
+
+test("ShelfManager.raycastCards returns null when no visible cards hit", () => {
+	const { children, documentLike, three } = makeRaycastShelfDeps();
+	const m = createShelfManager({
+		scene: { add() {}, remove() {} } as unknown as import("three").Scene,
+		three,
+		document: documentLike,
+	});
+	m.setShelfVisibility(1);
+	m.setData([{ type: "playlist", title: "Miss", playlistId: "miss" }]);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+
+	const raycaster = {
+		intersectObjects(objects: unknown[]) {
+			expect(objects).toEqual([children[0]]);
+			return [];
+		},
+	} as unknown as import("three").Raycaster;
+
+	expect(m.raycastCards(raycaster)).toBeNull();
 });

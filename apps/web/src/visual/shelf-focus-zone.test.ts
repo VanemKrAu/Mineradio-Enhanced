@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
 	attachShelfFocusZonePointerWiring,
 	isWallpaperSafeShelfPreset,
+	isQueueFocusActive,
 	resolveShelfFocusZone,
 } from "./shelf-focus-zone";
 
@@ -132,19 +133,19 @@ test("resolveShelfFocusZone passes portrait and wallpaper-safe flags through", (
 });
 
 class FakePointerTarget {
-	listeners = new Map<string, Set<(event: { clientY: number }) => void>>();
+	listeners = new Map<string, Set<(event: { clientX?: number; clientY: number }) => void>>();
 
 	addEventListener(type: string, listener: EventListener): void {
-		const set = this.listeners.get(type) ?? new Set<(event: { clientY: number }) => void>();
-		set.add(listener as unknown as (event: { clientY: number }) => void);
+		const set = this.listeners.get(type) ?? new Set<(event: { clientX?: number; clientY: number }) => void>();
+		set.add(listener as unknown as (event: { clientX?: number; clientY: number }) => void);
 		this.listeners.set(type, set);
 	}
 
 	removeEventListener(type: string, listener: EventListener): void {
-		this.listeners.get(type)?.delete(listener as unknown as (event: { clientY: number }) => void);
+		this.listeners.get(type)?.delete(listener as unknown as (event: { clientX?: number; clientY: number }) => void);
 	}
 
-	emit(type: string, event: { clientY: number }): void {
+	emit(type: string, event: { clientX?: number; clientY: number }): void {
 		for (const listener of this.listeners.get(type) ?? []) {
 			listener(event);
 		}
@@ -202,4 +203,139 @@ test("attachShelfFocusZonePointerWiring calls cinema focus from global pointer m
 	expect(target.count("pointermove")).toBe(0);
 	expect(target.count("pointerleave")).toBe(0);
 	expect(target.count("blur")).toBe(0);
+});
+
+test("isQueueFocusActive follows baseline edge trigger band without a panel", () => {
+	const basePointer = { clientX: 14, clientY: 133, viewportWidth: 1200, viewportHeight: 900 };
+	expect(isQueueFocusActive(basePointer)).toBe(true);
+	expect(isQueueFocusActive({ ...basePointer, clientX: 13 })).toBe(false);
+	expect(isQueueFocusActive({ ...basePointer, clientX: 78 })).toBe(false);
+	expect(isQueueFocusActive({ ...basePointer, clientY: 132 })).toBe(false);
+	expect(isQueueFocusActive({ ...basePointer, clientY: 768 })).toBe(false);
+});
+
+test("isQueueFocusActive keeps focus inside the active playlist panel padding", () => {
+	const panel = {
+		active: true,
+		peek: false,
+		rect: { left: 80, right: 320, top: 140, bottom: 720 },
+	};
+
+	expect(isQueueFocusActive({
+		clientX: 62,
+		clientY: 118,
+		viewportWidth: 1200,
+		viewportHeight: 900,
+	}, panel)).toBe(true);
+	expect(isQueueFocusActive({
+		clientX: 344,
+		clientY: 742,
+		viewportWidth: 1200,
+		viewportHeight: 900,
+	}, panel)).toBe(true);
+	expect(isQueueFocusActive({
+		clientX: 345,
+		clientY: 743,
+		viewportWidth: 1200,
+		viewportHeight: 900,
+	}, panel)).toBe(false);
+});
+
+test("isQueueFocusActive preserves peek panel focus up to the baseline right padding", () => {
+	const panel = {
+		active: false,
+		peek: true,
+		rect: { left: 80, right: 320, top: 140, bottom: 720 },
+	};
+
+	expect(isQueueFocusActive({
+		clientX: 371,
+		clientY: 40,
+		viewportWidth: 1200,
+		viewportHeight: 900,
+	}, panel)).toBe(true);
+	expect(isQueueFocusActive({
+		clientX: 372,
+		clientY: 40,
+		viewportWidth: 1200,
+		viewportHeight: 900,
+	}, panel)).toBe(false);
+});
+
+test("attachShelfFocusZonePointerWiring lets injected queue focus win immediately", () => {
+	const target = new FakePointerTarget();
+	const calls: unknown[] = [];
+	const cleanup = attachShelfFocusZonePointerWiring({
+		target,
+		cinema: {
+			setFocusZone: (type, opts) => calls.push([type, opts]),
+		},
+		shelfManager: {
+			getSnapshot: () => ({
+				centerIdx: 0,
+				centerSmooth: 0,
+				mode: "stage",
+				shelfPane: "mine",
+				shelfVisibility: 1,
+				openCardIdx: -1,
+				breathPulse: 0,
+			}),
+			getData: () => [{ title: "Queued track" }],
+			getMode: () => "stage",
+		},
+		getSplashActive: () => false,
+		getShelfCameraMode: () => "dynamic",
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportHeight: () => 900,
+		getQueueFocusActive: () => true,
+	} as Parameters<typeof attachShelfFocusZonePointerWiring>[0] & {
+		getQueueFocusActive: () => boolean;
+	});
+
+	target.emit("pointermove", { clientY: 100 });
+	cleanup();
+
+	expect(calls).toEqual([
+		["queue", { immediate: true, portrait: false, wallpaperSafe: false }],
+	]);
+});
+
+test("attachShelfFocusZonePointerWiring lets injected side shelf raycast hit drive side focus", () => {
+	const target = new FakePointerTarget();
+	const calls: unknown[] = [];
+	const cleanup = attachShelfFocusZonePointerWiring({
+		target,
+		cinema: {
+			setFocusZone: (type, opts) => calls.push([type, opts]),
+		},
+		shelfManager: {
+			getSnapshot: () => ({
+				centerIdx: 0,
+				centerSmooth: 0,
+				mode: "side",
+				shelfPane: "mine",
+				shelfVisibility: 1,
+				openCardIdx: -1,
+				breathPulse: 0,
+			}),
+			getData: () => [{ title: "Side playlist" }],
+			getMode: () => "side",
+		},
+		getSplashActive: () => false,
+		getShelfCameraMode: () => "dynamic",
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportHeight: () => 900,
+		getSideShelfFocusHit: () => true,
+	} as Parameters<typeof attachShelfFocusZonePointerWiring>[0] & {
+		getSideShelfFocusHit: () => boolean;
+	});
+
+	target.emit("pointermove", { clientX: 1180, clientY: 200 });
+	cleanup();
+
+	expect(calls).toEqual([
+		["shelf-side", { immediate: false, portrait: false, wallpaperSafe: false }],
+	]);
 });

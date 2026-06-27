@@ -267,8 +267,15 @@ export type {
 	ShelfItem,
 	ShelfManagerOptions,
 	ShelfSnapshot,
+	ShelfRaycastCardHit,
 	ShelfManager,
 } from "./shelf/shelf-animate";
+export { createShelfPointerRaycastFocus } from "./shelf/shelf-raycast-focus";
+export type {
+	ShelfPointerRaycastFocusGetter,
+	ShelfPointerRaycastFocusOptions,
+	ShelfPointerRaycastInfo,
+} from "./shelf/shelf-raycast-focus";
 export { createShelfStep, SHELF_RENDER_STEP_SLOT } from "./shelf/shelf-step";
 export {
 	SHELF_CARD_CANVAS_WIDTH,
