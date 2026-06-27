@@ -17,9 +17,19 @@ declare module "bun:test" {
     toBeTruthy(): void;
     toBeFalsy(): void;
     toBeInstanceOf(expected: unknown): void;
+    toMatch(expected: string | RegExp): void;
+    toThrow(expected?: unknown): void;
+    toHaveLength(expected: number): void;
   }
   export interface ExpectWithNot extends ExpectBase {
-    readonly not: Pick<ExpectBase, "toBe" | "toEqual" | "toBeNull" | "toBeUndefined" | "toContain">;
+    readonly not: Pick<ExpectBase, "toBe" | "toEqual" | "toBeNull" | "toBeUndefined" | "toContain" | "toMatch" | "toThrow">;
   }
-  export function expect(actual: unknown): ExpectWithNot;
+  export interface ExpectHelpers {
+    arrayContaining(expected: readonly unknown[]): unknown;
+    objectContaining(expected: Record<string, unknown>): unknown;
+    any(constructor: unknown): unknown;
+    anything(): unknown;
+  }
+  export type ExpectFn = ((actual: unknown) => ExpectWithNot) & ExpectHelpers;
+  export const expect: ExpectFn;
 }

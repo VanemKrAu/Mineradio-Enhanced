@@ -211,3 +211,49 @@ export type {
 export { LyricPaletteRuntime } from "./stage-lyrics/palette-runtime";
 export { createLyricPaletteDriver } from "./stage-lyrics/palette-driver";
 export type { PaletteDriver } from "./stage-lyrics/palette-driver";
+
+export { SHELF_SETTINGS } from "./shelf/shelf-settings";
+export type { ShelfSettings } from "./shelf/shelf-settings";
+export {
+	getDefaultShelfLayoutProfile,
+} from "./shelf/shelf-layout-profile";
+export type {
+	SideProfile,
+	StageProfile,
+	DetailProfile,
+	ShelfLayoutProfile,
+	ShelfLayoutProfileOverrides,
+} from "./shelf/shelf-layout-profile";
+export {
+	createShelfState,
+} from "./shelf/shelf-state";
+export type {
+	ShelfMode,
+	ShelfPane,
+	ShelfState,
+} from "./shelf/shelf-state";
+export {
+	SHELF_VISIBLE_RADIUS,
+	SHELF_MAX_RENDER,
+	computeCardLayout,
+} from "./shelf/card-position";
+export type {
+	CardLayoutInput,
+	CardLayoutOutput,
+	CardLayoutMode,
+} from "./shelf/card-position";
+export { computeBreathPulse } from "./shelf/breath";
+export {
+	computeRevealRaw,
+	computePaneRaw,
+	smoothstep01,
+} from "./shelf/reveal";
+export { updateHoverFloatMix } from "./shelf/hover-float";
+export { createShelfManager } from "./shelf/shelf-animate";
+export type {
+	ShelfItem,
+	ShelfManagerOptions,
+	ShelfSnapshot,
+	ShelfManager,
+} from "./shelf/shelf-animate";
+export { createShelfStep, SHELF_RENDER_STEP_SLOT } from "./shelf/shelf-step";
