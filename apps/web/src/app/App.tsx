@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { SidecarClient, SidecarClientError } from "../api/sidecar-client";
 import { PlayerController } from "../audio/player-controller";
+import { resolveLyricsForTrack } from "../lyrics/custom-lyrics";
 import { selectCurrentIndex } from "../lyrics/select-current-index";
 import { useLyricsStore } from "../stores/lyrics-store";
 import { usePlaybackStore } from "../stores/playback-store";
@@ -668,7 +669,12 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 				setLyricsLoading(true);
 				const lyric = await client.lyric(currentTrack);
 				if (playbackRequestSeqRef.current !== seq) return;
-				setLyricsPayload(lyric);
+				const resolvedLyric = resolveLyricsForTrack({
+					track: currentTrack,
+					original: lyric,
+					durationMs: usePlaybackStore.getState().durationMs ?? currentTrack.durationMs,
+				});
+				setLyricsPayload(resolvedLyric.payload);
 			} catch (e) {
 				if (playbackRequestSeqRef.current !== seq) return;
 				const message = e instanceof Error ? e.message : "lyrics failed";
