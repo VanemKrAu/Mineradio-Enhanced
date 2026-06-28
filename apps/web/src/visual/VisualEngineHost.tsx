@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactElement, type RefObject } from "react";
-import type { LyricPayload, LyricLine as SharedLyricLine, Track } from "@mineradio/shared";
+import type { LyricPayload, LyricLine as SharedLyricLine, PlaylistSummary, Track } from "@mineradio/shared";
 import {
 	type FxState,
 	type LyricLine as VisualLyricLine,
@@ -11,7 +11,7 @@ import { useVisualEngine } from "./useVisualEngine";
 import type { ShelfDetailRowClickPayload } from "./shelf-pointer-interactions";
 import type { ShelfDetailContentListWriter } from "./shelf-detail-data";
 import { PlayerController } from "../audio/player-controller";
-import { mapQueueToShelfItems } from "./shelf-items";
+import { resolveShelfItems } from "./shelf-items";
 import { isWallpaperSafeShelfPreset } from "./shelf-focus-zone";
 
 export interface VisualEngineHostProps {
@@ -21,6 +21,7 @@ export interface VisualEngineHostProps {
 	positionMs: number;
 	isPlaying: boolean;
 	queue?: Track[];
+	playlists?: PlaylistSummary[];
 	currentTrack?: Track | null;
 	currentCoverUrl?: string | null;
 	sidecarBaseUrl?: string | null;
@@ -127,8 +128,12 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	}, []);
 
 	const nextShelfItems = useMemo(
-		() => mapQueueToShelfItems(props.queue ?? [], props.currentTrack ?? null),
-		[props.queue, props.currentTrack],
+		() => resolveShelfItems({
+			playlists: props.playlists ?? [],
+			queue: props.queue ?? [],
+			currentTrack: props.currentTrack ?? null,
+		}),
+		[props.playlists, props.queue, props.currentTrack],
 	);
 
 	useEffect(() => {

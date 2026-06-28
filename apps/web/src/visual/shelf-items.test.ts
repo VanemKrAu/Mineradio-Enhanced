@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { Track } from "@mineradio/shared";
-import { mapQueueToShelfItems } from "./shelf-items";
+import type { PlaylistSummary, Track } from "@mineradio/shared";
+import { mapQueueToShelfItems, resolveShelfItems } from "./shelf-items";
 
 function track(
 	id: string,
@@ -59,4 +59,64 @@ test("mapQueueToShelfItems returns no hidden Mineradio host fixture when queue i
 	expect(items).toEqual([]);
 	expect(JSON.stringify(items)).not.toContain("Tauri shelf host fixture");
 	expect(JSON.stringify(items)).not.toContain("Mineradio");
+});
+
+test("resolveShelfItems prefers provider playlists over queue fallback for the 3D shelf", () => {
+	const playlists: PlaylistSummary[] = [
+		{
+			provider: "netease",
+			id: "101",
+			name: "我喜欢的音乐",
+			coverUrl: "cover-like",
+			trackCount: 12,
+			trackIds: [],
+		},
+		{
+			provider: "qq",
+			id: "201",
+			name: "QQ 收藏",
+			coverUrl: "cover-qq",
+			trackCount: 3,
+			trackIds: [],
+		},
+	];
+	const queue = [track("a", "Queued", ["Ada"], "Album", "cover-q")];
+
+	const items = resolveShelfItems({ playlists, queue, currentTrack: queue[0] });
+
+	expect(items).toEqual([
+		{
+			type: "playlist",
+			title: "我喜欢的音乐",
+			sub: "12 首",
+			cover: "cover-like",
+			tag: "网易云",
+			playlistId: "101",
+			provider: "netease",
+		},
+		{
+			type: "playlist",
+			title: "QQ 收藏",
+			sub: "3 首",
+			cover: "cover-qq",
+			tag: "QQ 音乐",
+			playlistId: "201",
+			provider: "qq",
+		},
+	]);
+});
+
+test("resolveShelfItems falls back to queue when no provider playlist is available", () => {
+	const queue = [track("a", "Queued", ["Ada"], "Album", "cover-q")];
+	const items = resolveShelfItems({ playlists: [], queue, currentTrack: queue[0] });
+
+	expect(items[0]).toEqual({
+		type: "queue",
+		title: "Queued",
+		sub: "Ada",
+		cover: "cover-q",
+		tag: "正在播放",
+		queueIndex: 0,
+		provider: "netease",
+	});
 });

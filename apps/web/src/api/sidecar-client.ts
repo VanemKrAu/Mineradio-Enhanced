@@ -7,6 +7,8 @@ import {
 	HealthResponseSchema,
 	LyricPayloadSchema,
 	PlaylistDetailSchema,
+	PlaylistSummary,
+	PlaylistSummaryArraySchema,
 	ProviderId,
 	ProviderSessionCookieAck,
 	ProviderSessionCookieAckSchema,
@@ -224,6 +226,14 @@ export class SidecarClient {
 			"GET",
 			`/providers/${provider}/playlists/${encodeURIComponent(id)}`,
 			PlaylistDetailSchema,
+		);
+	}
+
+	async playlistList(provider: ProviderId): Promise<PlaylistSummary[]> {
+		return this.request(
+			"GET",
+			`/providers/${provider}/playlists`,
+			PlaylistSummaryArraySchema,
 		);
 	}
 

@@ -16,7 +16,7 @@ import { EmptyHomeHost } from "../home/EmptyHomeHost";
 import { SplashHost, type SplashHostProps } from "../visual/SplashHost";
 import { VisualEngineHost } from "../visual/VisualEngineHost";
 import { createShelfDetailContentLoader, playShelfDetailRow } from "../visual/shelf-detail-data";
-import type { PlaybackQuality, ProviderId, ProviderLoginStatus } from "@mineradio/shared";
+import type { PlaybackQuality, PlaylistSummary, ProviderId, ProviderLoginStatus } from "@mineradio/shared";
 
 const SHOW_SPLASH = import.meta.env.VITE_SPLASH !== "0";
 const SIDECAR_STATUS_POLL_MS = 1500;
@@ -126,6 +126,7 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 	const [loginModalOpen, setLoginModalOpen] = useState(false);
 	const [neteaseStatus, setNeteaseStatus] = useState<ProviderLoginStatus | null>(null);
 	const [qqStatus, setQqStatus] = useState<ProviderLoginStatus | null>(null);
+	const [shelfPlaylists, setShelfPlaylists] = useState<PlaylistSummary[]>([]);
 	const [homeForcedOpen, setHomeForcedOpen] = useState(false);
 	const [homeSuppressed, setHomeSuppressed] = useState(false);
 	const [sidecarRecoveryState, setSidecarRecoveryState] = useState<SidecarRecoveryNoticeState | null>(null);
@@ -283,6 +284,18 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 
 	const providerLabel = useCallback((provider: ProviderId) => provider === "netease" ? "网易云" : "QQ 音乐", []);
 
+	const refreshShelfPlaylists = useCallback(async (client: SidecarClient | null) => {
+		if (!client) {
+			setShelfPlaylists([]);
+			return;
+		}
+		const results = await Promise.allSettled([
+			client.playlistList("netease"),
+			client.playlistList("qq"),
+		]);
+		setShelfPlaylists(results.flatMap((result) => result.status === "fulfilled" ? result.value : []));
+	}, []);
+
 	const refreshProviderStatus = useCallback(async (provider: ProviderId) => {
 		const client = sidecarClient;
 		if (!client) {
@@ -292,13 +305,14 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 		try {
 			const status = await client.loginStatus(provider);
 			setProviderStatus(status);
+			void refreshShelfPlaylists(client);
 			const label = providerLabel(provider);
 			showToast(status.loggedIn ? `${label}已登录: ${status.nickname ?? status.userId ?? "账号"}` : `${label}未登录`);
 		} catch (e) {
 			const message = e instanceof Error ? e.message : "登录状态读取失败";
 			showToast(message);
 		}
-	}, [providerLabel, setProviderStatus, showToast, sidecarClient]);
+	}, [providerLabel, refreshShelfPlaylists, setProviderStatus, showToast, sidecarClient]);
 
 	const openLoginModal = useCallback(() => {
 		setLoginModalOpen(true);
@@ -340,13 +354,14 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 			if (input) input.value = "";
 			const status = await client.loginStatus(provider);
 			setProviderStatus(status);
+			void refreshShelfPlaylists(client);
 			showToast(status.loggedIn ? `${label}已登录: ${status.nickname ?? status.userId ?? "账号"}` : `${label}会话已保存，但账号态未确认`);
 		} catch (e) {
 			if (input) input.value = "";
 			const message = e instanceof Error ? e.message : "手动导入失败";
 			showToast(message);
 		}
-	}, [providerLabel, setProviderStatus, showToast, sidecarClient]);
+	}, [providerLabel, refreshShelfPlaylists, setProviderStatus, showToast, sidecarClient]);
 
 	const logoutProvider = useCallback(async (provider: ProviderId) => {
 		const client = sidecarClient;
@@ -358,12 +373,13 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 		try {
 			await client.logout(provider);
 			setProviderStatus({ provider, loggedIn: false });
+			void refreshShelfPlaylists(client);
 			showToast(`${label}会话已清除`);
 		} catch (e) {
 			const message = e instanceof Error ? e.message : "退出登录失败";
 			showToast(message);
 		}
-	}, [providerLabel, setProviderStatus, showToast, sidecarClient]);
+	}, [providerLabel, refreshShelfPlaylists, setProviderStatus, showToast, sidecarClient]);
 
 	const togglePlayback = useCallback(() => {
 		if (!usePlaybackStore.getState().currentTrack) {
@@ -531,6 +547,7 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 					} catch {
 						// 能力矩阵仅用于运行期同步，失败不阻断视觉宿主。
 					}
+					if (!cancelledRef.current) void refreshShelfPlaylists(client);
 				} catch (e) {
 					if (cancelledRef.current) return;
 					attempts += 1;
@@ -555,7 +572,7 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 			cancelledRef.current = true;
 			if (timer) clearTimeout(timer);
 		};
-	}, [initSidecar, setMatrix]);
+	}, [initSidecar, refreshShelfPlaylists, setMatrix]);
 
 	useEffect(() => {
 		if (!audioElementSupported()) return;
@@ -674,6 +691,7 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 				positionMs={positionMs}
 				isPlaying={isPlaying}
 				queue={queue}
+				playlists={shelfPlaylists}
 				currentTrack={currentTrack}
 				currentCoverUrl={currentTrack?.coverUrl}
 				sidecarBaseUrl={sidecarBaseUrl}

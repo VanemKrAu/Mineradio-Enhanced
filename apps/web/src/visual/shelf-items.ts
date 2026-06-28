@@ -1,4 +1,4 @@
-import type { Track } from "@mineradio/shared";
+import type { PlaylistSummary, Track } from "@mineradio/shared";
 import type { ShelfItem } from "@mineradio/visual-engine";
 
 function trackKey(track: Track | null): string {
@@ -19,4 +19,36 @@ export function mapQueueToShelfItems(queue: Track[], currentTrack: Track | null)
 			provider: track.provider,
 		};
 	});
+}
+
+function providerTag(provider: PlaylistSummary["provider"]): string {
+	return provider === "netease" ? "网易云" : "QQ 音乐";
+}
+
+function playlistSub(trackCount: number | undefined): string {
+	if (typeof trackCount !== "number") return "";
+	return `${trackCount} 首`;
+}
+
+export function mapPlaylistsToShelfItems(playlists: PlaylistSummary[]): ShelfItem[] {
+	return playlists
+		.filter((playlist) => playlist.id && playlist.name)
+		.map((playlist) => ({
+			type: "playlist",
+			title: playlist.name,
+			sub: playlistSub(playlist.trackCount),
+			cover: playlist.coverUrl,
+			tag: providerTag(playlist.provider),
+			playlistId: playlist.id,
+			provider: playlist.provider,
+		}));
+}
+
+export function resolveShelfItems(input: {
+	playlists: PlaylistSummary[];
+	queue: Track[];
+	currentTrack: Track | null;
+}): ShelfItem[] {
+	const playlistItems = mapPlaylistsToShelfItems(input.playlists);
+	return playlistItems.length > 0 ? playlistItems : mapQueueToShelfItems(input.queue, input.currentTrack);
 }

@@ -11,6 +11,8 @@ export const PlaylistSummarySchema = z.object({
   trackIds: z.array(z.string()).default([])
 });
 
+export const PlaylistSummaryArraySchema = z.array(PlaylistSummarySchema);
+
 export const PlaylistDetailSchema = PlaylistSummarySchema.extend({
   tracks: z.array(TrackSchema).default([])
 });

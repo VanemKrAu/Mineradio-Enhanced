@@ -268,6 +268,35 @@ test("playlistDetail GETs the playlist by id", async () => {
 	});
 });
 
+test("playlistList GETs provider playlists and parses playlist summaries", async () => {
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		expect(url).toContain("/providers/qq/playlists");
+		expect(init?.method).toBe("GET");
+		return jsonResponse({
+			ok: true,
+			data: [
+				{
+					provider: "qq",
+					id: "201",
+					name: "我喜欢",
+					coverUrl: "http://cover/like.jpg",
+					trackCount: 8,
+					trackIds: [],
+				},
+			],
+		});
+	}) as typeof fetch;
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		const playlists = await client.playlistList("qq");
+		expect(playlists.length).toBe(1);
+		expect(playlists[0].provider).toBe("qq");
+		expect(playlists[0].id).toBe("201");
+		expect(playlists[0].name).toBe("我喜欢");
+	});
+});
+
 test("setProviderSessionCookie POSTs cookie and accepts ack without retaining cookie", async () => {
 	let receivedBody: unknown = null;
 	const secret = "MUSIC_U=web-secret";
