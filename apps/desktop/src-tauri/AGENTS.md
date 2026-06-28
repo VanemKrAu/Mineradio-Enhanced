@@ -16,7 +16,7 @@ src/
 capabilities/
 └── default.json       # core:window/event/webview/app only，scope ["main"]；Rust-owned dialogs 不暴露 renderer plugin commands
 
-tauri.conf.json        # 单窗口 main 1280x720，identifier com.mineradio.fork.tauri，CSP null (dev)
+tauri.conf.json        # 单窗口 main 1280x720，identifier com.mineradio.fork.tauri，release CSP 锁定 self + 127.0.0.1 sidecar
 Cargo.toml             # deps: tauri 2 / tauri-plugin-dialog / tauri-plugin-updater / serde / serde_json / dirs 5 / time；GPL-3.0 license
 build.rs               # tauri_build::build()
 ```
@@ -82,7 +82,7 @@ cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml
 - codegraph/LSP 未启用；本表由 bg explore agent + 6 source file 直读构造。
 - **sidecar launch plan**：dev fallback 用 `"bun"` 程序名 + `["run", "sidecars/api/src/server.ts"]`，要求 PATH 含 `bun.exe`；打包态 `build.rs`/`apps/desktop/scripts/build-sidecar-binary.mjs` 生成 `binaries/mineradio-sidecar-api-<target-triple>[.exe]`，`tauri.conf.json` 通过 `bundle.externalBin` 打包，运行时优先同目录二进制。spawn 失败时 setup hook 容错 `eprintln!` 不挂启动。
 - **capabilities/default.json scope `["main"]`**：所有权限只绑主窗口；创建 DESKTOP_LYRICS 等新窗口时**必须新建 capability JSON 或扩 scope**，否则命令在该窗口上 forbidden。
-- **`tauri.conf.json` CSP `"null"`**：dev 阶段无 CSP；P10 release 时**需要收紧** 至基线允许域，permit `img-src https://y.gtimg.cn http://p4.music.126.net/...` 等 cover CDN 域 + sidecar 自身 `connect-src http://127.0.0.1:*`。当前 dev 无 concern。
+- **`tauri.conf.json` release CSP**：`csp` 已收紧为 `default/script/style 'self'`，图片/媒体/连接只允许 `self`、`data:`/`blob:`（图片/媒体需要时）和 `http://127.0.0.1:*` sidecar。`devCsp` 只为 Vite/HMR 放宽 `127.0.0.1:5173`、`unsafe-eval` 和 inline style；不要把 QQ/网易云/Open-Meteo/CDN 外部域直接加进 release CSP，远程封面和音频必须继续走 sidecar `image-proxy` / `audio-proxy`。
 - **Cargo.lock 已提交（依赖已固）**；新 dep 须先 license 审核后记入 `docs/migration/LICENSE_GATE.md` Dependency Audit。
 - **manual `tauri dev` 验证**：Bun 在 PATH 后启动成功 = 窗口立现 + sidecar `/health` 200；sidecar base url 注入 React 通过 invoke `get_runtime_config` 拿 `sidecar_base_url`。
 - **Tauri updater 拐弯**：P10.a 已接 `tauri-plugin-updater`、`invoke("check_for_update")` / `invoke("get_updater_status")`、`plugins.updater.endpoints = https://github.com/zzstar101/Mineradio/releases/latest/download/latest.json`。前端不直接调用 JS updater plugin；B2 无 pubkey/私钥，`download()` 会强制签名校验，公开发布 gate 仍未过。

@@ -64,6 +64,8 @@ P10.a code-side status: updater detection wiring is complete, but install/downlo
 
 Current status remains detection-only. Do not present the updater as release-complete until either signed Tauri updater download/install is proven or an approved manual-update release decision is recorded in Phase 5 of `11-final-baseline-parity.md`.
 
+2026-06-29 release CSP code-side status: `apps/desktop/src-tauri/tauri.conf.json` now uses a release `csp` that permits only self plus `http://127.0.0.1:*` sidecar proxy for network/media/image loading, with `data:`/`blob:` retained only where the migrated visual/image paths require them. `devCsp` separately allows the Vite dev server/HMR path. `npm run release-csp:check` prevents returning release `csp` to `null`, unsafe sources, wildcard sources, or direct external origins. Windows/WebView2 runtime verification remains pending.
+
 - [x] **Step 1: Choose manifest mode**
 
 Use static JSON first for local testing unless a dynamic server is already available.
