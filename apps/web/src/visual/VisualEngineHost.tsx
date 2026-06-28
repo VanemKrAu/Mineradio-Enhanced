@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactElement, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type RefObject } from "react";
 import type { LyricPayload, LyricLine as SharedLyricLine, PlaylistSummary, PodcastCollection, Track } from "@mineradio/shared";
 import {
 	type FxState,
 	type LyricLine as VisualLyricLine,
 	type ShelfItem,
 	type ShelfOpenDetailContentPayload,
+	type ShelfPane,
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
 import { useVisualEngine } from "./useVisualEngine";
@@ -104,8 +105,19 @@ export function resolveVisualCoverUrlForSidecar(coverUrl: string, sidecarBaseUrl
 	return `${base}/image-proxy?${params.toString()}`;
 }
 
+export function countShelfPanePlaylists(playlists: PlaylistSummary[]): { mineCount: number; favCount: number } {
+	let mineCount = 0;
+	let favCount = 0;
+	for (const playlist of playlists) {
+		if (playlist.subscribed === true) favCount += 1;
+		else mineCount += 1;
+	}
+	return { mineCount, favCount };
+}
+
 export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const hostRef = useRef<HTMLDivElement | null>(null);
+	const [shelfPane, setShelfPane] = useState<ShelfPane>("mine");
 	const positionRef = useRef<number>(props.positionMs);
 	const isPlayingRef = useRef<boolean>(props.isPlaying);
 	const lyricLinesRef = useRef<VisualLyricLine[]>(mapLyricPayload(props.lyricsPayload));
@@ -122,10 +134,14 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const previousDefaultShelfModeRef = useRef<string | undefined>(initialShelfSettings.mode);
 	const shelfCameraModeRef = useRef<string>(initialShelfSettings.cameraMode);
 	const shelfPresenceRef = useRef<string>(initialShelfSettings.presence);
+	const shelfMergeCollectionsRef = useRef<boolean>(initialShelfSettings.mergeCollections);
+	const shelfMineCountRef = useRef<number>(0);
+	const shelfFavCountRef = useRef<number>(0);
 	const wallpaperSafeRef = useRef<boolean>(isWallpaperSafeShelfPreset(props.fxDefaults?.preset));
 	const onShelfPlayQueueIndexRef = useRef<((index: number) => void) | undefined>(props.onShelfPlayQueueIndex);
 	const onShelfDetailRowClickRef = useRef<((payload: ShelfDetailRowClickPayload) => void) | undefined>(props.onShelfDetailRowClick);
 	const onShelfOpenDetailContentRef = useRef<((payload: ShelfOpenDetailContentPayload, writer: ShelfDetailContentListController) => void) | undefined>(props.onShelfOpenDetailContent);
+	const onShelfPaneChangeRef = useRef<((pane: ShelfPane) => void) | undefined>(undefined);
 	const lifecycleRef = useRef<StageLyricsLifecycle | null>(null);
 
 	positionRef.current = props.positionMs;
@@ -142,10 +158,16 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	shelfModeRef.current = resolveRuntimeShelfMode(visualShelfSettings.mode, runtimeShelfModeOverrideRef.current);
 	shelfCameraModeRef.current = visualShelfSettings.cameraMode;
 	shelfPresenceRef.current = visualShelfSettings.presence;
+	shelfMergeCollectionsRef.current = visualShelfSettings.mergeCollections;
 	wallpaperSafeRef.current = isWallpaperSafeShelfPreset(props.fxDefaults?.preset);
 	onShelfPlayQueueIndexRef.current = props.onShelfPlayQueueIndex;
 	onShelfDetailRowClickRef.current = props.onShelfDetailRowClick;
 	onShelfOpenDetailContentRef.current = props.onShelfOpenDetailContent;
+	onShelfPaneChangeRef.current = setShelfPane;
+
+	useEffect(() => {
+		if (visualShelfSettings.mergeCollections) setShelfPane("mine");
+	}, [visualShelfSettings.mergeCollections]);
 	const nextCoverUrl = resolveVisualCoverUrlForSidecar(
 		resolveVisualCoverUrl(props.currentCoverUrl, props.currentTrack),
 		props.sidecarBaseUrl,
@@ -161,6 +183,13 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		props.onShelfModeChange?.(mode);
 	}, [props.onShelfModeChange]);
 
+	const shelfPaneCounts = useMemo(
+		() => countShelfPanePlaylists(props.playlists ?? []),
+		[props.playlists],
+	);
+	shelfMineCountRef.current = shelfPaneCounts.mineCount;
+	shelfFavCountRef.current = shelfPaneCounts.favCount;
+
 	const nextShelfItems = useMemo(
 		() => resolveShelfItems({
 			playlists: props.playlists ?? [],
@@ -170,9 +199,10 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 			settings: {
 				showPodcasts: visualShelfSettings.showPodcasts,
 				mergeCollections: visualShelfSettings.mergeCollections,
+				pane: shelfPane,
 			},
 		}),
-		[props.playlists, props.podcastCollections, props.queue, props.currentTrack, visualShelfSettings.showPodcasts, visualShelfSettings.mergeCollections],
+		[props.playlists, props.podcastCollections, props.queue, props.currentTrack, visualShelfSettings.showPodcasts, visualShelfSettings.mergeCollections, shelfPane],
 	);
 
 	useEffect(() => {
@@ -207,10 +237,14 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		shelfModeRef,
 		shelfCameraModeRef,
 		shelfPresenceRef,
+		shelfMergeCollectionsRef,
+		shelfMineCountRef,
+		shelfFavCountRef,
 		wallpaperSafeRef,
 		onShelfPlayQueueIndexRef,
 		onShelfDetailRowClickRef,
 		onShelfOpenDetailContentRef,
+		onShelfPaneChangeRef,
 		lifecycleRef,
 		coverResolution: props.coverResolution ?? 1.55,
 		fxDefaults: props.fxDefaults,

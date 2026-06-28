@@ -27,6 +27,7 @@ import {
 	type ShelfManager,
 	type ShelfItem,
 	type ShelfOpenDetailContentPayload,
+	type ShelfPane,
 	type ShelfSelectSoundPlayer,
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
@@ -38,6 +39,7 @@ import {
 import { attachShelfPointerInteractionWiring } from "./shelf-pointer-interactions";
 import type { ShelfDetailRowClickPayload } from "./shelf-pointer-interactions";
 import type { ShelfDetailContentListController } from "./shelf-detail-data";
+import { createShelfPaneWheelSwitcher } from "./shelf-pane-switch";
 import {
 	attachShelfFocusZonePointerWiring,
 	createSecondaryPlaylistEdgeGuard,
@@ -59,6 +61,9 @@ export interface VisualEngineRefs {
 	shelfModeRef?: RefObject<string>;
 	shelfCameraModeRef?: RefObject<string>;
 	shelfPresenceRef?: RefObject<string>;
+	shelfMergeCollectionsRef?: RefObject<boolean>;
+	shelfMineCountRef?: RefObject<number>;
+	shelfFavCountRef?: RefObject<number>;
 	wallpaperSafeRef?: RefObject<boolean>;
 	secondaryLeftDisplaySeamGuardRef?: RefObject<boolean>;
 	coverUrlRef?: RefObject<string>;
@@ -66,6 +71,7 @@ export interface VisualEngineRefs {
 	onShelfPlayQueueIndexRef?: RefObject<((index: number) => void) | undefined>;
 	onShelfDetailRowClickRef?: RefObject<((payload: ShelfDetailRowClickPayload) => void) | undefined>;
 	onShelfOpenDetailContentRef?: RefObject<((payload: ShelfOpenDetailContentPayload, writer: ShelfDetailContentListController) => void) | undefined>;
+	onShelfPaneChangeRef?: RefObject<((pane: ShelfPane) => void) | undefined>;
 	lifecycleRef: RefObject<StageLyricsLifecycle | null>;
 	coverResolution: number;
 	fxDefaults?: Partial<FxState>;
@@ -549,6 +555,17 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				camera: renderer.camera,
 				shelfManager,
 			});
+			const shelfPaneWheelSwitcher = createShelfPaneWheelSwitcher({
+				getPane: () => shelfManager.getShelfPane(),
+				getMergeCollections: () => refs.shelfMergeCollectionsRef?.current === true,
+				getMineCount: () => refs.shelfMineCountRef?.current ?? shelfManager.getData().length,
+				getFavCount: () => refs.shelfFavCountRef?.current ?? 0,
+				getCenterTarget: () => shelfManager.getState().centerTarget,
+				setPane: (pane) => {
+					shelfManager.setShelfPane(pane);
+					refs.onShelfPaneChangeRef?.current?.(pane);
+				},
+			});
 			const secondaryPlaylistEdgeGuard = createSecondaryPlaylistEdgeGuard();
 			if (cancelled || disposedRef.current) {
 				offAudio();
@@ -605,6 +622,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 					return shelfManager.getContentList()?.hasScreenTargetAt({ x: event.clientX, y: event.clientY }) === true;
 				},
 				setShelfMode: (mode) => setRuntimeShelfMode(refs.shelfModeRef, mode, refs.onShelfModeChange),
+				onBeforeShelfWheelScroll: (direction) => shelfPaneWheelSwitcher.step(direction),
 				onShelfPlayQueueIndex: (index) => refs.onShelfPlayQueueIndexRef?.current?.(index),
 				onShelfDetailRowClick: (payload) => refs.onShelfDetailRowClickRef?.current?.(payload),
 				onShelfSelectFeedback: (direction, variant) => {
@@ -653,5 +671,5 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			handles = null;
 			refs.lifecycleRef.current = null;
 		};
-	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.homeActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.secondaryLeftDisplaySeamGuardRef, refs.coverUrlRef, refs.coverUrlVersionRef, refs.onShelfPlayQueueIndexRef, refs.onShelfDetailRowClickRef, refs.onShelfOpenDetailContentRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
+	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.homeActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.shelfMergeCollectionsRef, refs.shelfMineCountRef, refs.shelfFavCountRef, refs.wallpaperSafeRef, refs.secondaryLeftDisplaySeamGuardRef, refs.coverUrlRef, refs.coverUrlVersionRef, refs.onShelfPlayQueueIndexRef, refs.onShelfDetailRowClickRef, refs.onShelfOpenDetailContentRef, refs.onShelfPaneChangeRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
 }

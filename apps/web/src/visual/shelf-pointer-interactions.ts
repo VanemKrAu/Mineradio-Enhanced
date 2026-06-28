@@ -54,6 +54,7 @@ export interface ShelfPointerInteractionOptions {
 	getShelfPreviewActive?: () => boolean;
 	isDetailWheelTarget?: (event: WheelEvent) => boolean;
 	setShelfMode?: (mode: "side") => void;
+	onBeforeShelfWheelScroll?: (direction: number) => boolean;
 	onShelfPlayQueueIndex?: (index: number) => void;
 	onShelfDetailRowClick?: (payload: ShelfDetailRowClickPayload) => void;
 	onShelfSelectFeedback?: (direction: number, variant: ShelfSelectSoundVariant) => void;
@@ -430,6 +431,10 @@ export function attachShelfPointerInteractionWiring(
 		wheelEvent.preventDefault();
 		wheelEvent.stopImmediatePropagation();
 		const direction = wheelEvent.deltaY > 0 ? 1 : -1;
+		if (opts.onBeforeShelfWheelScroll?.(direction)) {
+			opts.onShelfSelectFeedback?.(direction, "card");
+			return;
+		}
 		opts.shelfManager.scrollBy(direction);
 		opts.onShelfSelectFeedback?.(direction, "card");
 	};

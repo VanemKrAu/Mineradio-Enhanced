@@ -8,6 +8,7 @@ import {
 	resolveVisualShelfSettings,
 	syncRuntimeShelfModeOverride,
 	mapLyricPayload,
+	countShelfPanePlaylists,
 	VisualEngineHost,
 } from "./VisualEngineHost";
 
@@ -59,6 +60,14 @@ test("resolveVisualShelfSettings prefers explicit shelf store settings over fx d
 		showPodcasts: true,
 		mergeCollections: false,
 	});
+});
+
+test("countShelfPanePlaylists follows baseline mine and favorite split", () => {
+	expect(countShelfPanePlaylists([
+		{ subscribed: false },
+		{ subscribed: true },
+		{},
+	] as never)).toEqual({ mineCount: 2, favCount: 1 });
 });
 
 test("resolveVisualCoverUrl prefers explicit currentCoverUrl and falls back to currentTrack.coverUrl", () => {

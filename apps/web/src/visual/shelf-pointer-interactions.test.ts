@@ -778,6 +778,46 @@ test("attachShelfPointerInteractionWiring scrolls stage card-hit wheel in delta 
 	expect(target.options.get("wheel")).toEqual([{ passive: false, capture: true }]);
 });
 
+test("attachShelfPointerInteractionWiring consumes first-level wheel when pane switcher handles the boundary", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const feedback: unknown[] = [];
+	const beforeScroll: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "stage",
+			getSnapshot: closedSnapshot,
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 2,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2),
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		onBeforeShelfWheelScroll: (direction) => {
+			beforeScroll.push(direction);
+			return true;
+		},
+		onShelfSelectFeedback: (direction, variant) => feedback.push({ direction, variant }),
+	});
+
+	const event = makeWheelEvent({ deltaY: 120 });
+	target.emit("wheel", event);
+	cleanup();
+
+	expect(beforeScroll).toEqual([1]);
+	expect(scrolled).toEqual([]);
+	expect(feedback).toEqual([{ direction: 1, variant: "card" }]);
+	expect(event.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+});
+
 test("attachShelfPointerInteractionWiring ignores stage wheel without hit unless shift forces shelf scroll", () => {
 	const target = new FakePointerTarget();
 	const scrolled: number[] = [];

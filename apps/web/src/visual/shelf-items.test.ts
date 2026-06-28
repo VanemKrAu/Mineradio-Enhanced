@@ -269,8 +269,63 @@ test("resolveShelfItems keeps favorite playlists out of the default mine pane un
 		podcastCollections: [],
 		queue: [],
 		currentTrack: null,
+		settings: { showPodcasts: true, mergeCollections: false, pane: "fav" },
+	}).map((item) => item.title)).toEqual(["收藏歌单"]);
+
+	expect(resolveShelfItems({
+		playlists,
+		podcastCollections: [],
+		queue: [],
+		currentTrack: null,
 		settings: { showPodcasts: true, mergeCollections: true },
 	}).map((item) => item.title)).toEqual(["我的歌单", "收藏歌单"]);
+});
+
+test("resolveShelfItems only appends podcast collections on mine pane unless collections are merged", () => {
+	const playlists: PlaylistSummary[] = [
+		{
+			provider: "netease",
+			id: "mine",
+			name: "我的歌单",
+			coverUrl: "",
+			trackCount: 1,
+			trackIds: [],
+			subscribed: false,
+		},
+		{
+			provider: "netease",
+			id: "fav",
+			name: "收藏歌单",
+			coverUrl: "",
+			trackCount: 1,
+			trackIds: [],
+			subscribed: true,
+		},
+	];
+	const podcastCollections: PodcastCollection[] = [{
+		key: "liked",
+		title: "喜欢的声音",
+		sub: "",
+		itemType: "voice",
+		count: 2,
+		coverUrl: "",
+	}];
+
+	expect(resolveShelfItems({
+		playlists,
+		podcastCollections,
+		queue: [],
+		currentTrack: null,
+		settings: { showPodcasts: true, mergeCollections: false, pane: "fav" },
+	}).map((item) => item.title)).toEqual(["收藏歌单"]);
+
+	expect(resolveShelfItems({
+		playlists,
+		podcastCollections,
+		queue: [],
+		currentTrack: null,
+		settings: { showPodcasts: true, mergeCollections: true, pane: "fav" },
+	}).map((item) => item.title)).toEqual(["我的歌单", "收藏歌单", "喜欢的声音"]);
 });
 
 test("resolveShelfItems falls back to queue when no provider playlist is available", () => {

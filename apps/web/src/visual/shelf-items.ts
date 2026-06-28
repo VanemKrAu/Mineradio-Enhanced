@@ -1,5 +1,5 @@
 import type { PlaylistSummary, PodcastCollection, Track } from "@mineradio/shared";
-import type { ShelfItem } from "@mineradio/visual-engine";
+import type { ShelfItem, ShelfPane } from "@mineradio/visual-engine";
 
 function trackKey(track: Track | null): string {
 	return track ? `${track.provider}:${track.id}` : "";
@@ -47,6 +47,7 @@ export function mapPlaylistsToShelfItems(playlists: PlaylistSummary[]): ShelfIte
 export interface ShelfContentSettings {
 	showPodcasts: boolean;
 	mergeCollections: boolean;
+	pane?: ShelfPane;
 }
 
 function splitPlaylists(playlists: PlaylistSummary[]): { mine: PlaylistSummary[]; fav: PlaylistSummary[] } {
@@ -60,12 +61,12 @@ function splitPlaylists(playlists: PlaylistSummary[]): { mine: PlaylistSummary[]
 
 export function resolveActivePlaylists(
 	playlists: PlaylistSummary[],
-	settings?: Partial<Pick<ShelfContentSettings, "mergeCollections">>,
+	settings?: Partial<Pick<ShelfContentSettings, "mergeCollections" | "pane">>,
 ): PlaylistSummary[] {
 	const panes = splitPlaylists(playlists);
 	if (settings?.mergeCollections === true) return [...panes.mine, ...panes.fav];
-	if (panes.mine.length) return panes.mine;
-	return panes.fav;
+	if (settings?.pane === "fav") return panes.fav.length ? panes.fav : panes.mine;
+	return panes.mine.length ? panes.mine : panes.fav;
 }
 
 export function mapPodcastCollectionsToShelfItems(collections: PodcastCollection[]): ShelfItem[] {
@@ -92,11 +93,12 @@ export function resolveShelfItems(input: {
 	const settings = {
 		showPodcasts: input.settings?.showPodcasts !== false,
 		mergeCollections: input.settings?.mergeCollections === true,
+		pane: input.settings?.pane === "fav" ? "fav" as const : "mine" as const,
 	};
 	const activePlaylists = resolveActivePlaylists(input.playlists, settings);
 	const accountItems = [
 		...mapPlaylistsToShelfItems(activePlaylists),
-		...(settings.showPodcasts ? mapPodcastCollectionsToShelfItems(input.podcastCollections ?? []) : []),
+		...(settings.showPodcasts && (settings.pane === "mine" || settings.mergeCollections) ? mapPodcastCollectionsToShelfItems(input.podcastCollections ?? []) : []),
 	];
 	return accountItems.length > 0 ? accountItems : mapQueueToShelfItems(input.queue, input.currentTrack);
 }
