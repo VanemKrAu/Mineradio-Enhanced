@@ -477,6 +477,34 @@ test("ShelfManager exposes a content-list skeleton for open detail state", () =>
 	expect(m.getContentList()).toBeNull();
 });
 
+test("ShelfManager notifies host with playlist detail metadata and the content-list request token", () => {
+	const calls: unknown[] = [];
+	const m = createShelfManager({
+		onOpenDetailContent: (payload) => calls.push(payload),
+	});
+	const item: ShelfItem = {
+		type: "playlist",
+		title: "Daily Mix",
+		playlistId: "daily",
+		provider: "netease",
+		cover: "cover.jpg",
+	};
+	m.setData([item]);
+
+	m.openDetail(0);
+
+	const snapshot = m.getContentList()?.getSnapshot();
+	expect(calls).toEqual([{
+		playlistId: "daily",
+		title: "Daily Mix",
+		provider: "netease",
+		contentKind: "playlist",
+		requestToken: snapshot?.requestToken,
+		sourceCard: { item },
+		item,
+	}]);
+});
+
 test("ShelfManager closes content-list skeleton when shelf data shrink invalidates open detail", () => {
 	const m = createShelfManager({});
 	m.setData([{ type: "playlist", title: "A", playlistId: "p1" }]);

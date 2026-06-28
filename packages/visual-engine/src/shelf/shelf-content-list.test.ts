@@ -92,6 +92,34 @@ test("ShelfContentList loading and error helpers create baseline placeholder row
 	expect(list.getRows()).toEqual([{ name: "加载中…", artist: "", kind: "loading" }]);
 });
 
+test("ShelfContentList token-guarded row updates ignore stale playlist detail responses", () => {
+	const list = createShelfContentList();
+	const staleToken = list.open({ playlistId: "p1", title: "First" });
+	const currentToken = list.open({ playlistId: "p2", title: "Second" });
+
+	list.setRowsForToken(staleToken, [{ id: "old", name: "Old song" }]);
+
+	expect(list.getRows()).toEqual([{ name: "加载中…", artist: "", kind: "loading" }]);
+
+	list.setRowsForToken(currentToken, [{ id: "new", name: "New song", provider: "netease" }]);
+
+	expect(list.getRows()).toEqual([{ id: "new", name: "New song", provider: "netease" }]);
+});
+
+test("ShelfContentList token-guarded errors ignore stale playlist detail failures", () => {
+	const list = createShelfContentList();
+	const staleToken = list.open({ playlistId: "p1", title: "First" });
+	const currentToken = list.open({ playlistId: "p2", title: "Second" });
+
+	list.setErrorForToken(staleToken, "旧请求失败");
+
+	expect(list.getRows()).toEqual([{ name: "加载中…", artist: "", kind: "loading" }]);
+
+	list.setErrorForToken(currentToken, "歌单加载失败");
+
+	expect(list.getRows()).toEqual([{ name: "歌单加载失败", artist: "", kind: "error" }]);
+});
+
 test("ShelfContentList scroll clamps target and emits optional row tick only on movement", () => {
 	const ticks: Array<{ delta: number; kind: "row" }> = [];
 	const list = createShelfContentList({ onSelectTick: (delta, kind) => ticks.push({ delta, kind }) });

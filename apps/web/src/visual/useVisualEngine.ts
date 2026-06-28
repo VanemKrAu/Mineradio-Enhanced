@@ -24,10 +24,12 @@ import {
 	type ConnectorParticles,
 	type ShelfManager,
 	type ShelfItem,
+	type ShelfOpenDetailContentPayload,
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
 import { attachShelfPointerInteractionWiring } from "./shelf-pointer-interactions";
 import type { ShelfDetailRowClickPayload } from "./shelf-pointer-interactions";
+import type { ShelfDetailContentListWriter } from "./shelf-detail-data";
 import {
 	attachShelfFocusZonePointerWiring,
 	isQueueFocusActive,
@@ -50,6 +52,7 @@ export interface VisualEngineRefs {
 	wallpaperSafeRef?: RefObject<boolean>;
 	onShelfPlayQueueIndexRef?: RefObject<((index: number) => void) | undefined>;
 	onShelfDetailRowClickRef?: RefObject<((payload: ShelfDetailRowClickPayload) => void) | undefined>;
+	onShelfOpenDetailContentRef?: RefObject<((payload: ShelfOpenDetailContentPayload, writer: ShelfDetailContentListWriter) => void) | undefined>;
 	lifecycleRef: RefObject<StageLyricsLifecycle | null>;
 	coverResolution: number;
 	fxDefaults?: Partial<FxState>;
@@ -331,10 +334,18 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				renderer.dispose();
 				return;
 			}
+			let shelfManagerForCallback: ShelfManager | null = null;
 			const shelfManager = await createShelfManagerWithThree({
 				scene: renderer.scene,
 				document,
+				onOpenDetailContent: (payload) => {
+					const contentList = shelfManagerForCallback?.getContentList();
+					if (contentList) {
+						refs.onShelfOpenDetailContentRef?.current?.(payload, contentList);
+					}
+				},
 			});
+			shelfManagerForCallback = shelfManager;
 			if (cancelled || disposedRef.current) {
 				shelfManager.dispose();
 				homeVisual.dispose();
@@ -518,5 +529,5 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			handles = null;
 			refs.lifecycleRef.current = null;
 		};
-	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.onShelfPlayQueueIndexRef, refs.onShelfDetailRowClickRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
+	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.onShelfPlayQueueIndexRef, refs.onShelfDetailRowClickRef, refs.onShelfOpenDetailContentRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
 }

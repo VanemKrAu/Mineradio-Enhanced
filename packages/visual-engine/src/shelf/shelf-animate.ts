@@ -23,7 +23,9 @@ import {
 	CONTENT_MAX_RENDER,
 	computeContentPanelOpacity,
 	createShelfContentList,
+	type ShelfContentKind,
 	type ShelfContentList,
+	type ShelfContentSourceCard,
 	type ShelfContentScreenBounds,
 	type ShelfContentScreenRow,
 } from "./shelf-content-list";
@@ -53,6 +55,17 @@ export interface ShelfManagerOptions {
 	three?: typeof import("three") | null;
 	document?: Document | null;
 	now?: () => number;
+	onOpenDetailContent?: (payload: ShelfOpenDetailContentPayload) => void;
+}
+
+export interface ShelfOpenDetailContentPayload {
+	playlistId: string;
+	title: string;
+	provider?: string;
+	contentKind: ShelfContentKind;
+	requestToken: number;
+	sourceCard: ShelfContentSourceCard | null;
+	item?: ShelfItem;
 }
 
 export interface ShelfSnapshot {
@@ -302,11 +315,23 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 			const item = data[idx];
 			openDetailCardKey = shelfItemIdentityKey(item);
 			const playlistId = detailOpts?.playlistId ?? item?.playlistId ?? podcastPlaylistId(item?.podcastKey) ?? "";
-			contentList.open({
+			const title = detailOpts?.title ?? item?.title ?? "歌单详情";
+			const kind: ShelfContentKind = item?.type === "podcast" || item?.podcastKey || playlistId.startsWith("podcast:") ? "podcast" : "playlist";
+			const sourceCard = item ? { item } : null;
+			const requestToken = contentList.open({
 				playlistId,
-				title: detailOpts?.title ?? item?.title ?? "歌单详情",
-				kind: item?.type === "podcast" || item?.podcastKey || playlistId.startsWith("podcast:") ? "podcast" : "playlist",
-				sourceCard: item ? { item } : null,
+				title,
+				kind,
+				sourceCard,
+			});
+			opts.onOpenDetailContent?.({
+				playlistId,
+				title,
+				provider: item?.provider,
+				contentKind: kind,
+				requestToken,
+				sourceCard,
+				item,
 			});
 		},
 		closeDetail() {

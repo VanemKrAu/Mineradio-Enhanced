@@ -155,8 +155,10 @@ export interface ShelfContentPanelOpacityInputs {
 export interface ShelfContentList {
 	open(opts: ShelfContentOpenOptions): number;
 	setRows(rows: ShelfContentRow[], kind?: ShelfContentKind): void;
+	setRowsForToken(token: number, rows: ShelfContentRow[], kind?: ShelfContentKind): void;
 	setLoading(): void;
 	setError(label: string): void;
+	setErrorForToken(token: number, label: string): void;
 	close(): void;
 	isOpen(): boolean;
 	getRows(): ShelfContentRow[];
@@ -224,6 +226,10 @@ export function createShelfContentList(opts: ShelfContentListOptions = {}): Shel
 			renderedStart = -1;
 			rowAnimAt = nowFn();
 		},
+		setRowsForToken(token, nextRows, kind) {
+			if (!openState || token !== requestToken) return;
+			this.setRows(nextRows, kind);
+		},
 		setLoading() {
 			clearScreenTargets();
 			rows = [makePlaceholderRow("加载中…", "loading")];
@@ -239,6 +245,10 @@ export function createShelfContentList(opts: ShelfContentListOptions = {}): Shel
 			centerSmooth = 0;
 			renderedStart = -1;
 			rowAnimAt = nowFn();
+		},
+		setErrorForToken(token, label) {
+			if (!openState || token !== requestToken) return;
+			this.setError(label);
 		},
 		close() {
 			clearScreenTargets();

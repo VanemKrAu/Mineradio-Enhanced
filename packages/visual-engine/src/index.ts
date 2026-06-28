@@ -307,6 +307,7 @@ export { createShelfManager, createShelfManagerWithThree } from "./shelf/shelf-a
 export type {
 	ShelfItem,
 	ShelfManagerOptions,
+	ShelfOpenDetailContentPayload,
 	ShelfSnapshot,
 	ShelfRaycastCardHit,
 	ShelfManager,
