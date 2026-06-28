@@ -3,6 +3,7 @@ export interface RuntimeConfig {
 	appDataDir: string;
 	appVersion: string;
 	schemaVersion: string;
+	updaterPublicKeyConfigured: boolean;
 }
 
 export type Unlisten = () => void;
@@ -24,6 +25,7 @@ interface RawRuntimeConfig {
 	app_data_dir: string;
 	app_version: string;
 	schema_version: string;
+	updater_public_key_configured: boolean;
 }
 
 export function isTauriRuntime(): boolean {
@@ -61,6 +63,7 @@ function placeholderRuntimeConfig(): RuntimeConfig {
 		appDataDir: "",
 		appVersion: "0.0.0-dev",
 		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
 	};
 }
 
@@ -93,6 +96,7 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 			appDataDir: raw.app_data_dir,
 			appVersion: raw.app_version,
 			schemaVersion: raw.schema_version,
+			updaterPublicKeyConfigured: raw.updater_public_key_configured,
 		};
 	} catch {
 		return placeholderRuntimeConfig();

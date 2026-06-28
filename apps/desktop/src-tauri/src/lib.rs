@@ -11,6 +11,7 @@ pub struct RuntimeConfig {
     pub app_data_dir: String,
     pub app_version: String,
     pub schema_version: String,
+    pub updater_public_key_configured: bool,
 }
 
 #[derive(Default)]
@@ -76,6 +77,7 @@ impl AppState {
         app_data_dir: String,
         app_version: String,
         schema_version: String,
+        updater_public_key_configured: bool,
     ) -> Self {
         Self {
             config: RuntimeConfig {
@@ -83,6 +85,7 @@ impl AppState {
                 app_data_dir,
                 app_version,
                 schema_version,
+                updater_public_key_configured,
             },
             desktop_lyrics: Mutex::new(DesktopLyricsRuntimeState {
                 latest_payload: None,
@@ -98,11 +101,26 @@ impl AppState {
     }
 }
 
+fn updater_public_key_configured_from_plugin_config(
+    plugins: &tauri::utils::config::PluginConfig,
+) -> bool {
+    plugins
+        .0
+        .get("updater")
+        .and_then(|config| config.get("pubkey"))
+        .and_then(|value| value.as_str())
+        .map(updater::has_updater_public_key)
+        .unwrap_or(false)
+}
+
 pub fn run() {
     let app_data_dir = paths::resolve_app_data_dir();
     let log_dir = paths::resolve_log_dir();
     let app_version = env!("CARGO_PKG_VERSION").to_string();
     let schema_version = "0.1.0".to_string();
+    let context = tauri::generate_context!();
+    let updater_public_key_configured =
+        updater_public_key_configured_from_plugin_config(&context.config().plugins);
 
     let port = sidecar::allocate_port();
     let base_url = format!("http://127.0.0.1:{}", port);
@@ -112,6 +130,7 @@ pub fn run() {
         app_data_dir.to_string_lossy().to_string(),
         app_version.clone(),
         schema_version.clone(),
+        updater_public_key_configured,
     );
 
     let setup_app_version = app_version.clone();
@@ -120,9 +139,12 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime_config,
+            commands::get_updater_status,
+            commands::check_for_update,
             commands::window_minimize,
             commands::window_toggle_maximize,
             commands::window_toggle_fullscreen,
@@ -166,7 +188,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("failed to run Mineradio Tauri shell");
 }
 
@@ -181,11 +203,13 @@ mod tests {
             "/data".into(),
             "0.1.0".into(),
             "0.1.0".into(),
+            false,
         );
         assert_eq!(s.config.sidecar_base_url, "http://127.0.0.1:1");
         assert_eq!(s.config.app_data_dir, "/data");
         assert_eq!(s.config.app_version, "0.1.0");
         assert_eq!(s.config.schema_version, "0.1.0");
+        assert!(!s.config.updater_public_key_configured);
         let lyrics = s.desktop_lyrics.lock().expect("desktop lyrics state");
         assert!(lyrics.latest_payload.is_none());
         assert!(lyrics.click_through);
@@ -195,5 +219,29 @@ mod tests {
         assert!(!lyrics.poller_starting);
         assert!(!lyrics.poller_desired);
         assert!(lyrics.poller_child.is_none());
+    }
+
+    #[test]
+    fn updater_public_key_config_is_read_from_tauri_plugin_config() {
+        let empty = tauri::utils::config::PluginConfig(Default::default());
+        assert!(!updater_public_key_configured_from_plugin_config(&empty));
+
+        let mut plugins = std::collections::HashMap::new();
+        plugins.insert(
+            "updater".to_string(),
+            serde_json::json!({ "endpoints": ["https://example.test/latest.json"], "pubkey": "   " }),
+        );
+        assert!(!updater_public_key_configured_from_plugin_config(
+            &tauri::utils::config::PluginConfig(plugins)
+        ));
+
+        let mut plugins = std::collections::HashMap::new();
+        plugins.insert(
+            "updater".to_string(),
+            serde_json::json!({ "endpoints": ["https://example.test/latest.json"], "pubkey": "base64-public-key" }),
+        );
+        assert!(updater_public_key_configured_from_plugin_config(
+            &tauri::utils::config::PluginConfig(plugins)
+        ));
     }
 }

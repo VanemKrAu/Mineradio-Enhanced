@@ -30,6 +30,7 @@ function placeholderRuntimeConfig(): RuntimeConfig {
 		appDataDir: "",
 		appVersion: "0.0.0-dev",
 		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
 	};
 }
 

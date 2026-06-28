@@ -57,9 +57,7 @@ pub fn build_sidecar_command(
     cmd
 }
 
-pub fn spawn_sidecar(
-    mut cmd: std::process::Command,
-) -> Result<std::process::Child, SidecarError> {
+pub fn spawn_sidecar(mut cmd: std::process::Command) -> Result<std::process::Child, SidecarError> {
     cmd.spawn().map_err(|e| SidecarError::Io(e.to_string()))
 }
 
@@ -98,10 +96,15 @@ pub fn parse_health_response(body: &[u8]) -> Result<HealthInfo, SidecarError> {
 }
 
 fn parse_base_url(base_url: &str) -> Result<(String, u16), SidecarError> {
-    let rest = base_url.strip_prefix("http://").ok_or(SidecarError::BadUrl)?;
+    let rest = base_url
+        .strip_prefix("http://")
+        .ok_or(SidecarError::BadUrl)?;
     let host_port = rest.split('/').next().ok_or(SidecarError::BadUrl)?;
     let (host, port) = match host_port.rsplit_once(':') {
-        Some((h, p)) => (h.to_string(), p.parse::<u16>().map_err(|_| SidecarError::BadUrl)?),
+        Some((h, p)) => (
+            h.to_string(),
+            p.parse::<u16>().map_err(|_| SidecarError::BadUrl)?,
+        ),
         None => return Err(SidecarError::BadUrl),
     };
     if host.is_empty() {
@@ -116,8 +119,8 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
 
 fn try_health_once(host: &str, port: u16) -> Result<HealthInfo, SidecarError> {
     use std::io::{Read, Write};
-    let mut stream = std::net::TcpStream::connect((host, port))
-        .map_err(|e| SidecarError::Io(e.to_string()))?;
+    let mut stream =
+        std::net::TcpStream::connect((host, port)).map_err(|e| SidecarError::Io(e.to_string()))?;
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(2)))
         .ok();
@@ -142,11 +145,11 @@ fn try_health_once(host: &str, port: u16) -> Result<HealthInfo, SidecarError> {
             return Err(SidecarError::Parse("response too large".into()));
         }
     }
-    let header_end = find_header_end(&buf)
-        .ok_or_else(|| SidecarError::Parse("no header terminator".into()))?;
+    let header_end =
+        find_header_end(&buf).ok_or_else(|| SidecarError::Parse("no header terminator".into()))?;
     let header_bytes = &buf[..header_end];
-    let header_str = std::str::from_utf8(header_bytes)
-        .map_err(|e| SidecarError::Parse(e.to_string()))?;
+    let header_str =
+        std::str::from_utf8(header_bytes).map_err(|e| SidecarError::Parse(e.to_string()))?;
     let status_line = header_str.lines().next().unwrap_or("");
     if !status_line.contains(" 200 ") {
         return Err(SidecarError::BadStatus);
@@ -202,8 +205,7 @@ mod tests {
             .collect();
         assert_eq!(args, vec!["run", "sidecars/api/src/server.ts"]);
 
-        let envs: Vec<(&std::ffi::OsStr, Option<&std::ffi::OsStr>)> =
-            cmd.get_envs().collect();
+        let envs: Vec<(&std::ffi::OsStr, Option<&std::ffi::OsStr>)> = cmd.get_envs().collect();
         let get = |key: &str| -> Option<String> {
             envs.iter().find_map(|(k, v)| {
                 if k.to_str() == Some(key) {

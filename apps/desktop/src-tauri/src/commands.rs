@@ -4,7 +4,7 @@
 //! the frontend sends data or receives parsed JSON, while paths come only from
 //! the native open/save dialog result.
 
-use crate::{AppState, DesktopLyricsPollerChild, DesktopLyricsRuntimeState};
+use crate::{updater, AppState, DesktopLyricsPollerChild, DesktopLyricsRuntimeState};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -16,6 +16,7 @@ use tauri::{
     Emitter, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_updater::UpdaterExt;
 
 const DESKTOP_LYRICS_MAX_MOVE_DELTA: f64 = 4096.0;
 const DESKTOP_LYRICS_DEFAULT_WIDTH: i32 = 760;
@@ -49,6 +50,48 @@ pub mod labels {
 #[tauri::command]
 pub fn get_runtime_config(state: tauri::State<'_, AppState>) -> crate::RuntimeConfig {
     state.config.clone()
+}
+
+#[tauri::command]
+pub async fn get_updater_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<updater::UpdaterStatus, String> {
+    Ok(updater::unavailable_status(
+        &state.config.app_version,
+        state.config.updater_public_key_configured,
+    ))
+}
+
+#[tauri::command]
+pub async fn check_for_update(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<updater::UpdaterStatus, String> {
+    let current_version = state.config.app_version.clone();
+    let has_public_key = state.config.updater_public_key_configured;
+    drop(state);
+
+    match app.updater() {
+        Ok(updater_client) => match updater_client.check().await {
+            Ok(Some(update)) => Ok(updater::update_to_status(&update, has_public_key)),
+            Ok(None) => Ok(updater::unavailable_status(
+                &current_version,
+                has_public_key,
+            )),
+            Err(e) => Ok(updater::check_error_status(
+                &current_version,
+                "UPDATER_CHECK_FAILED",
+                &e.to_string(),
+                has_public_key,
+            )),
+        },
+        Err(e) => Ok(updater::check_error_status(
+            &current_version,
+            "UPDATER_NOT_CONFIGURED",
+            &e.to_string(),
+            has_public_key,
+        )),
+    }
 }
 
 fn main_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {

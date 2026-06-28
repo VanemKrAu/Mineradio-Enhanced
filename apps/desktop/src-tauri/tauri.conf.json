@@ -30,5 +30,13 @@
     "category": "Music",
     "shortDescription": "Mineradio Tauri rewrite shell",
     "longDescription": "A GPL-3.0 Tauri rewrite shell for Mineradio."
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/zzstar101/Mineradio/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
   }
 }
