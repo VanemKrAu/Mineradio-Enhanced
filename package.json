@@ -21,6 +21,7 @@
     "sidecar:dev": "bun run --filter ./sidecars/api dev",
     "installer-policy:check": "node scripts/check-installer-policy.mjs",
     "license:check": "node scripts/check-license-allowlist.mjs",
+    "packaged-notices:check": "node scripts/check-packaged-notices.mjs",
     "release-identity:check": "node scripts/check-release-identity.mjs"
   },
   "build": {
