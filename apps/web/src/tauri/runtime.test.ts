@@ -1,5 +1,17 @@
 import { expect, test } from "bun:test";
-import { exportJsonFile, getRuntimeConfig, getSidecarStatus, importJsonFile, isTauriRuntime } from "./runtime";
+import {
+	closeDesktopLyricsWindow,
+	configureGlobalHotkeys,
+	exportJsonFile,
+	getRuntimeConfig,
+	getSidecarStatus,
+	importJsonFile,
+	isTauriRuntime,
+	listenGlobalHotkey,
+	showDesktopLyricsWindow,
+	toggleWindowFullscreen,
+	updateDesktopLyricsPayload
+} from "./runtime";
 
 test("isTauriRuntime is false outside the Tauri webview", () => {
 	expect(isTauriRuntime()).toBe(false);
@@ -39,4 +51,30 @@ test("JSON file helpers return cancelled placeholders outside Tauri", async () =
 		path: null,
 		data: null,
 	});
+});
+
+test("global hotkey helpers are inert outside Tauri", async () => {
+	const configured = await configureGlobalHotkeys([
+		{ action: "togglePlay", accelerator: "Control+Alt+Space" },
+	]);
+	expect(configured).toEqual({
+		ok: true,
+		results: [],
+	});
+	let called = false;
+	const unlisten = await listenGlobalHotkey(() => {
+		called = true;
+	});
+	unlisten();
+	expect(called).toBe(false);
+});
+
+test("window fullscreen helper is inert outside Tauri", async () => {
+	expect(await toggleWindowFullscreen()).toBe(undefined);
+});
+
+test("desktop lyrics window helpers are inert outside Tauri", async () => {
+	expect(await showDesktopLyricsWindow()).toBe(undefined);
+	expect(await updateDesktopLyricsPayload({ enabled: true, text: "line" })).toBe(undefined);
+	expect(await closeDesktopLyricsWindow()).toBe(undefined);
 });

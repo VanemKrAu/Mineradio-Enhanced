@@ -86,6 +86,8 @@
 | @tauri-apps/api | npm | MIT/Apache-2.0 | Tauri 前端 IPC | 兼容 | 通过 |
 | TypeScript | npm devDependency | Apache-2.0 | typecheck/build tooling | Apache-2.0 兼容 | 通过 |
 | tauri-plugin-dialog | Rust (crate) | MIT/Apache-2.0 | Rust-owned JSON import/export open/save dialogs | 兼容 | 通过 |
+| tauri-plugin-global-shortcut 2.3.2 | Rust (crate) | MIT/Apache-2.0 | Tauri 全局热键注册、冲突检测和事件桥接 | 兼容；真实 Windows OS 注册/触发仍需 capability gate 验证 | 通过（code-side 接入） |
+| global-hotkey 0.8.0 | Rust (crate, transitive via tauri-plugin-global-shortcut) | MIT/Apache-2.0 | 系统级 hotkey 注册 backend | 兼容；随 Rust crates full audit 复核 | 通过（transitive） |
 | tauri-plugin-updater 2.10.0 | Rust (crate) | MIT/Apache-2.0 | Tauri updater 检测和签名校验通道；P10.a 只启用 check，download/install 仍受签名 gate 阻挡 | 兼容；公开安装更新仍需 pubkey/signature 或最终风险决策 | 通过（检测接入） |
 | tauri-plugin-fs | Rust (crate, transitive via tauri-plugin-dialog) | MIT/Apache-2.0 | dialog FilePath conversion / scoped filesystem support | 兼容 | 通过（transitive） |
 | rfd | Rust (crate, transitive via tauri-plugin-dialog) | MIT | native file dialog backend | 兼容 | 通过（transitive） |

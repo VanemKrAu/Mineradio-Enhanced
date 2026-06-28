@@ -230,11 +230,13 @@ pub fn run() {
             reactivate_main_window_for_single_instance(app);
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime_config,
             commands::get_sidecar_status,
+            commands::configure_global_hotkeys,
             commands::get_updater_status,
             commands::check_for_update,
             commands::window_minimize,

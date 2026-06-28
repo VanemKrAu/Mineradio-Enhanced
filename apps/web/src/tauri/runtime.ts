@@ -33,6 +33,33 @@ export interface ImportJsonFileResult {
 	data: JsonValue | null;
 }
 
+export interface GlobalHotkeyBinding {
+	action: string;
+	accelerator: string;
+}
+
+export interface GlobalHotkeyConflict {
+	sourceName: string;
+	sourceIcon: string;
+	reason: string;
+}
+
+export interface GlobalHotkeyRegistrationResult {
+	action: string;
+	accelerator: string;
+	ok: boolean;
+	conflict?: GlobalHotkeyConflict;
+}
+
+export interface ConfigureGlobalHotkeysResult {
+	ok: boolean;
+	results: GlobalHotkeyRegistrationResult[];
+}
+
+export interface GlobalHotkeyEventPayload {
+	action: string;
+}
+
 interface RawRuntimeConfig {
 	sidecar_base_url: string;
 	app_data_dir: string;
@@ -119,6 +146,13 @@ function cancelledImportJsonResult(): ImportJsonFileResult {
 	};
 }
 
+function disabledGlobalHotkeysResult(): ConfigureGlobalHotkeysResult {
+	return {
+		ok: true,
+		results: [],
+	};
+}
+
 export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 	if (!isTauriRuntime()) {
 		return placeholderRuntimeConfig();
@@ -176,4 +210,36 @@ export async function importJsonFile(): Promise<ImportJsonFileResult> {
 	}
 	const result = await invokeTauriCommand<ImportJsonFileResult>("import_json_file");
 	return result ?? cancelledImportJsonResult();
+}
+
+export async function toggleWindowFullscreen(): Promise<void> {
+	if (!isTauriRuntime()) return;
+	await invokeTauriCommand("window_toggle_fullscreen");
+}
+
+export async function showDesktopLyricsWindow(): Promise<void> {
+	if (!isTauriRuntime()) return;
+	await invokeTauriCommand("desktop_lyrics_show_window");
+}
+
+export async function closeDesktopLyricsWindow(): Promise<void> {
+	if (!isTauriRuntime()) return;
+	await invokeTauriCommand("desktop_lyrics_close_window");
+}
+
+export async function updateDesktopLyricsPayload(payload: JsonValue): Promise<void> {
+	if (!isTauriRuntime()) return;
+	await invokeTauriCommand("desktop_lyrics_update_payload", { payload });
+}
+
+export async function configureGlobalHotkeys(bindings: GlobalHotkeyBinding[]): Promise<ConfigureGlobalHotkeysResult> {
+	if (!isTauriRuntime()) {
+		return disabledGlobalHotkeysResult();
+	}
+	const result = await invokeTauriCommand<ConfigureGlobalHotkeysResult>("configure_global_hotkeys", { bindings });
+	return result ?? disabledGlobalHotkeysResult();
+}
+
+export async function listenGlobalHotkey(handler: (payload: GlobalHotkeyEventPayload) => void): Promise<Unlisten> {
+	return listenTauriEvent<GlobalHotkeyEventPayload>("mineradio-global-hotkey", handler);
 }

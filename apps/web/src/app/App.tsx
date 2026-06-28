@@ -23,7 +23,20 @@ import {
 	type ShelfPresence,
 } from "../stores/shelf-store";
 import { useUiStore } from "../stores/ui-store";
-import { getRuntimeConfig, getSidecarStatus, importJsonFile, type RuntimeConfig, type SidecarStatus } from "../tauri/runtime";
+import {
+	closeDesktopLyricsWindow,
+	configureGlobalHotkeys,
+	getRuntimeConfig,
+	getSidecarStatus,
+	importJsonFile,
+	listenGlobalHotkey,
+	showDesktopLyricsWindow,
+	toggleWindowFullscreen,
+	updateDesktopLyricsPayload,
+	type GlobalHotkeyBinding,
+	type RuntimeConfig,
+	type SidecarStatus,
+} from "../tauri/runtime";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
 import { SearchShell } from "../components/shell/SearchShell";
 import { SidecarRecoveryNotice, type SidecarRecoveryNoticeState } from "../components/shell/SidecarRecoveryNotice";
@@ -38,6 +51,15 @@ const SHOW_SPLASH = import.meta.env.VITE_SPLASH !== "0";
 const SIDECAR_STATUS_POLL_MS = 1500;
 const SIDECAR_RECOVERED_NOTICE_MS = 2600;
 const PLAYBACK_QUALITY_STORE_KEY = "mineradio-playback-quality-v1";
+const DEFAULT_GLOBAL_HOTKEYS: GlobalHotkeyBinding[] = [
+	{ action: "togglePlay", accelerator: "Control+Alt+Space" },
+	{ action: "prevTrack", accelerator: "Control+Alt+ArrowLeft" },
+	{ action: "nextTrack", accelerator: "Control+Alt+ArrowRight" },
+	{ action: "volumeUp", accelerator: "Control+Alt+ArrowUp" },
+	{ action: "volumeDown", accelerator: "Control+Alt+ArrowDown" },
+	{ action: "toggleFullscreen", accelerator: "Control+Alt+KeyF" },
+	{ action: "toggleDesktopLyrics", accelerator: "Control+Alt+KeyL" },
+];
 
 function placeholderRuntimeConfig(): RuntimeConfig {
 	return {
@@ -153,6 +175,7 @@ export function App({ SplashComponent = SplashHost, VisualComponent = VisualEngi
 	const [customLyricText, setCustomLyricText] = useState("");
 	const [customLyricStatus, setCustomLyricStatus] = useState<{ text: string; tone?: "good" | "fail" }>({ text: "" });
 	const [customLyricVersion, setCustomLyricVersion] = useState(0);
+	const [desktopLyricsEnabled, setDesktopLyricsEnabled] = useState(false);
 
 	const currentTrack = usePlaybackStore((s) => s.currentTrack);
 	const queue = usePlaybackStore((s) => s.queue);
@@ -575,6 +598,80 @@ export function App({ SplashComponent = SplashHost, VisualComponent = VisualEngi
 		showToast("正在切换音质");
 	}, [setPositionMs, showToast]);
 
+	const currentDesktopLyricText = useCallback(() => {
+		const payload = useLyricsStore.getState().payload;
+		const position = usePlaybackStore.getState().positionMs;
+		const index = selectCurrentIndex(position, payload);
+		const line = index >= 0 ? payload?.lines[index] : null;
+		const text = line?.text?.trim();
+		if (text) return text;
+		const track = usePlaybackStore.getState().currentTrack;
+		return track ? `${track.title} - ${track.artists.join(" / ")}` : "";
+	}, []);
+
+	const toggleDesktopLyrics = useCallback(async () => {
+		if (desktopLyricsEnabled) {
+			await closeDesktopLyricsWindow();
+			setDesktopLyricsEnabled(false);
+			return;
+		}
+		const playback = usePlaybackStore.getState();
+		const duration = playback.durationMs ?? 0;
+		const text = currentDesktopLyricText();
+		await updateDesktopLyricsPayload({
+			enabled: true,
+			text,
+			progress: duration > 0 ? Math.min(1, Math.max(0, playback.positionMs / duration)) : 0,
+		});
+		await showDesktopLyricsWindow();
+		setDesktopLyricsEnabled(true);
+	}, [currentDesktopLyricText, desktopLyricsEnabled]);
+
+	const executeGlobalHotkeyAction = useCallback((action: string) => {
+		switch (action) {
+			case "togglePlay":
+				togglePlayback();
+				break;
+			case "prevTrack":
+				previousTrack();
+				break;
+			case "nextTrack":
+				nextTrack();
+				break;
+			case "volumeUp":
+				setVolume(usePlaybackStore.getState().volume + 0.05);
+				break;
+			case "volumeDown":
+				setVolume(usePlaybackStore.getState().volume - 0.05);
+				break;
+			case "toggleFullscreen":
+				void toggleWindowFullscreen();
+				break;
+			case "toggleDesktopLyrics":
+				void toggleDesktopLyrics();
+				break;
+			default:
+				break;
+		}
+	}, [nextTrack, previousTrack, setVolume, toggleDesktopLyrics, togglePlayback]);
+
+	useEffect(() => {
+		let disposed = false;
+		let unlisten: (() => void) | null = null;
+		void configureGlobalHotkeys(DEFAULT_GLOBAL_HOTKEYS);
+		void listenGlobalHotkey((payload) => {
+			if (!disposed && payload?.action) executeGlobalHotkeyAction(payload.action);
+		}).then((dispose) => {
+			if (disposed) dispose();
+			else unlisten = dispose;
+		});
+		return () => {
+			disposed = true;
+			unlisten?.();
+			void configureGlobalHotkeys([]);
+		};
+	}, [executeGlobalHotkeyAction]);
+
 	useEffect(() => {
 		if (typeof document === "undefined") return;
 		document.body.classList.toggle("splash-active", splashActive);
@@ -619,6 +716,15 @@ export function App({ SplashComponent = SplashHost, VisualComponent = VisualEngi
 		const timer = setTimeout(() => clearToast(), 2600);
 		return () => clearTimeout(timer);
 	}, [clearToast, toast]);
+
+	useEffect(() => {
+		if (!desktopLyricsEnabled) return;
+		void updateDesktopLyricsPayload({
+			enabled: true,
+			text: currentDesktopLyricText(),
+			progress: (durationMs ?? 0) > 0 ? Math.min(1, Math.max(0, positionMs / (durationMs ?? 1))) : 0,
+		});
+	}, [currentDesktopLyricText, desktopLyricsEnabled, durationMs, lyricsPayload, positionMs]);
 
 	useEffect(() => {
 		if (!sidecarBaseUrl) return;

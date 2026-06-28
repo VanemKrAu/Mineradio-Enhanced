@@ -17,6 +17,7 @@ use tauri::{
     Emitter, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 
 const DESKTOP_LYRICS_MAX_MOVE_DELTA: f64 = 4096.0;
@@ -24,6 +25,9 @@ const DESKTOP_LYRICS_DEFAULT_WIDTH: i32 = 760;
 const DESKTOP_LYRICS_DEFAULT_HEIGHT: i32 = 120;
 const DESKTOP_LYRICS_MIDDLE_CLICK_DEBOUNCE_MS: u64 = 260;
 const DEFAULT_JSON_EXPORT_FILE_NAME: &str = "mineradio-export.json";
+const GLOBAL_HOTKEY_CONFLICT_SOURCE_NAME: &str = "系统 / 其他软件";
+const GLOBAL_HOTKEY_CONFLICT_SOURCE_ICON: &str = "warning";
+const GLOBAL_HOTKEY_CONFLICT_REASON: &str = "该组合键已被占用或被系统保留";
 #[allow(dead_code)]
 const NETEASE_LOGIN_COOKIE_PRIORITY: &[&str] = &["MUSIC_U", "__csrf", "NMTID"];
 #[allow(dead_code)]
@@ -48,6 +52,44 @@ pub mod labels {
     pub const LOGIN_QQ: &str = "login-qq";
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalHotkeyBinding {
+    pub action: String,
+    pub accelerator: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalHotkeyConflict {
+    pub source_name: String,
+    pub source_icon: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalHotkeyRegistrationResult {
+    pub action: String,
+    pub accelerator: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflict: Option<GlobalHotkeyConflict>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigureGlobalHotkeysResult {
+    pub ok: bool,
+    pub results: Vec<GlobalHotkeyRegistrationResult>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalHotkeyEventPayload {
+    pub action: String,
+}
+
 #[tauri::command]
 pub fn get_runtime_config(state: tauri::State<'_, AppState>) -> crate::RuntimeConfig {
     state.config.clone()
@@ -59,6 +101,31 @@ pub fn get_sidecar_status(
 ) -> Result<sidecar::SidecarRuntimeSnapshot, String> {
     let runtime = state.sidecar.lock().map_err(|e| e.to_string())?;
     Ok(runtime.snapshot())
+}
+
+#[tauri::command]
+pub fn configure_global_hotkeys(
+    app: tauri::AppHandle,
+    bindings: Vec<GlobalHotkeyBinding>,
+) -> ConfigureGlobalHotkeysResult {
+    let manager = app.global_shortcut();
+    let _ = manager.unregister_all();
+    build_global_hotkey_registration_results(&bindings, |binding| {
+        let action = binding.action.clone();
+        manager
+            .on_shortcut(binding.accelerator.as_str(), move |app, _shortcut, event| {
+                if event.state != ShortcutState::Released {
+                    return;
+                }
+                let _ = app.emit(
+                    "mineradio-global-hotkey",
+                    GlobalHotkeyEventPayload {
+                        action: action.clone(),
+                    },
+                );
+            })
+            .is_ok()
+    })
 }
 
 #[tauri::command]
@@ -106,6 +173,49 @@ pub async fn check_for_update(
 fn main_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     app.get_webview_window(labels::MAIN)
         .ok_or_else(|| "main window not found".to_string())
+}
+
+pub fn global_hotkey_conflict() -> GlobalHotkeyConflict {
+    GlobalHotkeyConflict {
+        source_name: GLOBAL_HOTKEY_CONFLICT_SOURCE_NAME.to_string(),
+        source_icon: GLOBAL_HOTKEY_CONFLICT_SOURCE_ICON.to_string(),
+        reason: GLOBAL_HOTKEY_CONFLICT_REASON.to_string(),
+    }
+}
+
+pub fn build_global_hotkey_registration_results<F>(
+    bindings: &[GlobalHotkeyBinding],
+    mut register: F,
+) -> ConfigureGlobalHotkeysResult
+where
+    F: FnMut(&GlobalHotkeyBinding) -> bool,
+{
+    let mut results = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for binding in bindings {
+        let action = binding.action.trim();
+        let accelerator = binding.accelerator.trim();
+        if action.is_empty() || accelerator.is_empty() || seen.contains(accelerator) {
+            continue;
+        }
+        seen.insert(accelerator.to_string());
+        let normalized = GlobalHotkeyBinding {
+            action: action.to_string(),
+            accelerator: accelerator.to_string(),
+        };
+        let ok = register(&normalized);
+        results.push(GlobalHotkeyRegistrationResult {
+            action: normalized.action,
+            accelerator: normalized.accelerator,
+            ok,
+            conflict: if ok {
+                None
+            } else {
+                Some(global_hotkey_conflict())
+            },
+        });
+    }
+    ConfigureGlobalHotkeysResult { ok: true, results }
 }
 
 pub fn desktop_lyrics_window_url() -> &'static str {
@@ -1248,6 +1358,69 @@ mod tests {
         assert!(!is_openable_url("ftp://example.com"));
         assert!(!is_openable_url(""));
         assert!(!is_openable_url("data:text/plain,hi"));
+    }
+
+    #[test]
+    fn global_hotkey_conflict_matches_baseline_copy() {
+        assert_eq!(
+            global_hotkey_conflict(),
+            GlobalHotkeyConflict {
+                source_name: "系统 / 其他软件".to_string(),
+                source_icon: "warning".to_string(),
+                reason: "该组合键已被占用或被系统保留".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn global_hotkey_registration_results_skip_empty_and_duplicate_accelerators() {
+        let bindings = vec![
+            GlobalHotkeyBinding {
+                action: "togglePlay".to_string(),
+                accelerator: "Control+Alt+Space".to_string(),
+            },
+            GlobalHotkeyBinding {
+                action: "".to_string(),
+                accelerator: "Control+Alt+Left".to_string(),
+            },
+            GlobalHotkeyBinding {
+                action: "nextTrack".to_string(),
+                accelerator: "".to_string(),
+            },
+            GlobalHotkeyBinding {
+                action: "prevTrack".to_string(),
+                accelerator: "Control+Alt+Space".to_string(),
+            },
+            GlobalHotkeyBinding {
+                action: "volumeUp".to_string(),
+                accelerator: "Control+Alt+Up".to_string(),
+            },
+        ];
+
+        let result = build_global_hotkey_registration_results(&bindings, |binding| {
+            binding.accelerator == "Control+Alt+Space"
+        });
+
+        assert_eq!(
+            result,
+            ConfigureGlobalHotkeysResult {
+                ok: true,
+                results: vec![
+                    GlobalHotkeyRegistrationResult {
+                        action: "togglePlay".to_string(),
+                        accelerator: "Control+Alt+Space".to_string(),
+                        ok: true,
+                        conflict: None,
+                    },
+                    GlobalHotkeyRegistrationResult {
+                        action: "volumeUp".to_string(),
+                        accelerator: "Control+Alt+Up".to_string(),
+                        ok: false,
+                        conflict: Some(global_hotkey_conflict()),
+                    },
+                ],
+            }
+        );
     }
 
     #[test]
