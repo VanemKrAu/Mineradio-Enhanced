@@ -104,6 +104,31 @@ test("PlayerConsoleHost renders shelf mode controls and emits baseline setting c
 	container.remove();
 });
 
+test("PlayerConsoleHost renders shelf content switches and emits baseline callbacks", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	const calls: string[] = [];
+	const container = document.createElement("div");
+	document.body.appendChild(container);
+	const root = createRoot(container);
+	root.render(
+		React.createElement(PlayerConsoleHost, {
+			shelfShowPodcasts: false,
+			shelfMergeCollections: true,
+			onShelfShowPodcastsChange: (show) => calls.push(`podcasts:${show}`),
+			onShelfMergeCollectionsChange: (merge) => calls.push(`merge:${merge}`),
+		}),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	expect(container.querySelector('[data-shelf-content="podcasts"]')?.className).not.toContain("active");
+	expect(container.querySelector('[data-shelf-content="merge"]')?.className).toContain("active");
+	(container.querySelector('[data-shelf-content="podcasts"]') as HTMLButtonElement).click();
+	(container.querySelector('[data-shelf-content="merge"]') as HTMLButtonElement).click();
+	expect(calls).toEqual(["podcasts:true", "merge:false"]);
+	root.unmount();
+	container.remove();
+});
+
 test("PlayerConsoleHost routes the collect button to the baseline collect picker callback", async () => {
 	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
 	let opened = 0;

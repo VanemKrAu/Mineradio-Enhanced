@@ -29,7 +29,7 @@ export interface VisualEngineHostProps {
 	sidecarBaseUrl?: string | null;
 	coverResolution?: number;
 	fxDefaults?: Partial<FxState>;
-	shelfSettings?: Pick<ShelfSettings, "mode" | "cameraMode" | "presence"> | null;
+	shelfSettings?: Pick<ShelfSettings, "mode" | "cameraMode" | "presence" | "showPodcasts" | "mergeCollections"> | null;
 	splashActive?: boolean;
 	homeActive?: boolean;
 	secondaryLeftDisplaySeamGuardActive?: boolean;
@@ -41,12 +41,14 @@ export interface VisualEngineHostProps {
 
 export function resolveVisualShelfSettings(
 	fxDefaults: Partial<FxState> | undefined,
-	settings: Pick<ShelfSettings, "mode" | "cameraMode" | "presence"> | null | undefined,
-): { mode: ShelfMode; cameraMode: ShelfCameraMode; presence: ShelfPresence } {
+	settings: Pick<ShelfSettings, "mode" | "cameraMode" | "presence" | "showPodcasts" | "mergeCollections"> | null | undefined,
+): { mode: ShelfMode; cameraMode: ShelfCameraMode; presence: ShelfPresence; showPodcasts: boolean; mergeCollections: boolean } {
 	return {
 		mode: settings?.mode ?? (fxDefaults?.shelf as ShelfMode | undefined) ?? "side",
 		cameraMode: settings?.cameraMode ?? (fxDefaults?.shelfCameraMode as ShelfCameraMode | undefined) ?? "static",
 		presence: settings?.presence ?? (fxDefaults?.shelfPresence as ShelfPresence | undefined) ?? "always",
+		showPodcasts: settings?.showPodcasts ?? (fxDefaults?.shelfShowPodcasts !== false),
+		mergeCollections: settings?.mergeCollections ?? (fxDefaults?.shelfMergeCollections === true),
 	};
 }
 
@@ -165,8 +167,12 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 			podcastCollections: props.podcastCollections ?? [],
 			queue: props.queue ?? [],
 			currentTrack: props.currentTrack ?? null,
+			settings: {
+				showPodcasts: visualShelfSettings.showPodcasts,
+				mergeCollections: visualShelfSettings.mergeCollections,
+			},
 		}),
-		[props.playlists, props.podcastCollections, props.queue, props.currentTrack],
+		[props.playlists, props.podcastCollections, props.queue, props.currentTrack, visualShelfSettings.showPodcasts, visualShelfSettings.mergeCollections],
 	);
 
 	useEffect(() => {

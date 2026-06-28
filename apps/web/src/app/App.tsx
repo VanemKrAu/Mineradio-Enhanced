@@ -237,9 +237,13 @@ export function App({
 	const shelfMode = useShelfStore((s) => s.mode);
 	const shelfCameraMode = useShelfStore((s) => s.cameraMode);
 	const shelfPresence = useShelfStore((s) => s.presence);
+	const shelfShowPodcasts = useShelfStore((s) => s.showPodcasts);
+	const shelfMergeCollections = useShelfStore((s) => s.mergeCollections);
 	const setShelfMode = useShelfStore((s) => s.setMode);
 	const setShelfCameraMode = useShelfStore((s) => s.setCameraMode);
 	const setShelfPresence = useShelfStore((s) => s.setPresence);
+	const setShelfShowPodcasts = useShelfStore((s) => s.setShowPodcasts);
+	const setShelfMergeCollections = useShelfStore((s) => s.setMergeCollections);
 	const applyShelfSettings = useShelfStore((s) => s.applySettings);
 	const consoleVisible = useUiStore((s) => s.consoleVisible);
 	const setConsole = useUiStore((s) => s.setConsole);
@@ -764,6 +768,18 @@ export function App({
 		showToast(presence === "always" ? "3D歌单架: 常驻" : "3D歌单架: 自动隐藏");
 	}, [setShelfPresence, showToast]);
 
+	const updateShelfShowPodcasts = useCallback((show: boolean) => {
+		setShelfShowPodcasts(show);
+		saveShelfSettingsToStorage();
+		showToast(show ? "3D歌单架已显示播客歌单" : "3D歌单架已隐藏播客歌单");
+	}, [setShelfShowPodcasts, showToast]);
+
+	const updateShelfMergeCollections = useCallback((merge: boolean) => {
+		setShelfMergeCollections(merge);
+		saveShelfSettingsToStorage();
+		showToast(merge ? "我的歌单与收藏歌单已合并滚动" : "收藏歌单恢复滚到底切页");
+	}, [setShelfMergeCollections, showToast]);
+
 	const setPlaybackQuality = useCallback((quality: PlaybackQuality) => {
 		setPlaybackQualityState(quality);
 		savePlaybackQualityPreference(quality);
@@ -1189,6 +1205,8 @@ export function App({
 					mode: shelfMode,
 					cameraMode: shelfCameraMode,
 					presence: shelfPresence,
+					showPodcasts: shelfShowPodcasts,
+					mergeCollections: shelfMergeCollections,
 				}}
 				splashActive={splashActive}
 				homeActive={emptyHomeActive}
@@ -1285,6 +1303,8 @@ export function App({
 				onShelfModeChange={updateShelfMode}
 				onShelfCameraModeChange={updateShelfCameraMode}
 				onShelfPresenceChange={updateShelfPresence}
+				onShelfShowPodcastsChange={updateShelfShowPodcasts}
+				onShelfMergeCollectionsChange={updateShelfMergeCollections}
 				onPlayQueueIndex={playMiniQueueIndex}
 				onRemoveQueueIndex={removeQueueAt}
 				onInsertQueueNext={insertMiniQueueNext}
@@ -1307,6 +1327,8 @@ export function App({
 				shelfMode={shelfMode}
 				shelfCameraMode={shelfCameraMode}
 				shelfPresence={shelfPresence}
+				shelfShowPodcasts={shelfShowPodcasts}
+				shelfMergeCollections={shelfMergeCollections}
 				lyricSourceMode={currentLyricPreference === "custom" ? "custom" : "original"}
 				hasCustomLyric={!!currentCustomLyricText}
 			/>

@@ -1684,6 +1684,10 @@ html.control-glass-svg-ok #bottom-bar.visible {
   width: 54px;
 }
 
+.fx-seg.console-shelf-seg.shelf-content-seg {
+  width: 48px;
+}
+
 .fx-seg.console-shelf-seg button {
   min-width: 0;
   height: 26px;

@@ -58,6 +58,8 @@ test("shelf store persists baseline shelf mode controls without legacy lyric lay
 		mode: "stage",
 		cameraMode: "dynamic",
 		presence: "auto",
+		showPodcasts: true,
+		mergeCollections: false,
 	});
 });
 
@@ -76,6 +78,46 @@ test("loadShelfSettingsFromStorage normalizes invalid stored values", () => {
 		mode: "side",
 		cameraMode: "static",
 		presence: "always",
+		showPodcasts: true,
+		mergeCollections: false,
+	});
+});
+
+test("shelf content switches persist baseline podcast and collection merge controls", () => {
+	const storage = new Map<string, string>();
+	const localStorageLike = {
+		getItem: (key: string) => storage.get(key) ?? null,
+		setItem: (key: string, value: string) => storage.set(key, value),
+	};
+
+	useShelfStore.setState({
+		mode: "stage",
+		cameraMode: "dynamic",
+		presence: "auto",
+		showPodcasts: true,
+		mergeCollections: false,
+		open: false,
+		selectedPlaylistId: null,
+	});
+	useShelfStore.getState().setShowPodcasts(false);
+	useShelfStore.getState().setMergeCollections(true);
+	saveShelfSettingsToStorage(localStorageLike);
+
+	expect(JSON.parse(storage.get(SHELF_SETTINGS_STORE_KEY) ?? "{}")).toEqual({
+		version: 1,
+		mode: "stage",
+		cameraMode: "dynamic",
+		presence: "auto",
+		showPodcasts: false,
+		mergeCollections: true,
+	});
+	expect(loadShelfSettingsFromStorage(localStorageLike)).toEqual({
+		version: 1,
+		mode: "stage",
+		cameraMode: "dynamic",
+		presence: "auto",
+		showPodcasts: false,
+		mergeCollections: true,
 	});
 });
 
@@ -84,6 +126,8 @@ test("applySettings preserves unspecified shelf settings", () => {
 		mode: "stage",
 		cameraMode: "dynamic",
 		presence: "auto",
+		showPodcasts: false,
+		mergeCollections: true,
 		open: false,
 		selectedPlaylistId: null,
 	});
@@ -91,4 +135,6 @@ test("applySettings preserves unspecified shelf settings", () => {
 	expect(useShelfStore.getState().mode).toBe("off");
 	expect(useShelfStore.getState().cameraMode).toBe("dynamic");
 	expect(useShelfStore.getState().presence).toBe("auto");
+	expect(useShelfStore.getState().showPodcasts).toBe(false);
+	expect(useShelfStore.getState().mergeCollections).toBe(true);
 });

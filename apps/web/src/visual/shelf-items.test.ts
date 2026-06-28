@@ -61,7 +61,7 @@ test("mapQueueToShelfItems returns no hidden Mineradio host fixture when queue i
 	expect(JSON.stringify(items)).not.toContain("Mineradio");
 });
 
-test("resolveShelfItems prefers provider playlists over queue fallback for the 3D shelf", () => {
+test("resolveShelfItems prefers merged provider playlists over queue fallback for the 3D shelf", () => {
 	const playlists: PlaylistSummary[] = [
 		{
 			provider: "netease",
@@ -84,7 +84,13 @@ test("resolveShelfItems prefers provider playlists over queue fallback for the 3
 	];
 	const queue = [track("a", "Queued", ["Ada"], "Album", "cover-q")];
 
-	const items = resolveShelfItems({ playlists, podcastCollections: [], queue, currentTrack: queue[0] });
+	const items = resolveShelfItems({
+		playlists,
+		podcastCollections: [],
+		queue,
+		currentTrack: queue[0],
+		settings: { showPodcasts: true, mergeCollections: true },
+	});
 
 	expect(items).toEqual([
 		{
@@ -190,6 +196,81 @@ test("resolveShelfItems appends podcast collections after provider playlists bef
 			itemType: "voice",
 		},
 	]);
+});
+
+test("resolveShelfItems hides podcast collections when the baseline content switch is off", () => {
+	const playlists: PlaylistSummary[] = [{
+		provider: "netease",
+		id: "101",
+		name: "我的歌单",
+		coverUrl: "cover-like",
+		trackCount: 12,
+		trackIds: [],
+		subscribed: false,
+	}];
+	const podcastCollections: PodcastCollection[] = [{
+		key: "liked",
+		title: "喜欢的声音",
+		sub: "收藏或最近喜欢的声音",
+		itemType: "voice",
+		count: 5,
+		coverUrl: "voice-cover",
+	}];
+
+	expect(resolveShelfItems({
+		playlists,
+		podcastCollections,
+		queue: [],
+		currentTrack: null,
+		settings: { showPodcasts: false, mergeCollections: false },
+	})).toEqual([{
+		type: "playlist",
+		title: "我的歌单",
+		sub: "12 首",
+		cover: "cover-like",
+		tag: "网易云",
+		playlistId: "101",
+		provider: "netease",
+	}]);
+});
+
+test("resolveShelfItems keeps favorite playlists out of the default mine pane until merge is enabled", () => {
+	const playlists: PlaylistSummary[] = [
+		{
+			provider: "netease",
+			id: "mine",
+			name: "我的歌单",
+			coverUrl: "mine-cover",
+			trackCount: 12,
+			trackIds: [],
+			subscribed: false,
+		},
+		{
+			provider: "netease",
+			id: "fav",
+			name: "收藏歌单",
+			coverUrl: "fav-cover",
+			trackCount: 7,
+			trackIds: [],
+			subscribed: true,
+		},
+	];
+
+	expect(resolveShelfItems({
+		playlists,
+		podcastCollections: [],
+		queue: [],
+		currentTrack: null,
+		settings: { showPodcasts: true, mergeCollections: false },
+	}).map((item) => item.title)).toEqual(["我的歌单"]);
+
+	expect(resolveShelfItems({
+		playlists,
+		podcastCollections: [],
+		queue: [],
+		currentTrack: null,
+		settings: { showPodcasts: true, mergeCollections: true },
+	}).map((item) => item.title)).toEqual(["我的歌单", "收藏歌单"]);
 });
 
 test("resolveShelfItems falls back to queue when no provider playlist is available", () => {

@@ -44,6 +44,30 @@ export function mapPlaylistsToShelfItems(playlists: PlaylistSummary[]): ShelfIte
 		}));
 }
 
+export interface ShelfContentSettings {
+	showPodcasts: boolean;
+	mergeCollections: boolean;
+}
+
+function splitPlaylists(playlists: PlaylistSummary[]): { mine: PlaylistSummary[]; fav: PlaylistSummary[] } {
+	const mine: PlaylistSummary[] = [];
+	const fav: PlaylistSummary[] = [];
+	for (const playlist of playlists) {
+		(playlist.subscribed ? fav : mine).push(playlist);
+	}
+	return { mine, fav };
+}
+
+export function resolveActivePlaylists(
+	playlists: PlaylistSummary[],
+	settings?: Partial<Pick<ShelfContentSettings, "mergeCollections">>,
+): PlaylistSummary[] {
+	const panes = splitPlaylists(playlists);
+	if (settings?.mergeCollections === true) return [...panes.mine, ...panes.fav];
+	if (panes.mine.length) return panes.mine;
+	return panes.fav;
+}
+
 export function mapPodcastCollectionsToShelfItems(collections: PodcastCollection[]): ShelfItem[] {
 	return collections
 		.filter((collection) => collection.key && collection.title)
@@ -63,10 +87,16 @@ export function resolveShelfItems(input: {
 	podcastCollections?: PodcastCollection[];
 	queue: Track[];
 	currentTrack: Track | null;
+	settings?: Partial<ShelfContentSettings>;
 }): ShelfItem[] {
+	const settings = {
+		showPodcasts: input.settings?.showPodcasts !== false,
+		mergeCollections: input.settings?.mergeCollections === true,
+	};
+	const activePlaylists = resolveActivePlaylists(input.playlists, settings);
 	const accountItems = [
-		...mapPlaylistsToShelfItems(input.playlists),
-		...mapPodcastCollectionsToShelfItems(input.podcastCollections ?? []),
+		...mapPlaylistsToShelfItems(activePlaylists),
+		...(settings.showPodcasts ? mapPodcastCollectionsToShelfItems(input.podcastCollections ?? []) : []),
 	];
 	return accountItems.length > 0 ? accountItems : mapQueueToShelfItems(input.queue, input.currentTrack);
 }

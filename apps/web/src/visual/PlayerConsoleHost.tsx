@@ -47,6 +47,8 @@ export interface PlayerConsoleHostProps {
 	onShelfModeChange?: (mode: ShelfMode) => void;
 	onShelfCameraModeChange?: (mode: ShelfCameraMode) => void;
 	onShelfPresenceChange?: (presence: ShelfPresence) => void;
+	onShelfShowPodcastsChange?: (show: boolean) => void;
+	onShelfMergeCollectionsChange?: (merge: boolean) => void;
 	onPlayQueueIndex?: (index: number) => void;
 	onRemoveQueueIndex?: (index: number) => void;
 	onInsertQueueNext?: (index: number) => void;
@@ -70,6 +72,8 @@ export interface PlayerConsoleHostProps {
 	shelfMode?: ShelfMode;
 	shelfCameraMode?: ShelfCameraMode;
 	shelfPresence?: ShelfPresence;
+	shelfShowPodcasts?: boolean;
+	shelfMergeCollections?: boolean;
 	lyricSourceMode?: "original" | "custom";
 	hasCustomLyric?: boolean;
 	deps?: {
@@ -133,6 +137,10 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 	onShelfCameraModeChangeRef.current = props.onShelfCameraModeChange;
 	const onShelfPresenceChangeRef = useRef(props.onShelfPresenceChange);
 	onShelfPresenceChangeRef.current = props.onShelfPresenceChange;
+	const onShelfShowPodcastsChangeRef = useRef(props.onShelfShowPodcastsChange);
+	onShelfShowPodcastsChangeRef.current = props.onShelfShowPodcastsChange;
+	const onShelfMergeCollectionsChangeRef = useRef(props.onShelfMergeCollectionsChange);
+	onShelfMergeCollectionsChangeRef.current = props.onShelfMergeCollectionsChange;
 	const onPlayQueueIndexRef = useRef(props.onPlayQueueIndex);
 	onPlayQueueIndexRef.current = props.onPlayQueueIndex;
 	const onRemoveQueueIndexRef = useRef(props.onRemoveQueueIndex);
@@ -279,6 +287,8 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 	const shelfMode = props.shelfMode ?? "side";
 	const shelfCameraMode = props.shelfCameraMode ?? "static";
 	const shelfPresence = props.shelfPresence ?? "always";
+	const shelfShowPodcasts = props.shelfShowPodcasts !== false;
+	const shelfMergeCollections = props.shelfMergeCollections === true;
 	const chooseOriginalLyrics = useCallback(() => {
 		onLyricSourceChangeRef.current?.("original");
 	}, []);
@@ -445,6 +455,22 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 						<div className="fx-seg console-shelf-seg compact" id="shelf-presence-seg">
 							<button type="button" data-shelf-presence="always" className={shelfPresence === "always" ? "active" : ""} onClick={() => onShelfPresenceChangeRef.current?.("always")}>常</button>
 							<button type="button" data-shelf-presence="auto" className={shelfPresence === "auto" ? "active" : ""} onClick={() => onShelfPresenceChangeRef.current?.("auto")}>隐</button>
+						</div>
+						<div className="fx-seg console-shelf-seg compact shelf-content-seg" id="shelf-content-seg">
+							<button
+								type="button"
+								data-shelf-content="podcasts"
+								className={shelfShowPodcasts ? "active" : ""}
+								title="关闭后 3D 歌单架不显示播客收藏"
+								onClick={() => onShelfShowPodcastsChangeRef.current?.(!shelfShowPodcasts)}
+							>播</button>
+							<button
+								type="button"
+								data-shelf-content="merge"
+								className={shelfMergeCollections ? "active" : ""}
+								title="开启后我的歌单与收藏歌单按一条线连续滚动"
+								onClick={() => onShelfMergeCollectionsChangeRef.current?.(!shelfMergeCollections)}
+							>合</button>
 						</div>
 					</div>
 					<button

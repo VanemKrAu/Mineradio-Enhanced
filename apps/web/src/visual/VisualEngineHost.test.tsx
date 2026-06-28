@@ -44,16 +44,20 @@ test("syncRuntimeShelfModeOverride clears runtime override when default shelf pr
 test("resolveVisualShelfSettings prefers explicit shelf store settings over fx defaults", () => {
 	expect(resolveVisualShelfSettings(
 		{ shelf: "off", shelfCameraMode: "dynamic", shelfPresence: "auto" },
-		{ mode: "stage", cameraMode: "static", presence: "always" },
+		{ mode: "stage", cameraMode: "static", presence: "always", showPodcasts: false, mergeCollections: true },
 	)).toEqual({
 		mode: "stage",
 		cameraMode: "static",
 		presence: "always",
+		showPodcasts: false,
+		mergeCollections: true,
 	});
 	expect(resolveVisualShelfSettings({ shelf: "off" }, null)).toEqual({
 		mode: "off",
 		cameraMode: "static",
 		presence: "always",
+		showPodcasts: true,
+		mergeCollections: false,
 	});
 });
 

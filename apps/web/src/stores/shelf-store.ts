@@ -11,6 +11,8 @@ export interface ShelfSettings {
 	mode: ShelfMode;
 	cameraMode: ShelfCameraMode;
 	presence: ShelfPresence;
+	showPodcasts: boolean;
+	mergeCollections: boolean;
 }
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
@@ -27,12 +29,14 @@ export function normalizeShelfPresence(value: unknown): ShelfPresence {
 	return value === "auto" || value === "always" ? value : "always";
 }
 
-function serializeShelfSettings(state: Pick<ShelfState, "mode" | "cameraMode" | "presence">): ShelfSettings {
+function serializeShelfSettings(state: Pick<ShelfState, "mode" | "cameraMode" | "presence" | "showPodcasts" | "mergeCollections">): ShelfSettings {
 	return {
 		version: 1,
 		mode: normalizeShelfMode(state.mode),
 		cameraMode: normalizeShelfCameraMode(state.cameraMode),
 		presence: normalizeShelfPresence(state.presence),
+		showPodcasts: state.showPodcasts !== false,
+		mergeCollections: state.mergeCollections === true,
 	};
 }
 
@@ -60,6 +64,8 @@ export function loadShelfSettingsFromStorage(storage?: StorageLike): ShelfSettin
 		mode: normalizeShelfMode(record.mode),
 		cameraMode: normalizeShelfCameraMode(record.cameraMode),
 		presence: normalizeShelfPresence(record.presence),
+		showPodcasts: record.showPodcasts !== false,
+		mergeCollections: record.mergeCollections === true,
 	};
 }
 
@@ -76,12 +82,16 @@ export interface ShelfState {
 	mode: ShelfMode;
 	cameraMode: ShelfCameraMode;
 	presence: ShelfPresence;
+	showPodcasts: boolean;
+	mergeCollections: boolean;
 	open: boolean;
 	selectedPlaylistId: string | null;
 	setMode: (mode: ShelfMode) => void;
 	setCameraMode: (mode: ShelfCameraMode) => void;
 	setPresence: (presence: ShelfPresence) => void;
-	applySettings: (settings: Partial<Pick<ShelfState, "mode" | "cameraMode" | "presence">>) => void;
+	setShowPodcasts: (show: boolean) => void;
+	setMergeCollections: (merge: boolean) => void;
+	applySettings: (settings: Partial<Pick<ShelfState, "mode" | "cameraMode" | "presence" | "showPodcasts" | "mergeCollections">>) => void;
 	openShelf: () => void;
 	closeShelf: () => void;
 	toggleShelf: () => void;
@@ -92,15 +102,21 @@ export const useShelfStore = create<ShelfState>()((set, get) => ({
 	mode: "side",
 	cameraMode: "static",
 	presence: "always",
+	showPodcasts: true,
+	mergeCollections: false,
 	open: false,
 	selectedPlaylistId: null,
 	setMode: (mode) => set({ mode: normalizeShelfMode(mode) }),
 	setCameraMode: (cameraMode) => set({ cameraMode: normalizeShelfCameraMode(cameraMode) }),
 	setPresence: (presence) => set({ presence: normalizeShelfPresence(presence) }),
+	setShowPodcasts: (showPodcasts) => set({ showPodcasts: showPodcasts !== false }),
+	setMergeCollections: (mergeCollections) => set({ mergeCollections: mergeCollections === true }),
 	applySettings: (settings) => set((state) => ({
 		mode: settings.mode === undefined ? state.mode : normalizeShelfMode(settings.mode),
 		cameraMode: settings.cameraMode === undefined ? state.cameraMode : normalizeShelfCameraMode(settings.cameraMode),
 		presence: settings.presence === undefined ? state.presence : normalizeShelfPresence(settings.presence),
+		showPodcasts: settings.showPodcasts === undefined ? state.showPodcasts : settings.showPodcasts !== false,
+		mergeCollections: settings.mergeCollections === undefined ? state.mergeCollections : settings.mergeCollections === true,
 	})),
 	openShelf: () => set({ open: true }),
 	closeShelf: () => set({ open: false }),

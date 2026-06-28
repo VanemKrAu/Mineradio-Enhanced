@@ -25,6 +25,8 @@ export interface BottomControlsHostProps {
 	onShelfModeChange?: (mode: ShelfMode) => void;
 	onShelfCameraModeChange?: (mode: ShelfCameraMode) => void;
 	onShelfPresenceChange?: (presence: ShelfPresence) => void;
+	onShelfShowPodcastsChange?: (show: boolean) => void;
+	onShelfMergeCollectionsChange?: (merge: boolean) => void;
 	onPlayQueueIndex?: (index: number) => void;
 	onRemoveQueueIndex?: (index: number) => void;
 	onInsertQueueNext?: (index: number) => void;
@@ -47,6 +49,8 @@ export interface BottomControlsHostProps {
 	shelfMode?: ShelfMode;
 	shelfCameraMode?: ShelfCameraMode;
 	shelfPresence?: ShelfPresence;
+	shelfShowPodcasts?: boolean;
+	shelfMergeCollections?: boolean;
 	lyricSourceMode?: "original" | "custom";
 	hasCustomLyric?: boolean;
 }
@@ -86,6 +90,8 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 				onShelfModeChange={props.onShelfModeChange}
 				onShelfCameraModeChange={props.onShelfCameraModeChange}
 				onShelfPresenceChange={props.onShelfPresenceChange}
+				onShelfShowPodcastsChange={props.onShelfShowPodcastsChange}
+				onShelfMergeCollectionsChange={props.onShelfMergeCollectionsChange}
 				onPlayQueueIndex={props.onPlayQueueIndex}
 				onRemoveQueueIndex={props.onRemoveQueueIndex}
 				onInsertQueueNext={props.onInsertQueueNext}
@@ -108,6 +114,8 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 				shelfMode={props.shelfMode}
 				shelfCameraMode={props.shelfCameraMode}
 				shelfPresence={props.shelfPresence}
+				shelfShowPodcasts={props.shelfShowPodcasts}
+				shelfMergeCollections={props.shelfMergeCollections}
 				lyricSourceMode={props.lyricSourceMode}
 				hasCustomLyric={props.hasCustomLyric}
 			/>
