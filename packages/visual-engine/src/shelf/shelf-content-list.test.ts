@@ -4,8 +4,17 @@ import { SHELF_SETTINGS } from "./shelf-settings";
 import {
 	CONTENT_MAX_RENDER,
 	CONTENT_VISIBLE_RADIUS,
+	SHELF_CONTENT_PANEL_SCREEN_HEIGHT,
+	SHELF_CONTENT_PANEL_SCREEN_PAD,
+	SHELF_CONTENT_PANEL_SCREEN_WIDTH,
+	SHELF_CONTENT_ROW_SCREEN_HEIGHT,
+	SHELF_CONTENT_ROW_SCREEN_PAD_X,
+	SHELF_CONTENT_ROW_SCREEN_PAD_Y,
+	SHELF_CONTENT_ROW_SCREEN_WIDTH,
 	computeContentPanelOpacity,
 	createShelfContentList,
+	pickShelfContentRowAtScreen,
+	screenContainsShelfContentPanel,
 	type ShelfContentRow,
 } from "./shelf-content-list";
 
@@ -199,4 +208,136 @@ test("ShelfContentList.computeRowLayout hides rows beyond baseline visible radiu
 test("computeContentPanelOpacity preserves baseline 0.86 intro opacity", () => {
 	expect(computeContentPanelOpacity({ now: 0.36, openAnimAt: 0, settings: SHELF_SETTINGS })).toBeCloseTo(0.4128, 6);
 	expect(computeContentPanelOpacity({ now: 0.72, openAnimAt: 0, settings: SHELF_SETTINGS })).toBeCloseTo(0.8256, 6);
+});
+
+test("pickShelfContentRowAtScreen prefers higher renderOrder and returns padded baseline uv", () => {
+	const low = { id: "low", name: "Low" };
+	const high = { id: "high", name: "High" };
+	const hit = pickShelfContentRowAtScreen([
+		{
+			row: low,
+			visible: true,
+			renderOrder: 10,
+			bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+		},
+		{
+			row: high,
+			visible: true,
+			renderOrder: 20,
+			bounds: { minX: 110, minY: 110, maxX: 210, maxY: 170 },
+		},
+	], { x: 90, y: 100 });
+
+	expect(hit).toEqual({
+		row: high,
+		uv: { x: 0, y: 1 },
+		screenPick: true,
+	});
+});
+
+test("pickShelfContentRowAtScreen returns null outside baseline row padding", () => {
+	const row = { id: "row", name: "Row" };
+
+	expect(pickShelfContentRowAtScreen([
+		{
+			row,
+			visible: true,
+			renderOrder: 1,
+			bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+		},
+	], { x: 75, y: 100 })).toBeNull();
+	expect(pickShelfContentRowAtScreen([
+		{
+			row,
+			visible: true,
+			renderOrder: 1,
+			bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+		},
+	], { x: 100, y: 83 })).toBeNull();
+});
+
+test("pickShelfContentRowAtScreen ignores zero-area row bounds", () => {
+	const row = { id: "row", name: "Row" };
+
+	expect(pickShelfContentRowAtScreen([
+		{
+			row,
+			visible: true,
+			renderOrder: 1,
+			bounds: { minX: 100, minY: 100, maxX: 100, maxY: 160 },
+		},
+	], { x: 100, y: 120 })).toBeNull();
+	expect(pickShelfContentRowAtScreen([
+		{
+			row,
+			visible: true,
+			renderOrder: 1,
+			bounds: { minX: 100, minY: 100, maxX: 200, maxY: 100 },
+		},
+	], { x: 120, y: 100 })).toBeNull();
+});
+
+test("pickShelfContentRowAtScreen ignores non-finite row bounds and pointer", () => {
+	const row = { id: "row", name: "Row" };
+	const validRow = {
+		row,
+		visible: true,
+		renderOrder: 1,
+		bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+	};
+
+	expect(pickShelfContentRowAtScreen([
+		{
+			...validRow,
+			bounds: { minX: Number.NaN, minY: 100, maxX: 200, maxY: 160 },
+		},
+	], { x: 120, y: 120 })).toBeNull();
+	expect(pickShelfContentRowAtScreen([
+		{
+			...validRow,
+			bounds: { minX: 100, minY: 100, maxX: Number.POSITIVE_INFINITY, maxY: 160 },
+		},
+	], { x: 120, y: 120 })).toBeNull();
+	expect(pickShelfContentRowAtScreen([validRow], { x: Number.NaN, y: 120 })).toBeNull();
+	expect(pickShelfContentRowAtScreen([validRow], { x: 120, y: Number.POSITIVE_INFINITY })).toBeNull();
+});
+
+test("screenContainsShelfContentPanel uses baseline 42px padding", () => {
+	const panel = {
+		visible: true,
+		bounds: { minX: 300, minY: 200, maxX: 500, maxY: 520 },
+	};
+
+	expect(screenContainsShelfContentPanel(panel, { x: 258, y: 158 })).toBe(true);
+	expect(screenContainsShelfContentPanel(panel, { x: 257, y: 158 })).toBe(false);
+	expect(screenContainsShelfContentPanel(panel, { x: 258, y: 563 })).toBe(false);
+});
+
+test("screenContainsShelfContentPanel ignores zero-area and non-finite bounds", () => {
+	expect(screenContainsShelfContentPanel({
+		visible: true,
+		bounds: { minX: 300, minY: 200, maxX: 300, maxY: 520 },
+	}, { x: 300, y: 240 })).toBe(false);
+	expect(screenContainsShelfContentPanel({
+		visible: true,
+		bounds: { minX: 300, minY: 200, maxX: 500, maxY: 200 },
+	}, { x: 320, y: 200 })).toBe(false);
+	expect(screenContainsShelfContentPanel({
+		visible: true,
+		bounds: { minX: Number.NaN, minY: 200, maxX: 500, maxY: 520 },
+	}, { x: 320, y: 240 })).toBe(false);
+	expect(screenContainsShelfContentPanel({
+		visible: true,
+		bounds: { minX: 300, minY: 200, maxX: Number.POSITIVE_INFINITY, maxY: 520 },
+	}, { x: 320, y: 240 })).toBe(false);
+});
+
+test("shelf content screen hit primitives export baseline default geometry and padding constants", () => {
+	expect(SHELF_CONTENT_ROW_SCREEN_WIDTH).toBe(2.50);
+	expect(SHELF_CONTENT_ROW_SCREEN_HEIGHT).toBe(0.36);
+	expect(SHELF_CONTENT_ROW_SCREEN_PAD_X).toBe(24);
+	expect(SHELF_CONTENT_ROW_SCREEN_PAD_Y).toBe(16);
+	expect(SHELF_CONTENT_PANEL_SCREEN_WIDTH).toBe(2.62);
+	expect(SHELF_CONTENT_PANEL_SCREEN_HEIGHT).toBe(3.02);
+	expect(SHELF_CONTENT_PANEL_SCREEN_PAD).toBe(42);
 });

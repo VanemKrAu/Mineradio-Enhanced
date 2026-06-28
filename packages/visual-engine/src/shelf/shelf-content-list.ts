@@ -4,6 +4,13 @@ import { SHELF_SETTINGS, type ShelfSettings } from "./shelf-settings";
 
 export const CONTENT_VISIBLE_RADIUS = 5;
 export const CONTENT_MAX_RENDER = CONTENT_VISIBLE_RADIUS * 2 + 1;
+export const SHELF_CONTENT_ROW_SCREEN_WIDTH = 2.50;
+export const SHELF_CONTENT_ROW_SCREEN_HEIGHT = 0.36;
+export const SHELF_CONTENT_ROW_SCREEN_PAD_X = 24;
+export const SHELF_CONTENT_ROW_SCREEN_PAD_Y = 16;
+export const SHELF_CONTENT_PANEL_SCREEN_WIDTH = 2.62;
+export const SHELF_CONTENT_PANEL_SCREEN_HEIGHT = 3.02;
+export const SHELF_CONTENT_PANEL_SCREEN_PAD = 42;
 
 export type ShelfContentKind = "playlist" | "podcast";
 export type ShelfContentPlaceholderKind = "loading" | "error" | "empty";
@@ -91,6 +98,45 @@ export interface ShelfContentRowLayout {
 		x: number;
 		y: number;
 	};
+}
+
+export interface ShelfContentScreenPoint {
+	x: number;
+	y: number;
+}
+
+export interface ShelfContentScreenBounds {
+	minX: number;
+	minY: number;
+	maxX: number;
+	maxY: number;
+}
+
+export interface ShelfContentScreenRow<T = ShelfContentRow> {
+	row: T;
+	visible?: boolean;
+	renderOrder?: number;
+	bounds: ShelfContentScreenBounds;
+}
+
+export interface ShelfContentScreenPanel {
+	visible?: boolean;
+	bounds: ShelfContentScreenBounds;
+}
+
+export interface PickShelfContentRowAtScreenOptions {
+	padX?: number;
+	padY?: number;
+}
+
+export interface ShelfContentScreenRowPick<T = ShelfContentRow> {
+	row: T;
+	uv: ShelfContentScreenPoint;
+	screenPick: true;
+}
+
+export interface ScreenContainsShelfContentPanelOptions {
+	pad?: number;
 }
 
 export interface ShelfContentPanelOpacityInputs {
@@ -332,6 +378,55 @@ export function computeContentPanelOpacity(input: ShelfContentPanelOpacityInputs
 	return 0.86 * pr * settings.opacity;
 }
 
+export function pickShelfContentRowAtScreen<T>(
+	rows: Array<ShelfContentScreenRow<T>>,
+	pointer: ShelfContentScreenPoint,
+	options: PickShelfContentRowAtScreenOptions = {},
+): ShelfContentScreenRowPick<T> | null {
+	if (!isFiniteScreenPoint(pointer)) return null;
+
+	const padX = options.padX ?? SHELF_CONTENT_ROW_SCREEN_PAD_X;
+	const padY = options.padY ?? SHELF_CONTENT_ROW_SCREEN_PAD_Y;
+	const ordered = rows
+		.filter((row) => row.visible !== false)
+		.sort((a, b) => (b.renderOrder ?? 0) - (a.renderOrder ?? 0));
+
+	for (const row of ordered) {
+		const bounds = normalizeScreenBounds(row.bounds);
+		if (!bounds) continue;
+		if (
+			pointer.x < bounds.minX - padX ||
+			pointer.x > bounds.maxX + padX ||
+			pointer.y < bounds.minY - padY ||
+			pointer.y > bounds.maxY + padY
+		) {
+			continue;
+		}
+
+		const u = clampRange((pointer.x - bounds.minX) / Math.max(1, bounds.maxX - bounds.minX), 0, 1);
+		const v = 1 - clampRange((pointer.y - bounds.minY) / Math.max(1, bounds.maxY - bounds.minY), 0, 1);
+		return { row: row.row, uv: { x: u, y: v }, screenPick: true };
+	}
+
+	return null;
+}
+
+export function screenContainsShelfContentPanel(
+	panel: ShelfContentScreenPanel | null | undefined,
+	pointer: ShelfContentScreenPoint,
+	options: ScreenContainsShelfContentPanelOptions = {},
+): boolean {
+	if (!panel || panel.visible === false) return false;
+	if (!isFiniteScreenPoint(pointer)) return false;
+	const pad = options.pad ?? SHELF_CONTENT_PANEL_SCREEN_PAD;
+	const bounds = normalizeScreenBounds(panel.bounds);
+	if (!bounds) return false;
+	return pointer.x >= bounds.minX - pad &&
+		pointer.x <= bounds.maxX + pad &&
+		pointer.y >= bounds.minY - pad &&
+		pointer.y <= bounds.maxY + pad;
+}
+
 export function isShelfContentLoadingRow(row: ShelfContentRow | undefined): boolean {
 	return row?.kind === "loading" || /加载中|正在载入/.test(String(row?.name || ""));
 }
@@ -376,4 +471,29 @@ function clampInt(value: number, min: number, max: number): number {
 function clampRange(value: number, min: number, max: number): number {
 	if (!Number.isFinite(value)) return min;
 	return Math.max(min, Math.min(max, value));
+}
+
+function isFiniteScreenPoint(point: ShelfContentScreenPoint): boolean {
+	return Number.isFinite(point.x) && Number.isFinite(point.y);
+}
+
+function normalizeScreenBounds(bounds: ShelfContentScreenBounds): ShelfContentScreenBounds | null {
+	if (
+		!Number.isFinite(bounds.minX) ||
+		!Number.isFinite(bounds.minY) ||
+		!Number.isFinite(bounds.maxX) ||
+		!Number.isFinite(bounds.maxY)
+	) {
+		return null;
+	}
+
+	const normalized = {
+		minX: Math.min(bounds.minX, bounds.maxX),
+		minY: Math.min(bounds.minY, bounds.maxY),
+		maxX: Math.max(bounds.minX, bounds.maxX),
+		maxY: Math.max(bounds.minY, bounds.maxY),
+	};
+
+	if (normalized.maxX <= normalized.minX || normalized.maxY <= normalized.minY) return null;
+	return normalized;
 }
