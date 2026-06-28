@@ -209,7 +209,6 @@ export function App(): ReactElement {
 		<>
 			{SHOW_SPLASH && (
 				<SplashHost
-					autoDismissMs={1180 + 980 + 600}
 					onDismissed={() => setSplashActive(false)}
 				/>
 			)}

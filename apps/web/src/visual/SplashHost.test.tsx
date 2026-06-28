@@ -15,6 +15,7 @@ type FakeEl = {
 	classList: { add: (...t: string[]) => void; remove: (...t: string[]) => void; contains: (t: string) => boolean };
 	children: FakeEl[];
 	parentNode: FakeEl | null;
+	listeners: Map<string, Array<(event: unknown) => void>>;
 	getContext(): null;
 	setAttribute(k: string, v: string): void;
 	getAttribute(k: string): string | null;
@@ -22,8 +23,8 @@ type FakeEl = {
 	querySelectorAll(sel: string): FakeEl[];
 	appendChild(c: FakeEl): FakeEl;
 	removeChild(c: FakeEl): FakeEl;
-	addEventListener(): void;
-	removeEventListener(): void;
+	addEventListener(type: string, listener: (event: unknown) => void): void;
+	removeEventListener(type: string, listener: (event: unknown) => void): void;
 };
 
 interface FakeWindow {
@@ -37,8 +38,11 @@ interface FakeWindow {
 interface FakeDocument {
 	head: FakeEl;
 	body: FakeEl;
+	listeners: Map<string, Array<(event: unknown) => void>>;
 	createElement(tag: string): FakeEl;
 	getElementById(id: string): FakeEl | null;
+	addEventListener(type: string, listener: (event: unknown) => void): void;
+	removeEventListener(type: string, listener: (event: unknown) => void): void;
 }
 
 const saved = {
@@ -71,6 +75,7 @@ function makeEl(tag: string): FakeEl {
 		textContent: "",
 		attrs,
 		style: {},
+		listeners: new Map(),
 		classList: {
 			add: (...tokens: string[]) => tokens.forEach((t) => cls.add(t)),
 			remove: (...tokens: string[]) => tokens.forEach((t) => cls.delete(t)),
@@ -97,8 +102,15 @@ function makeEl(tag: string): FakeEl {
 			c.parentNode = null;
 			return c;
 		},
-		addEventListener: () => {},
-		removeEventListener: () => {},
+		addEventListener: (type: string, listener: (event: unknown) => void) => {
+			const list = el.listeners.get(type) ?? [];
+			list.push(listener);
+			el.listeners.set(type, list);
+		},
+		removeEventListener: (type: string, listener: (event: unknown) => void) => {
+			const list = el.listeners.get(type) ?? [];
+			el.listeners.set(type, list.filter((fn) => fn !== listener));
+		},
 	};
 	Object.defineProperty(el, "id", {
 		get() {
@@ -209,6 +221,7 @@ beforeEach(() => {
 	const fakeDocument: FakeDocument = {
 		head: fakeHead,
 		body: fakeBody,
+		listeners: new Map(),
 		createElement: (tag: string) => {
 			const el = makeEl(tag);
 			return el;
@@ -230,6 +243,15 @@ beforeEach(() => {
 				if (f) return f;
 			}
 			return null;
+		},
+		addEventListener: (type: string, listener: (event: unknown) => void) => {
+			const list = fakeDocument.listeners.get(type) ?? [];
+			list.push(listener);
+			fakeDocument.listeners.set(type, list);
+		},
+		removeEventListener: (type: string, listener: (event: unknown) => void) => {
+			const list = fakeDocument.listeners.get(type) ?? [];
+			fakeDocument.listeners.set(type, list.filter((fn) => fn !== listener));
 		},
 	};
 
@@ -292,6 +314,15 @@ function asHtml(el: FakeEl): HTMLElement {
 	return el as unknown as HTMLElement;
 }
 
+function emitEl(el: FakeEl, type: string, event: unknown = {}): void {
+	for (const listener of el.listeners.get(type) ?? []) listener(event);
+}
+
+function emitDocument(type: string, event: unknown = {}): void {
+	const doc = globalThis.document as unknown as FakeDocument;
+	for (const listener of doc.listeners.get(type) ?? []) listener(event);
+}
+
 test("SplashHost server-renders a visual-splash-root div", () => {
 	const html = renderToStaticMarkup(React.createElement(SplashHost, {}));
 	expect(html).toContain("visual-splash-root");
@@ -344,5 +375,47 @@ test("createSplashEngine dismiss fires onDismissed after final timer", () => {
 	engine.dismiss();
 	flushTimers();
 	expect(dismissed).toBe(1);
+	engine.dispose();
+});
+
+test("createSplashEngine requires ready gate before click or keyboard dismisses splash", () => {
+	let dismissed = 0;
+	const engine = createSplashEngine(asHtml(fakeRoot), {
+		onDismissed: () => {
+			dismissed += 1;
+		},
+	});
+	const splash = fakeRoot.children[0]!;
+	let prevented = 0;
+
+	emitEl(splash, "click", {});
+	emitDocument("keydown", {
+		key: "Enter",
+		code: "Enter",
+		preventDefault: () => {
+			prevented += 1;
+		},
+	});
+	flushTimers();
+	expect(splash.classList.contains("exiting")).toBe(false);
+	expect(dismissed).toBe(0);
+	expect(prevented).toBe(1);
+
+	flushTimers();
+	expect(splash.classList.contains("ready")).toBe(true);
+	emitDocument("keydown", {
+		key: "a",
+		code: "KeyA",
+		preventDefault: () => {
+			prevented += 1;
+		},
+	});
+	expect(splash.classList.contains("exiting")).toBe(false);
+
+	emitEl(splash, "click", {});
+	flushTimers();
+	expect(splash.classList.contains("exiting")).toBe(true);
+	expect(dismissed).toBe(1);
+
 	engine.dispose();
 });

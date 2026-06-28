@@ -92,6 +92,25 @@ export function createSplashEngine(root: HTMLElement, opts: SplashEngineOptions 
 	}
 	readyTimer = setTimeout(markReadyToEnter, readyDelay);
 
+	function requestSplashEnter() {
+		if (!document.body.classList.contains("splash-active")) return;
+		if (splashEl.classList.contains("ready")) dismiss();
+	}
+
+	function onSplashClick() {
+		requestSplashEnter();
+	}
+
+	function onDocumentKeydown(event: KeyboardEvent) {
+		if (!document.body.classList.contains("splash-active")) return;
+		if (event.key !== "Enter" && event.code !== "Space") return;
+		event.preventDefault();
+		requestSplashEnter();
+	}
+
+	splashEl.addEventListener("click", onSplashClick);
+	document.addEventListener("keydown", onDocumentKeydown);
+
 	function cleanupReveal() {
 		if (typeof window !== "undefined" && splashEl.parentNode) splashEl.style.display = "none";
 		document.body.classList.remove("splash-active");
@@ -150,6 +169,8 @@ export function createSplashEngine(root: HTMLElement, opts: SplashEngineOptions 
 			if (typeof window !== "undefined") {
 				window.removeEventListener("resize", resize);
 			}
+			splashEl.removeEventListener("click", onSplashClick);
+			document.removeEventListener("keydown", onDocumentKeydown);
 			glHandler?.dispose();
 			canvasHandler?.dispose();
 			document.body.classList.remove("splash-active");

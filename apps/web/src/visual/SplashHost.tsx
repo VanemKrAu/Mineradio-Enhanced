@@ -4,7 +4,6 @@ import { createSplashEngine, type SplashEngine } from "@mineradio/visual-engine"
 export type SplashHostProps = {
 	onReady?: () => void;
 	onDismissed?: () => void;
-	autoDismissMs?: number;
 };
 
 export function SplashHost(props: SplashHostProps): ReactElement | null {
@@ -24,17 +23,11 @@ export function SplashHost(props: SplashHostProps): ReactElement | null {
 		});
 		engineRef.current = engine;
 
-		let autoTimer: ReturnType<typeof setTimeout> | null = null;
-		if (props.autoDismissMs && props.autoDismissMs > 0) {
-			autoTimer = setTimeout(() => engine.dismiss(), props.autoDismissMs);
-		}
-
 		return () => {
-			if (autoTimer) clearTimeout(autoTimer);
 			engine.dispose();
 			engineRef.current = null;
 		};
-	}, [props.autoDismissMs]);
+	}, []);
 
 	return <div ref={rootRef} className="visual-splash-root" />;
 }
