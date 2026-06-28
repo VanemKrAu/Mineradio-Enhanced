@@ -8,6 +8,7 @@ import {
 	importJsonFile,
 	isTauriRuntime,
 	listenGlobalHotkey,
+	openExternalUrl,
 	openProviderLoginWindow,
 	showDesktopLyricsWindow,
 	toggleWindowFullscreen,
@@ -72,6 +73,10 @@ test("global hotkey helpers are inert outside Tauri", async () => {
 
 test("window fullscreen helper is inert outside Tauri", async () => {
 	expect(await toggleWindowFullscreen()).toBe(undefined);
+});
+
+test("external URL helper is inert outside Tauri", async () => {
+	expect(await openExternalUrl("https://example.com/release")).toBe(false);
 });
 
 test("desktop lyrics window helpers are inert outside Tauri", async () => {

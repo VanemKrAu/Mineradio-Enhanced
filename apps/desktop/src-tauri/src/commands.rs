@@ -1046,7 +1046,26 @@ pub fn window_close(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 pub fn is_openable_url(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
+    if url.trim() != url {
+        return false;
+    }
+    if url.chars().any(|ch| ch.is_ascii_control()) {
+        return false;
+    }
+    let Ok(parsed) = tauri::Url::parse(url) else {
+        return false;
+    };
+    matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
+}
+
+pub fn external_open_command(url: &str) -> (&'static str, Vec<&str>) {
+    if cfg!(target_os = "windows") {
+        ("explorer.exe", vec![url])
+    } else if cfg!(target_os = "macos") {
+        ("open", vec![url])
+    } else {
+        ("xdg-open", vec![url])
+    }
 }
 
 #[tauri::command]
@@ -1054,27 +1073,11 @@ pub fn open_external(url: String) -> Result<(), String> {
     if !is_openable_url(&url) {
         return Err("INVALID_URL".into());
     }
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", &url])
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
+    let (program, args) = external_open_command(&url);
+    std::process::Command::new(program)
+        .args(args)
+        .spawn()
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1614,6 +1617,7 @@ mod tests {
     fn openable_url_accepts_http_and_https() {
         assert!(is_openable_url("http://example.com"));
         assert!(is_openable_url("https://example.com/path"));
+        assert!(is_openable_url("https://example.com.evil/path"));
     }
 
     #[test]
@@ -1623,6 +1627,24 @@ mod tests {
         assert!(!is_openable_url("ftp://example.com"));
         assert!(!is_openable_url(""));
         assert!(!is_openable_url("data:text/plain,hi"));
+        assert!(!is_openable_url("http://"));
+        assert!(!is_openable_url("https://"));
+        assert!(!is_openable_url(" https://example.com"));
+        assert!(!is_openable_url("https://example.com\n--bad"));
+    }
+
+    #[test]
+    fn external_open_command_avoids_shell_interpolation() {
+        let url = "https://example.com/release?x=1&y=2";
+        let (program, args) = external_open_command(url);
+        if cfg!(target_os = "windows") {
+            assert_eq!(program, "explorer.exe");
+        } else if cfg!(target_os = "macos") {
+            assert_eq!(program, "open");
+        } else {
+            assert_eq!(program, "xdg-open");
+        }
+        assert_eq!(args, vec![url]);
     }
 
     #[test]

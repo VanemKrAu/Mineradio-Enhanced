@@ -235,6 +235,16 @@ export async function toggleWindowFullscreen(): Promise<void> {
 	await invokeTauriCommand("window_toggle_fullscreen");
 }
 
+export async function openExternalUrl(url: string): Promise<boolean> {
+	if (!isTauriRuntime()) return false;
+	try {
+		await invokeTauriCommand("open_external", { url });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 export async function showDesktopLyricsWindow(): Promise<void> {
 	if (!isTauriRuntime()) return;
 	await invokeTauriCommand("desktop_lyrics_show_window");
