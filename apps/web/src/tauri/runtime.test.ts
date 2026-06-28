@@ -8,6 +8,7 @@ import {
 	importJsonFile,
 	isTauriRuntime,
 	listenGlobalHotkey,
+	openProviderLoginWindow,
 	showDesktopLyricsWindow,
 	toggleWindowFullscreen,
 	updateDesktopLyricsPayload
@@ -77,4 +78,14 @@ test("desktop lyrics window helpers are inert outside Tauri", async () => {
 	expect(await showDesktopLyricsWindow()).toBe(undefined);
 	expect(await updateDesktopLyricsPayload({ enabled: true, text: "line" })).toBe(undefined);
 	expect(await closeDesktopLyricsWindow()).toBe(undefined);
+});
+
+test("provider login helper returns a no-cookie placeholder outside Tauri", async () => {
+	const result = await openProviderLoginWindow("netease");
+	expect(result).toEqual({
+		provider: "netease",
+		stored: false,
+		reused: false,
+		partial: false,
+	});
 });

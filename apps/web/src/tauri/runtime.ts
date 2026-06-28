@@ -60,6 +60,15 @@ export interface GlobalHotkeyEventPayload {
 	action: string;
 }
 
+export type ProviderLoginId = "netease" | "qq";
+
+export interface ProviderLoginWindowResult {
+	provider: ProviderLoginId;
+	stored: boolean;
+	reused: boolean;
+	partial: boolean;
+}
+
 interface RawRuntimeConfig {
 	sidecar_base_url: string;
 	app_data_dir: string;
@@ -153,6 +162,15 @@ function disabledGlobalHotkeysResult(): ConfigureGlobalHotkeysResult {
 	};
 }
 
+function providerLoginPlaceholder(provider: ProviderLoginId): ProviderLoginWindowResult {
+	return {
+		provider,
+		stored: false,
+		reused: false,
+		partial: false,
+	};
+}
+
 export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 	if (!isTauriRuntime()) {
 		return placeholderRuntimeConfig();
@@ -242,4 +260,13 @@ export async function configureGlobalHotkeys(bindings: GlobalHotkeyBinding[]): P
 
 export async function listenGlobalHotkey(handler: (payload: GlobalHotkeyEventPayload) => void): Promise<Unlisten> {
 	return listenTauriEvent<GlobalHotkeyEventPayload>("mineradio-global-hotkey", handler);
+}
+
+export async function openProviderLoginWindow(provider: ProviderLoginId): Promise<ProviderLoginWindowResult> {
+	if (!isTauriRuntime()) {
+		return providerLoginPlaceholder(provider);
+	}
+	const command = provider === "qq" ? "login_qq_complete" : "login_netease_complete";
+	const result = await invokeTauriCommand<ProviderLoginWindowResult>(command);
+	return result ?? providerLoginPlaceholder(provider);
 }

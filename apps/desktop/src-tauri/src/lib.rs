@@ -255,6 +255,8 @@ pub fn run() {
             commands::desktop_lyrics_overlay_ready,
             commands::login_netease_show_window,
             commands::login_qq_show_window,
+            commands::login_netease_complete,
+            commands::login_qq_complete,
             commands::login_netease_close_window,
             commands::login_qq_close_window
         ])

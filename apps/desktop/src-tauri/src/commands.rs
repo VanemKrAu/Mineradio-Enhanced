@@ -10,9 +10,11 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Child;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{
     Emitter, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
@@ -28,6 +30,9 @@ const DEFAULT_JSON_EXPORT_FILE_NAME: &str = "mineradio-export.json";
 const GLOBAL_HOTKEY_CONFLICT_SOURCE_NAME: &str = "系统 / 其他软件";
 const GLOBAL_HOTKEY_CONFLICT_SOURCE_ICON: &str = "warning";
 const GLOBAL_HOTKEY_CONFLICT_REASON: &str = "该组合键已被占用或被系统保留";
+const LOGIN_SESSION_HTTP_TIMEOUT_MS: u64 = 3200;
+const LOGIN_COOKIE_POLL_ATTEMPTS: usize = 36;
+const LOGIN_COOKIE_POLL_INTERVAL_MS: u64 = 1200;
 #[allow(dead_code)]
 const NETEASE_LOGIN_COOKIE_PRIORITY: &[&str] = &["MUSIC_U", "__csrf", "NMTID"];
 #[allow(dead_code)]
@@ -43,6 +48,10 @@ const QQ_LOGIN_COOKIE_PRIORITY: &[&str] = &[
     "p_skey",
     "skey",
 ];
+const NETEASE_LOGIN_COOKIE_PROBE_URLS: &[&str] =
+    &["https://music.163.com", "https://interface.music.163.com"];
+const QQ_LOGIN_COOKIE_PROBE_URLS: &[&str] =
+    &["https://y.qq.com", "https://c.y.qq.com", "https://i.y.qq.com"];
 
 pub mod labels {
     pub const MAIN: &str = "main";
@@ -88,6 +97,15 @@ pub struct ConfigureGlobalHotkeysResult {
 #[serde(rename_all = "camelCase")]
 pub struct GlobalHotkeyEventPayload {
     pub action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginSessionImportResult {
+    pub provider: LoginProvider,
+    pub stored: bool,
+    pub reused: bool,
+    pub partial: bool,
 }
 
 #[tauri::command]
@@ -222,10 +240,20 @@ pub fn desktop_lyrics_window_url() -> &'static str {
     "index.html?view=desktop-lyrics"
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum LoginProvider {
     Netease,
     Qq,
+}
+
+impl LoginProvider {
+    pub fn as_route_segment(self) -> &'static str {
+        match self {
+            LoginProvider::Netease => "netease",
+            LoginProvider::Qq => "qq",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -246,6 +274,27 @@ pub struct LoginCookie {
     pub name: String,
     pub value: String,
     pub domain: String,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct LoginSessionCookieRequest {
+    pub url: String,
+    pub host: String,
+    pub port: u16,
+    pub path: String,
+    pub body: String,
+}
+
+impl std::fmt::Debug for LoginSessionCookieRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoginSessionCookieRequest")
+            .field("url", &self.url)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("path", &self.path)
+            .field("body", &"<redacted>")
+            .finish()
+    }
 }
 
 impl LoginCookie {
@@ -432,6 +481,206 @@ pub fn build_netease_login_cookie_header(cookies: &[LoginCookie]) -> String {
 #[allow(dead_code)]
 pub fn build_qq_login_cookie_header(cookies: &[LoginCookie]) -> String {
     build_login_cookie_header(cookies, is_qq_cookie_domain, QQ_LOGIN_COOKIE_PRIORITY)
+}
+
+fn login_cookie_has_required_session(provider: LoginProvider, cookie_text: &str) -> bool {
+    match provider {
+        LoginProvider::Netease => netease_cookie_has_login(cookie_text),
+        LoginProvider::Qq => qq_cookie_has_playback_login(cookie_text),
+    }
+}
+
+fn login_cookie_partial(provider: LoginProvider, cookie_text: &str) -> bool {
+    provider == LoginProvider::Qq
+        && qq_cookie_has_login(cookie_text)
+        && !qq_cookie_has_playback_login(cookie_text)
+}
+
+pub fn build_login_session_cookie_request(
+    sidecar_base_url: &str,
+    provider: LoginProvider,
+    cookie_text: &str,
+) -> Result<LoginSessionCookieRequest, String> {
+    let cookie = cookie_text.trim();
+    if cookie.is_empty() {
+        return Err("LOGIN_COOKIE_EMPTY".into());
+    }
+    if !login_cookie_has_required_session(provider, cookie) {
+        return Err("LOGIN_COOKIE_NOT_READY".into());
+    }
+    let base = sidecar_base_url.trim().trim_end_matches('/');
+    let Some(authority) = base.strip_prefix("http://") else {
+        return Err("LOGIN_SIDECAR_BAD_URL".into());
+    };
+    let mut host_port = authority.split('/').next().unwrap_or(authority).split(':');
+    let host = host_port.next().unwrap_or("").trim();
+    let port = host_port
+        .next()
+        .and_then(|value| value.parse::<u16>().ok())
+        .ok_or_else(|| "LOGIN_SIDECAR_BAD_URL".to_string())?;
+    if host != "127.0.0.1" && host != "localhost" {
+        return Err("LOGIN_SIDECAR_BAD_URL".into());
+    }
+    let path = format!("/providers/{}/session-cookie", provider.as_route_segment());
+    let url = format!("http://{}:{}{}", host, port, path);
+    let body = serde_json::json!({ "cookie": cookie }).to_string();
+    Ok(LoginSessionCookieRequest {
+        url,
+        host: host.to_string(),
+        port,
+        path,
+        body,
+    })
+}
+
+fn post_login_session_cookie_request(
+    request: &LoginSessionCookieRequest,
+) -> Result<LoginSessionImportResult, String> {
+    let mut stream = TcpStream::connect((request.host.as_str(), request.port))
+        .map_err(|_| "LOGIN_SIDECAR_UNAVAILABLE".to_string())?;
+    let timeout = Some(Duration::from_millis(LOGIN_SESSION_HTTP_TIMEOUT_MS));
+    let _ = stream.set_read_timeout(timeout);
+    let _ = stream.set_write_timeout(timeout);
+    let http = format!(
+        "POST {} HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        request.path,
+        request.host,
+        request.port,
+        request.body.as_bytes().len(),
+        request.body
+    );
+    stream
+        .write_all(http.as_bytes())
+        .map_err(|_| "LOGIN_SIDECAR_WRITE_FAILED".to_string())?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|_| "LOGIN_SIDECAR_READ_FAILED".to_string())?;
+    let Some((head, body)) = response.split_once("\r\n\r\n") else {
+        return Err("LOGIN_SIDECAR_BAD_RESPONSE".into());
+    };
+    if !head.starts_with("HTTP/1.1 2") && !head.starts_with("HTTP/1.0 2") {
+        return Err("LOGIN_SIDECAR_REJECTED_COOKIE".into());
+    }
+    let parsed: serde_json::Value =
+        serde_json::from_str(body).map_err(|_| "LOGIN_SIDECAR_BAD_RESPONSE".to_string())?;
+    let data = parsed
+        .get("data")
+        .ok_or_else(|| "LOGIN_SIDECAR_BAD_RESPONSE".to_string())?;
+    let stored = data
+        .get("stored")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let provider = match data
+        .get("provider")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+    {
+        "netease" => LoginProvider::Netease,
+        "qq" => LoginProvider::Qq,
+        _ => return Err("LOGIN_SIDECAR_BAD_RESPONSE".into()),
+    };
+    Ok(LoginSessionImportResult {
+        provider,
+        stored,
+        reused: false,
+        partial: false,
+    })
+}
+
+fn inject_login_cookie_into_sidecar(
+    sidecar_base_url: &str,
+    provider: LoginProvider,
+    cookie_text: &str,
+) -> Result<LoginSessionImportResult, String> {
+    let partial = login_cookie_partial(provider, cookie_text);
+    let request = build_login_session_cookie_request(sidecar_base_url, provider, cookie_text)?;
+    let mut result = post_login_session_cookie_request(&request)?;
+    result.partial = partial;
+    Ok(result)
+}
+
+fn login_cookie_probe_urls(provider: LoginProvider) -> &'static [&'static str] {
+    match provider {
+        LoginProvider::Netease => NETEASE_LOGIN_COOKIE_PROBE_URLS,
+        LoginProvider::Qq => QQ_LOGIN_COOKIE_PROBE_URLS,
+    }
+}
+
+fn build_provider_login_cookie_header(provider: LoginProvider, cookies: &[LoginCookie]) -> String {
+    match provider {
+        LoginProvider::Netease => build_netease_login_cookie_header(cookies),
+        LoginProvider::Qq => build_qq_login_cookie_header(cookies),
+    }
+}
+
+fn collect_login_cookies_for_provider(
+    win: &WebviewWindow,
+    provider: LoginProvider,
+) -> Result<Vec<LoginCookie>, String> {
+    let mut out = Vec::new();
+    for raw_url in login_cookie_probe_urls(provider) {
+        let url = tauri::Url::parse(raw_url).map_err(|e| e.to_string())?;
+        let cookies = win.cookies_for_url(url).map_err(|e| e.to_string())?;
+        for cookie in cookies {
+            let domain = cookie.domain().unwrap_or(raw_url).to_string();
+            out.push(LoginCookie::new(cookie.name(), cookie.value(), domain));
+        }
+    }
+    Ok(out)
+}
+
+fn read_provider_login_cookie_header(
+    win: &WebviewWindow,
+    provider: LoginProvider,
+) -> Result<String, String> {
+    let cookies = collect_login_cookies_for_provider(win, provider)?;
+    Ok(build_provider_login_cookie_header(provider, &cookies))
+}
+
+async fn poll_login_cookie_header(
+    win: WebviewWindow,
+    provider: LoginProvider,
+) -> Result<String, String> {
+    let mut last_cookie = String::new();
+    for _ in 0..LOGIN_COOKIE_POLL_ATTEMPTS {
+        let cookie = read_provider_login_cookie_header(&win, provider)?;
+        if login_cookie_has_required_session(provider, &cookie) {
+            return Ok(cookie);
+        }
+        last_cookie = cookie;
+        let _ = tauri::async_runtime::spawn_blocking(|| {
+            std::thread::sleep(Duration::from_millis(LOGIN_COOKIE_POLL_INTERVAL_MS));
+        })
+        .await;
+    }
+    if login_cookie_partial(provider, &last_cookie) {
+        return Err("LOGIN_COOKIE_NOT_PLAYBACK_READY".into());
+    }
+    Err("LOGIN_COOKIE_NOT_READY".into())
+}
+
+async fn complete_provider_login_from_window(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    provider: LoginProvider,
+) -> Result<LoginSessionImportResult, String> {
+    let win = ensure_login_window(&app, provider)?;
+    let initial_cookie = read_provider_login_cookie_header(&win, provider)?;
+    let (cookie, reused) = if login_cookie_has_required_session(provider, &initial_cookie) {
+        (initial_cookie, true)
+    } else {
+        if provider == LoginProvider::Qq && qq_cookie_has_login(&initial_cookie) {
+            if let Ok(url) = tauri::Url::parse("https://y.qq.com/n/ryqq/player") {
+                let _ = win.navigate(url);
+            }
+        }
+        (poll_login_cookie_header(win.clone(), provider).await?, false)
+    };
+    let mut result = inject_login_cookie_into_sidecar(&state.config.sidecar_base_url, provider, &cookie)?;
+    result.reused = reused;
+    let _ = win.close();
+    Ok(result)
 }
 
 fn login_window(app: &tauri::AppHandle, provider: LoginProvider) -> Option<WebviewWindow> {
@@ -1060,6 +1309,22 @@ pub fn login_qq_show_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn login_netease_complete(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<LoginSessionImportResult, String> {
+    complete_provider_login_from_window(app, state, LoginProvider::Netease).await
+}
+
+#[tauri::command]
+pub async fn login_qq_complete(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<LoginSessionImportResult, String> {
+    complete_provider_login_from_window(app, state, LoginProvider::Qq).await
+}
+
+#[tauri::command]
 pub fn login_netease_close_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(win) = login_window(&app, LoginProvider::Netease) {
         win.close().map_err(|e| e.to_string())?;
@@ -1570,6 +1835,44 @@ mod tests {
             LoginCookie::new("MUSIC_U", "secret", ".music.163.com"),
         ]);
         assert_eq!(qq_header, "uin=123; qm_keyst=key");
+    }
+
+    #[test]
+    fn login_session_cookie_request_posts_cookie_without_echoing_it() {
+        let request = build_login_session_cookie_request(
+            "http://127.0.0.1:42531/",
+            LoginProvider::Qq,
+            "uin=123; qm_keyst=secret",
+        )
+        .expect("request");
+
+        assert_eq!(
+            request.url,
+            "http://127.0.0.1:42531/providers/qq/session-cookie"
+        );
+        assert_eq!(
+            request.body,
+            serde_json::json!({ "cookie": "uin=123; qm_keyst=secret" }).to_string()
+        );
+        assert!(!format!("{:?}", request).contains("qm_keyst=secret"));
+    }
+
+    #[test]
+    fn login_session_cookie_request_rejects_empty_or_logged_out_cookie() {
+        assert_eq!(
+            build_login_session_cookie_request("http://127.0.0.1:42531", LoginProvider::Netease, "")
+                .expect_err("empty"),
+            "LOGIN_COOKIE_EMPTY"
+        );
+        assert_eq!(
+            build_login_session_cookie_request(
+                "http://127.0.0.1:42531",
+                LoginProvider::Netease,
+                "__csrf=csrf"
+            )
+            .expect_err("logged out"),
+            "LOGIN_COOKIE_NOT_READY"
+        );
     }
 
     #[test]

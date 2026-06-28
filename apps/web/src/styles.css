@@ -1808,6 +1808,7 @@ html.control-glass-svg-ok #bottom-bar.visible {
 
 .account-mini-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 10px;

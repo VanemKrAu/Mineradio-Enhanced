@@ -30,6 +30,7 @@ import {
 	getSidecarStatus,
 	importJsonFile,
 	listenGlobalHotkey,
+	openProviderLoginWindow,
 	showDesktopLyricsWindow,
 	toggleWindowFullscreen,
 	updateDesktopLyricsPayload,
@@ -512,6 +513,30 @@ export function App({ SplashComponent = SplashHost, VisualComponent = VisualEngi
 		} catch (e) {
 			if (input) input.value = "";
 			const message = e instanceof Error ? e.message : "手动导入失败";
+			showToast(message);
+		}
+	}, [providerLabel, refreshShelfPlaylists, setProviderStatus, showToast, sidecarClient]);
+
+	const openProviderWebLogin = useCallback(async (provider: ProviderId) => {
+		const client = sidecarClient;
+		const label = providerLabel(provider);
+		if (!client) {
+			showToast("sidecar 未连接，稍后再试");
+			return;
+		}
+		try {
+			const result = await openProviderLoginWindow(provider);
+			if (!result.stored) {
+				showToast(`${label}登录未完成`);
+				return;
+			}
+			const status = await client.loginStatus(provider);
+			setProviderStatus(status);
+			void refreshShelfPlaylists(client);
+			const suffix = provider === "qq" && result.partial ? "，播放授权不完整，部分歌曲会自动换源" : "";
+			showToast(status.loggedIn ? `${label}已登录: ${status.nickname ?? status.userId ?? "账号"}${suffix}` : `${label}会话已保存，但账号态未确认`);
+		} catch (e) {
+			const message = e instanceof Error ? e.message : `${label}登录失败`;
 			showToast(message);
 		}
 	}, [providerLabel, refreshShelfPlaylists, setProviderStatus, showToast, sidecarClient]);
@@ -1100,9 +1125,10 @@ export function App({ SplashComponent = SplashHost, VisualComponent = VisualEngi
 									{neteaseStatus?.loggedIn ? `已登录 ${neteaseStatus.nickname ?? neteaseStatus.userId ?? ""}` : "未确认登录"}
 								</div>
 								<div className="account-mini-actions">
+									<button className="modal-btn primary" type="button" onClick={() => void openProviderWebLogin("netease")}>网页登录</button>
 									<button className="modal-btn" type="button" onClick={() => void refreshProviderStatus("netease")}>刷新</button>
 									<button className="modal-btn" type="button" onClick={() => void logoutProvider("netease")}>退出</button>
-									<button className="modal-btn primary" type="button" onClick={() => void importProviderCookie("netease")}>导入</button>
+									<button className="modal-btn" type="button" onClick={() => void importProviderCookie("netease")}>导入</button>
 								</div>
 							</div>
 							<div className="manual-cookie-panel">
@@ -1112,9 +1138,10 @@ export function App({ SplashComponent = SplashHost, VisualComponent = VisualEngi
 									{qqStatus?.loggedIn ? `已登录 ${qqStatus.nickname ?? qqStatus.userId ?? ""}` : "未确认登录"}
 								</div>
 								<div className="account-mini-actions">
+									<button className="modal-btn primary" type="button" onClick={() => void openProviderWebLogin("qq")}>扫码登录</button>
 									<button className="modal-btn" type="button" onClick={() => void refreshProviderStatus("qq")}>刷新</button>
 									<button className="modal-btn" type="button" onClick={() => void logoutProvider("qq")}>退出</button>
-									<button className="modal-btn primary" type="button" onClick={() => void importProviderCookie("qq")}>导入</button>
+									<button className="modal-btn" type="button" onClick={() => void importProviderCookie("qq")}>导入</button>
 								</div>
 							</div>
 						</div>
