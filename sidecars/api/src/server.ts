@@ -3,6 +3,7 @@ import {
   ProviderIdSchema,
   SongUrlRequestSchema,
   TrackSchema,
+  WeatherRadioResponseSchema,
   ProviderSessionCookieAckSchema,
   SongLikeAckSchema,
   SongLikeCheckAckSchema,
@@ -32,6 +33,11 @@ import {
   type CrossSourceResolver
 } from "./services/cross-source-resolver";
 import {
+  weatherRadio,
+  type WeatherRadioParams,
+  type WeatherRadioService
+} from "./services/weather-radio";
+import {
   clearRuntimeProviderCookie,
   setRuntimeProviderCookie
 } from "./services/auth-session";
@@ -41,6 +47,7 @@ export type RouteHandlerDeps = {
   audioProxy?: AudioProxy;
   imageProxy?: ImageProxy;
   providerAdapters?: Record<ProviderId, ProviderAdapter>;
+  weatherRadio?: WeatherRadioService;
   logger?: SidecarLogger;
 };
 
@@ -49,6 +56,7 @@ export function createRouteHandler(deps: RouteHandlerDeps = {}) {
   const audioProxy = deps.audioProxy ?? resolveAudioProxy;
   const imageProxy = deps.imageProxy ?? resolveImageProxy;
   const providerAdapters = deps.providerAdapters ?? providers;
+  const weatherRadioService = deps.weatherRadio ?? weatherRadio;
   const logger = deps.logger ?? createSidecarLogger();
 
   return async function handleRoute(request: Request): Promise<Response> {
@@ -98,6 +106,13 @@ export function createRouteHandler(deps: RouteHandlerDeps = {}) {
       const target = url.searchParams.get("url") ?? "";
       response = await imageProxy({ target, request });
       await logRequest(logger, { method, path, status: response.status, startedAt });
+      return response;
+    }
+
+    if (path === "/weather/radio" && method === "GET") {
+      const params = parseWeatherRadioParams(url);
+      response = json(ok(WeatherRadioResponseSchema.parse(await weatherRadioService.build(params))));
+      await logRequest(logger, { method, path, status: response.status, startedAt, action: "weather-radio" });
       return response;
     }
 
@@ -418,6 +433,17 @@ export const routeHandler = createRouteHandler();
 function parseLimit(limitRaw: string | null): number {
   const limitParsed = limitRaw === null ? NaN : Number(limitRaw);
   return Number.isFinite(limitParsed) && limitParsed > 0 ? Math.floor(limitParsed) : 20;
+}
+
+function parseWeatherRadioParams(url: URL): WeatherRadioParams {
+  return {
+    city: url.searchParams.get("city") ?? undefined,
+    q: url.searchParams.get("q") ?? undefined,
+    location: url.searchParams.get("location") ?? undefined,
+    lat: url.searchParams.get("lat") ?? undefined,
+    lon: url.searchParams.get("lon") ?? undefined,
+    timezone: url.searchParams.get("timezone") ?? undefined
+  };
 }
 
 function parseIds(raw: string): string[] {

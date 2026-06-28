@@ -10,3 +10,4 @@ export * from "./persistence";
 export * from "./capabilities";
 export * from "./desktop";
 export * from "./session";
+export * from "./weather";

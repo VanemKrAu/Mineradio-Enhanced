@@ -23,6 +23,8 @@ import {
 	SongLikeCheckAck,
 	SongLikeCheckAckSchema,
 	SongUrlResultSchema,
+	WeatherRadioResponse,
+	WeatherRadioResponseSchema,
 	type PlaybackQuality,
 	TrackArraySchema,
 	Track,
@@ -183,6 +185,27 @@ export class SidecarClient {
 			"GET",
 			`/search?${params.toString()}`,
 			TrackArraySchema,
+		);
+	}
+
+	async weatherRadio(params: {
+		city?: string;
+		q?: string;
+		location?: string;
+		lat?: number;
+		lon?: number;
+		timezone?: string;
+	} = {}): Promise<WeatherRadioResponse> {
+		const query = new URLSearchParams();
+		for (const [key, value] of Object.entries(params)) {
+			if (value === undefined || value === null || value === "") continue;
+			query.set(key, String(value));
+		}
+		const suffix = query.toString() ? `?${query.toString()}` : "";
+		return this.request(
+			"GET",
+			`/weather/radio${suffix}`,
+			WeatherRadioResponseSchema,
 		);
 	}
 

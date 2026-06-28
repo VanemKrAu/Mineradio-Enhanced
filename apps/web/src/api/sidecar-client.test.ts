@@ -137,6 +137,70 @@ test("searchAll uses the cross-source search endpoint", async () => {
 	});
 });
 
+test("weatherRadio calls sidecar weather radio endpoint with location params", async () => {
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		expect(url).toContain("/weather/radio");
+		expect(url).toContain("city=%E4%B8%8A%E6%B5%B7");
+		expect(url).toContain("lat=31.23");
+		void init;
+		return jsonResponse({
+			ok: true,
+			data: {
+				ok: true,
+				weather: {
+					provider: "open-meteo",
+					location: {
+						name: "上海",
+						country: "中国",
+						admin1: "",
+						latitude: 31.23,
+						longitude: 121.47,
+						timezone: "Asia/Shanghai",
+						fallback: false,
+					},
+					label: "雨",
+					weatherCode: 61,
+					temperature: 22,
+					apparentTemperature: 21,
+					humidity: 88,
+					precipitation: 1,
+					cloudCover: 90,
+					windSpeed: 6,
+					windGusts: 10,
+					isDay: 1,
+					time: "",
+					updatedAt: 1,
+					error: "",
+					mood: {
+						key: "rain",
+						title: "雨天电台",
+						tagline: "留一点潮湿的空间给旋律",
+						energy: 0.38,
+						warmth: 0.42,
+						focus: 0.64,
+						melancholy: 0.66,
+						keywords: ["雨天 R&B"],
+					},
+				},
+				radio: {
+					title: "雨天电台",
+					subtitle: "留一点潮湿的空间给旋律",
+					seedQueries: ["陈奕迅 阴天快乐"],
+					songs: [SAMPLE_TRACK],
+					updatedAt: 1,
+				},
+			},
+		});
+	}) as typeof fetch;
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		const radio = await client.weatherRadio({ city: "上海", lat: 31.23, lon: 121.47 });
+		expect(radio.weather.mood.title).toBe("雨天电台");
+		expect(radio.radio.songs[0].id).toBe("t1");
+	});
+});
+
 test("search throws SidecarClientError on ok:false", async () => {
 	const fake = (async () =>
 		jsonResponse({

@@ -131,6 +131,69 @@ test("GET /search uses injected cross-source resolver", async () => {
   expect(b.data[0].provider).toBe("qq");
 });
 
+test("GET /weather/radio returns weather radio success envelope", async () => {
+  const handler = createRouteHandler({
+    weatherRadio: {
+      async build(params) {
+        expect(params.city).toBe("上海");
+        return {
+          ok: true,
+          weather: {
+            provider: "open-meteo",
+            location: {
+              name: "上海",
+              country: "中国",
+              admin1: "",
+              latitude: 31.23,
+              longitude: 121.47,
+              timezone: "Asia/Shanghai",
+              fallback: false
+            },
+            label: "雨",
+            weatherCode: 61,
+            temperature: 22,
+            apparentTemperature: 21,
+            humidity: 88,
+            precipitation: 1,
+            cloudCover: 90,
+            windSpeed: 6,
+            windGusts: 10,
+            isDay: 1,
+            time: "",
+            updatedAt: 1,
+            error: "",
+            mood: {
+              key: "rain",
+              title: "雨天电台",
+              tagline: "留一点潮湿的空间给旋律",
+              energy: 0.38,
+              warmth: 0.42,
+              focus: 0.64,
+              melancholy: 0.66,
+              keywords: ["雨天 R&B"]
+            }
+          },
+          radio: {
+            title: "雨天电台",
+            subtitle: "留一点潮湿的空间给旋律",
+            seedQueries: ["陈奕迅 阴天快乐"],
+            songs: [routeTrack],
+            updatedAt: 1
+          }
+        };
+      }
+    }
+  });
+
+  const r = await handler(new Request("http://127.0.0.1/weather/radio?city=%E4%B8%8A%E6%B5%B7"));
+
+  expect(r.status).toBe(200);
+  const b = await body(r);
+  expect(b.ok).toBe(true);
+  expect(b.data.weather.mood.title).toBe("雨天电台");
+  expect(b.data.radio.songs[0].id).toBe("1");
+});
+
 test("GET /providers/netease/login-status returns 200 logged-out when no cookie", async () => {
   const r = await call("/providers/netease/login-status");
   expect(r.status).toBe(200);
