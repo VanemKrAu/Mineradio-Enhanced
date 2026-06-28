@@ -158,6 +158,28 @@ test("HomeVisual.setCoverUrl updates cover uniforms and update advances the base
 	expect(hv.getField().materialUniforms.uColorMixT.value as number).toBeGreaterThan(0);
 });
 
+test("HomeVisual.setCoverUrl prepares cover canvas with the same baseline coverResolution as the field", async () => {
+	const scene = makeFakeScene();
+	const hv = await createHomeVisual({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		coverResolution: 1.1,
+		loadCoverImage: async (url) => ({ naturalWidth: 640, naturalHeight: 480, src: url }),
+		createCoverCanvas: (width, height) => ({
+			width,
+			height,
+			getContext: () => ({
+				drawImage() {},
+			} as never),
+		}) as never,
+	});
+	hv.setCoverUrl("https://img.example/a.jpg");
+	await hv.getCoverController().whenIdle();
+	const image = hv.getField().materialUniforms.uCoverTex.value.image as { width: number; height: number };
+	expect(image.width).toBe(384);
+	expect(image.height).toBe(384);
+});
+
 test("preset 6 (skull) suppresses points visibility; non-skull leaves points visible", async () => {
 	const scene = makeFakeScene();
 	const hv = await createHomeVisual({ scene: scene as never, threeFactory: makeFakeThree() });

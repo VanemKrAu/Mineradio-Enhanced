@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createHomeCoverTextureController } from "./cover-texture";
+import { createHomeCoverTextureController, coverTextureSizeForResolution, prepareSquareCoverCanvas } from "./cover-texture";
 
 function makeTexture(label: string) {
 	return {
@@ -110,4 +110,38 @@ test("advanceColorMix moves uColorMixT toward 1 over the baseline color mix dura
 	expect(uniforms.uColorMixT.value).toBeCloseTo(0.25, 5);
 	ctl.advanceColorMix(0.75);
 	expect(uniforms.uColorMixT.value).toBe(1);
+});
+
+test("coverTextureSizeForResolution preserves baseline 256/384/512 thresholds", () => {
+	expect(coverTextureSizeForResolution(0.75)).toBe(256);
+	expect(coverTextureSizeForResolution(1.09)).toBe(256);
+	expect(coverTextureSizeForResolution(1.10)).toBe(384);
+	expect(coverTextureSizeForResolution(1.31)).toBe(384);
+	expect(coverTextureSizeForResolution(1.32)).toBe(512);
+	expect(coverTextureSizeForResolution(1.55)).toBe(512);
+});
+
+test("prepareSquareCoverCanvas crops the image center into a baseline square texture canvas", () => {
+	const drawCalls: unknown[][] = [];
+	const canvas = {
+		width: 0,
+		height: 0,
+		getContext(type: string) {
+			expect(type).toBe("2d");
+			return {
+				drawImage(...args: unknown[]) {
+					drawCalls.push(args);
+				},
+			};
+		},
+	};
+	const image = { naturalWidth: 800, naturalHeight: 600 };
+	const result = prepareSquareCoverCanvas(image as never, {
+		coverResolution: 1.55,
+		createCanvas: () => canvas as never,
+	});
+	expect(result).toBe(canvas);
+	expect(canvas.width).toBe(512);
+	expect(canvas.height).toBe(512);
+	expect(drawCalls).toEqual([[image, 100, 0, 600, 600, 0, 0, 512, 512]]);
 });

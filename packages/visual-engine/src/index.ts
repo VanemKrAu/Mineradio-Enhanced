@@ -144,6 +144,7 @@ export type { HomeParticleField, HomeParticleFieldOptions } from "./home-visual/
 export { createHomeCoverTextureController } from "./home-visual/cover-texture";
 export type {
 	HomeCoverImage,
+	HomeCoverCanvasFactory,
 	HomeCoverLoader,
 	HomeCoverTextureController,
 	HomeCoverTextureControllerOptions,

@@ -10,7 +10,12 @@ import {
 	type HomeParticleField,
 	type HomeParticleFieldOptions,
 } from "./home-particle-field";
-import { createHomeCoverTextureController, type HomeCoverLoader, type HomeCoverTextureController } from "./cover-texture";
+import {
+	createHomeCoverTextureController,
+	type HomeCoverCanvasFactory,
+	type HomeCoverLoader,
+	type HomeCoverTextureController,
+} from "./cover-texture";
 
 export interface HomeVisualOptions {
 	scene: THREE.Scene;
@@ -18,6 +23,7 @@ export interface HomeVisualOptions {
 	coverResolution?: number;
 	fx?: FxState;
 	loadCoverImage?: HomeCoverLoader;
+	createCoverCanvas?: HomeCoverCanvasFactory;
 }
 
 export interface HomeVisual {
@@ -41,6 +47,8 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 	const coverController = createHomeCoverTextureController({
 		uniforms: field.materialUniforms as never,
 		loadImage: opts.loadCoverImage,
+		coverResolution: fieldOpts.coverResolution,
+		createCanvas: opts.createCoverCanvas,
 	});
 	field.applyFxState(fx);
 	field.bloomPoints.visible = !!(fx.bloom && fx.bloomStrength > 0.01) && fx.preset !== SKULL_PRESET_INDEX;
