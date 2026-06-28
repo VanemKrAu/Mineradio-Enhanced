@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@mineradio/shared": "workspace:*",
-    "hana-music-api": "^1.1.1"
+    "hana-music-api": "^1.1.1",
+    "qq-music-api": "^1.1.2"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

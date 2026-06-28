@@ -56,13 +56,13 @@ test("GET /providers/netease/login-status returns 200 logged-out when no cookie"
   expect(b.data.loggedIn).toBe(false);
 });
 
-test("GET /providers/qq/login-status returns 501 NOT_IMPLEMENTED action license-review", async () => {
+test("GET /providers/qq/login-status returns 200 logged-out when no cookie (no network)", async () => {
   const r = await call("/providers/qq/login-status");
-  expect(r.status).toBe(501);
+  expect(r.status).toBe(200);
   const b = await body(r);
-  expect(b.error.code).toBe("NOT_IMPLEMENTED");
-  expect(b.error.provider).toBe("qq");
-  expect(b.error.action).toBe("license-review");
+  expect(b.ok).toBe(true);
+  expect(b.data.provider).toBe("qq");
+  expect(b.data.loggedIn).toBe(false);
 });
 
 test("POST /providers/netease/song-url without body returns 400 BAD_REQUEST", async () => {
@@ -122,11 +122,12 @@ test("POST /providers/netease/lyric valid body returns lyric payload (not 501 NO
   expect(b.data.lines).toBeDefined();
 });
 
-test("POST /providers/qq/logout returns 501 license-review", async () => {
+test("POST /providers/qq/logout returns 501 action no-session when no cookie", async () => {
   const r = await call("/providers/qq/logout", { method: "POST" });
   expect(r.status).toBe(501);
   const b = await body(r);
-  expect(b.error.action).toBe("license-review");
+  expect(b.error.action).toBe("no-session");
+  expect(b.error.provider).toBe("qq");
 });
 
 test("GET /providers/netease/playlists returns 501 NOT_IMPLEMENTED", async () => {
@@ -144,7 +145,7 @@ test("POST /providers/netease/login-status (method mismatch) returns 404", async
   expect(r.status).toBe(404);
 });
 
-test("GET /providers/capabilities returns 200 matrix with netease online and qq unavailable", async () => {
+test("GET /providers/capabilities returns 200 matrix with both netease and qq online (post-A6)", async () => {
   const r = await call("/providers/capabilities");
   expect(r.status).toBe(200);
   const b = await body(r);
@@ -153,7 +154,7 @@ test("GET /providers/capabilities returns 200 matrix with netease online and qq 
   const netease = b.data.providers.find((e: { providerId: string }) => e.providerId === "netease");
   const qq = b.data.providers.find((e: { providerId: string }) => e.providerId === "qq");
   expect(netease.available).toBe(true);
-  expect(qq.available).toBe(false);
+  expect(qq.available).toBe(true);
 });
 
 test("GET /diagnostics returns 200 and contains none of the forbidden cookie/auth keys", async () => {

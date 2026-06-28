@@ -24,6 +24,15 @@ const NETEASE_CAPABILITIES: ProviderCapability[] = [
   "logout"
 ];
 
+const QQ_CAPABILITIES: ProviderCapability[] = [
+  "search",
+  "songUrl",
+  "lyric",
+  "playlistDetail",
+  "loginStatus",
+  "logout"
+];
+
 export function buildCapabilityMatrix(): CapabilityMatrix {
   const entries: ProviderStatusEntry[] = [
     {
@@ -34,9 +43,9 @@ export function buildCapabilityMatrix(): CapabilityMatrix {
     },
     {
       providerId: "qq",
-      available: false,
-      capabilities: [],
-      message: "license-review"
+      available: true,
+      capabilities: QQ_CAPABILITIES,
+      message: "online"
     }
   ];
   return { version: "0.1.0", providers: entries };

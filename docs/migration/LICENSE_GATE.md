@@ -73,6 +73,14 @@
 | Three.js | npm/vendor | MIT | 3D/WebGL | MIT 兼容 | 待审核（引入时再核） |
 | GSAP | npm/vendor | 标准功能 MIT/合规模型 | animation | 会员/闭源插件禁用 | 待审核（仅用标准功能） |
 | jsososo/qq-music-api（npm `qq-music-api`） | npm | GPL-3.0 | QQ provider | 与本项目同 GPL-3.0，组合作品可分发 | 通过 |
+| axios ^0.21.2 | npm [transitive via qq-music-api] | MIT | HTTP 客户端 | MIT 兼容 | 通过（transitive） |
+| cheerio ^1.0.0-rc.3 | npm [transitive via qq-music-api] | MIT | HTML 解析 | MIT 兼容 | 通过（transitive） |
+| express ~4.16.1 | npm [transitive via qq-music-api] | MIT | HTTP 服务框架（jsososo 服务模式入口；sidecar 仅依赖 `qq.api` 程序式调用，不启动 express server） | MIT 兼容 | 通过（transitive） |
+| js-base64 ^2.5.1 | npm [transitive via qq-music-api] | BSD-3-Clause | Base64 编解码 | BSD-3-Clause 兼容 | 通过（transitive） |
+| moment ^2.24.0 | npm [transitive via qq-music-api] | MIT | 时间格式化 | MIT 兼容；该项目已 EOL 但仅 jsososo 内用 | 通过（transitive） |
+| xml2js ^0.4.22 | npm [transitive via qq-music-api] | MIT | XML 解析（jsososo QQ 部分接口用） | MIT 兼容 | 通过（transitive） |
+| jade ~1.11.0 | npm [transitive via qq-music-api] | MIT | 模板引擎（jsososo express 服务模式备用） | MIT 兼容；已弃用但仅作为 transitive；sidecar 不调 express server | 通过（transitive，with EOL note） |
+| cookie-parser ~1.4.4 | npm [transitive via qq-music-api] | MIT | express cookie 中间件（transitive） | MIT 兼容 | 通过（transitive） |
 | hono | npm (hana 依赖) | MIT | HTTP 框架 | MIT 兼容 | 通过 |
 | music-metadata | npm (hana 依赖) | MIT | 音频元数据 | MIT 兼容 | 通过 |
 | qrcode | npm (hana 依赖) | MIT/BSD-3-Clause | QR 登录 | 兼容 | 通过 |

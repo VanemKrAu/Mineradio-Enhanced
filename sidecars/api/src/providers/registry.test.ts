@@ -7,7 +7,7 @@ test("registry exposes netease and qq adapters", () => {
   expect(PROVIDER_IDS).toEqual(["netease", "qq"]);
 });
 
-test("capability matrix: netease is online with capabilities; qq stays unavailable", () => {
+test("capability matrix: netease and qq both online after A6 jsososo integration", () => {
   const m = buildCapabilityMatrix();
   expect(m.providers.length).toBe(2);
   const netease = m.providers.find(e => e.providerId === "netease");
@@ -16,6 +16,6 @@ test("capability matrix: netease is online with capabilities; qq stays unavailab
   expect(netease?.available).toBe(true);
   expect(netease?.capabilities.length).toBeGreaterThan(0);
   expect(qq).toBeDefined();
-  expect(qq?.available).toBe(false);
-  expect(qq?.capabilities.length).toBe(0);
+  expect(qq?.available).toBe(true);
+  expect(qq?.capabilities.length).toBeGreaterThan(0);
 });
