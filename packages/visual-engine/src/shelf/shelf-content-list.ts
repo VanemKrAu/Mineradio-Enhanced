@@ -114,6 +114,7 @@ export interface ShelfContentScreenBounds {
 
 export interface ShelfContentScreenRow<T = ShelfContentRow> {
 	row: T;
+	index: number;
 	visible?: boolean;
 	renderOrder?: number;
 	bounds: ShelfContentScreenBounds;
@@ -136,6 +137,7 @@ export interface PickShelfContentRowAtScreenOptions {
 
 export interface ShelfContentScreenRowPick<T = ShelfContentRow> {
 	row: T;
+	index: number;
 	uv: ShelfContentScreenPoint;
 	screenPick: true;
 }
@@ -444,7 +446,7 @@ export function pickShelfContentRowAtScreen<T>(
 
 		const u = clampRange((pointer.x - bounds.minX) / Math.max(1, bounds.maxX - bounds.minX), 0, 1);
 		const v = 1 - clampRange((pointer.y - bounds.minY) / Math.max(1, bounds.maxY - bounds.minY), 0, 1);
-		return { row: row.row, uv: { x: u, y: v }, screenPick: true };
+		return { row: row.row, index: row.index, uv: { x: u, y: v }, screenPick: true };
 	}
 
 	return null;

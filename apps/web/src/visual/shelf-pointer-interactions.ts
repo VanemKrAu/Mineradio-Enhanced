@@ -2,6 +2,7 @@ import {
 	activateShelfPrimaryHit,
 	type CinemaCamera,
 	type ShelfManager,
+	type ShelfContentRow,
 	type ShelfRaycastCardHit,
 	type ShelfPointerRaycastHitGetter,
 	type ShelfPointerRaycastInfo,
@@ -10,6 +11,11 @@ import {
 export interface ShelfPointerInteractionTarget {
 	addEventListener(type: string, listener: EventListener, options?: boolean | AddEventListenerOptions): void;
 	removeEventListener(type: string, listener: EventListener, options?: boolean | EventListenerOptions): void;
+}
+
+export interface ShelfDetailRowClickPayload {
+	row: ShelfContentRow;
+	index: number;
 }
 
 export interface ShelfPointerInteractionOptions {
@@ -45,6 +51,7 @@ export interface ShelfPointerInteractionOptions {
 	isDetailWheelTarget?: (event: WheelEvent) => boolean;
 	setShelfMode?: (mode: "side") => void;
 	onShelfPlayQueueIndex?: (index: number) => void;
+	onShelfDetailRowClick?: (payload: ShelfDetailRowClickPayload) => void;
 	onOpenQueuePanel?: () => void;
 }
 
@@ -148,6 +155,10 @@ function isShelfInteractionBackgroundTarget(target: EventTarget | null): boolean
 	} catch {
 		return false;
 	}
+}
+
+function isShelfDetailPlaceholderRow(row: ShelfContentRow): boolean {
+	return row.kind === "loading" || row.kind === "error" || row.kind === "empty";
 }
 
 export function attachShelfPointerInteractionWiring(
@@ -254,6 +265,15 @@ export function attachShelfPointerInteractionWiring(
 		return contentList.hasScreenTargetAt({ x: event.clientX, y: event.clientY }) === true;
 	};
 
+	const canUseDetailClick = (event: MouseEvent): boolean => {
+		if (opts.getSplashActive()) return false;
+		if (opts.shelfManager.getMode() === "off") return false;
+		if (!opts.shelfManager.hasOpenContent()) return false;
+		if (isShelfInteractionUiTarget(event.target)) return false;
+		if (!isShelfInteractionBackgroundTarget(event.target)) return false;
+		return true;
+	};
+
 	const pointerInfoFromEvent = (event: PointerEvent | MouseEvent): ShelfPointerRaycastInfo => {
 		const mode = opts.shelfManager.getMode();
 		const snapshot = opts.shelfManager.getSnapshot();
@@ -323,6 +343,17 @@ export function attachShelfPointerInteractionWiring(
 		if (suppressNextClick || hadDrag) {
 			suppressNextClick = false;
 			hadDrag = false;
+			return;
+		}
+		if (opts.shelfManager.hasOpenContent()) {
+			const mouseEvent = event as MouseEvent;
+			if (!canUseDetailClick(mouseEvent)) return;
+			const contentList = opts.shelfManager.getContentList();
+			const pick = contentList?.pickRowAtScreen?.({ x: mouseEvent.clientX, y: mouseEvent.clientY }) ?? null;
+			if (!pick || isShelfDetailPlaceholderRow(pick.row)) return;
+			mouseEvent.preventDefault?.();
+			mouseEvent.stopImmediatePropagation?.();
+			opts.onShelfDetailRowClick?.({ row: pick.row, index: pick.index });
 			return;
 		}
 		if (!canStartInteraction(event)) return;

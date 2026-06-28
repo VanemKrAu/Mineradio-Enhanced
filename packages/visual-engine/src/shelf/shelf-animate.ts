@@ -754,11 +754,12 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		detailGroup.updateMatrixWorld(true);
 
 		const rowTargets: ShelfContentScreenRow[] = [];
-		for (const sprite of detailRows.values()) {
+		for (const [index, sprite] of detailRows) {
 			const bounds = projectMeshScreenBounds(sprite.mesh, viewport.width, viewport.height, camera);
 			if (!bounds) continue;
 			rowTargets.push({
 				row: sprite.row,
+				index,
 				visible: sprite.mesh.visible,
 				renderOrder: sprite.mesh.renderOrder,
 				bounds,

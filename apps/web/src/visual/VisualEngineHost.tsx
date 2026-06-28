@@ -7,6 +7,7 @@ import {
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
 import { useVisualEngine } from "./useVisualEngine";
+import type { ShelfDetailRowClickPayload } from "./shelf-pointer-interactions";
 import { PlayerController } from "../audio/player-controller";
 import { mapQueueToShelfItems } from "./shelf-items";
 import { isWallpaperSafeShelfPreset } from "./shelf-focus-zone";
@@ -23,6 +24,7 @@ export interface VisualEngineHostProps {
 	fxDefaults?: Partial<FxState>;
 	splashActive?: boolean;
 	onShelfPlayQueueIndex?: (index: number) => void;
+	onShelfDetailRowClick?: (payload: ShelfDetailRowClickPayload) => void;
 }
 
 function mapLyricPayload(payload: LyricPayload | null): VisualLyricLine[] {
@@ -67,6 +69,7 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const shelfPresenceRef = useRef<string>(props.fxDefaults?.shelfPresence ?? "always");
 	const wallpaperSafeRef = useRef<boolean>(isWallpaperSafeShelfPreset(props.fxDefaults?.preset));
 	const onShelfPlayQueueIndexRef = useRef<((index: number) => void) | undefined>(props.onShelfPlayQueueIndex);
+	const onShelfDetailRowClickRef = useRef<((payload: ShelfDetailRowClickPayload) => void) | undefined>(props.onShelfDetailRowClick);
 	const lifecycleRef = useRef<StageLyricsLifecycle | null>(null);
 
 	positionRef.current = props.positionMs;
@@ -82,6 +85,7 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	shelfPresenceRef.current = props.fxDefaults?.shelfPresence ?? "always";
 	wallpaperSafeRef.current = isWallpaperSafeShelfPreset(props.fxDefaults?.preset);
 	onShelfPlayQueueIndexRef.current = props.onShelfPlayQueueIndex;
+	onShelfDetailRowClickRef.current = props.onShelfDetailRowClick;
 
 	const handleShelfModeChange = useCallback((mode: "side") => {
 		runtimeShelfModeOverrideRef.current = mode;
@@ -123,6 +127,7 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		shelfPresenceRef,
 		wallpaperSafeRef,
 		onShelfPlayQueueIndexRef,
+		onShelfDetailRowClickRef,
 		lifecycleRef,
 		coverResolution: props.coverResolution ?? 1.55,
 		fxDefaults: props.fxDefaults,

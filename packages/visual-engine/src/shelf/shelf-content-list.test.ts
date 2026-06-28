@@ -216,12 +216,14 @@ test("pickShelfContentRowAtScreen prefers higher renderOrder and returns padded 
 	const hit = pickShelfContentRowAtScreen([
 		{
 			row: low,
+			index: 1,
 			visible: true,
 			renderOrder: 10,
 			bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
 		},
 		{
 			row: high,
+			index: 7,
 			visible: true,
 			renderOrder: 20,
 			bounds: { minX: 110, minY: 110, maxX: 210, maxY: 170 },
@@ -230,6 +232,7 @@ test("pickShelfContentRowAtScreen prefers higher renderOrder and returns padded 
 
 	expect(hit).toEqual({
 		row: high,
+		index: 7,
 		uv: { x: 0, y: 1 },
 		screenPick: true,
 	});
@@ -241,6 +244,7 @@ test("pickShelfContentRowAtScreen returns null outside baseline row padding", ()
 	expect(pickShelfContentRowAtScreen([
 		{
 			row,
+			index: 0,
 			visible: true,
 			renderOrder: 1,
 			bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
@@ -249,6 +253,7 @@ test("pickShelfContentRowAtScreen returns null outside baseline row padding", ()
 	expect(pickShelfContentRowAtScreen([
 		{
 			row,
+			index: 0,
 			visible: true,
 			renderOrder: 1,
 			bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
@@ -262,6 +267,7 @@ test("pickShelfContentRowAtScreen ignores zero-area row bounds", () => {
 	expect(pickShelfContentRowAtScreen([
 		{
 			row,
+			index: 0,
 			visible: true,
 			renderOrder: 1,
 			bounds: { minX: 100, minY: 100, maxX: 100, maxY: 160 },
@@ -270,6 +276,7 @@ test("pickShelfContentRowAtScreen ignores zero-area row bounds", () => {
 	expect(pickShelfContentRowAtScreen([
 		{
 			row,
+			index: 0,
 			visible: true,
 			renderOrder: 1,
 			bounds: { minX: 100, minY: 100, maxX: 200, maxY: 100 },
@@ -281,6 +288,7 @@ test("pickShelfContentRowAtScreen ignores non-finite row bounds and pointer", ()
 	const row = { id: "row", name: "Row" };
 	const validRow = {
 		row,
+		index: 0,
 		visible: true,
 		renderOrder: 1,
 		bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
@@ -359,12 +367,14 @@ test("ShelfContentList picks rows from stored screen targets using baseline row 
 		rows: [
 			{
 				row: low,
+				index: 1,
 				visible: true,
 				renderOrder: 10,
 				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
 			},
 			{
 				row: high,
+				index: 7,
 				visible: true,
 				renderOrder: 20,
 				bounds: { minX: 110, minY: 110, maxX: 210, maxY: 170 },
@@ -374,6 +384,7 @@ test("ShelfContentList picks rows from stored screen targets using baseline row 
 
 	expect(list.pickRowAtScreen({ x: 90, y: 100 })).toEqual({
 		row: high,
+		index: 7,
 		uv: { x: 0, y: 1 },
 		screenPick: true,
 	});
@@ -388,6 +399,7 @@ test("ShelfContentList checks stored panel targets after row targets", () => {
 		rows: [
 			{
 				row,
+				index: 0,
 				visible: true,
 				renderOrder: 1,
 				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
@@ -412,6 +424,7 @@ test("ShelfContentList can clear stored screen targets", () => {
 		rows: [
 			{
 				row: { id: "row", name: "Row" },
+				index: 0,
 				visible: true,
 				renderOrder: 1,
 				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
@@ -436,6 +449,7 @@ test("ShelfContentList screen hit methods can be used as callbacks", () => {
 		rows: [
 			{
 				row: { id: "row", name: "Row" },
+				index: 0,
 				visible: true,
 				renderOrder: 1,
 				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
@@ -454,6 +468,7 @@ test("ShelfContentList clears stale screen targets when content state changes", 
 		rows: [
 			{
 				row: { id: "row", name: "Row" },
+				index: 0,
 				visible: true,
 				renderOrder: 1,
 				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
@@ -493,6 +508,7 @@ test("ShelfContentList copies caller screen target arrays and bounds", () => {
 	const callerRows = [
 		{
 			row: { id: "first", name: "First" },
+			index: 0,
 			visible: true,
 			renderOrder: 1,
 			bounds: firstBounds,
@@ -502,6 +518,7 @@ test("ShelfContentList copies caller screen target arrays and bounds", () => {
 	list.setScreenTargets({ rows: callerRows });
 	callerRows.push({
 		row: { id: "pushed", name: "Pushed" },
+		index: 1,
 		visible: true,
 		renderOrder: 99,
 		bounds: { minX: 300, minY: 300, maxX: 360, maxY: 340 },

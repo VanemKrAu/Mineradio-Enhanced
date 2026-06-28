@@ -27,6 +27,7 @@ import {
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
 import { attachShelfPointerInteractionWiring } from "./shelf-pointer-interactions";
+import type { ShelfDetailRowClickPayload } from "./shelf-pointer-interactions";
 import {
 	attachShelfFocusZonePointerWiring,
 	isQueueFocusActive,
@@ -48,6 +49,7 @@ export interface VisualEngineRefs {
 	shelfPresenceRef?: RefObject<string>;
 	wallpaperSafeRef?: RefObject<boolean>;
 	onShelfPlayQueueIndexRef?: RefObject<((index: number) => void) | undefined>;
+	onShelfDetailRowClickRef?: RefObject<((payload: ShelfDetailRowClickPayload) => void) | undefined>;
 	lifecycleRef: RefObject<StageLyricsLifecycle | null>;
 	coverResolution: number;
 	fxDefaults?: Partial<FxState>;
@@ -485,6 +487,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				},
 				setShelfMode: (mode) => setRuntimeShelfMode(refs.shelfModeRef, mode, refs.onShelfModeChange),
 				onShelfPlayQueueIndex: (index) => refs.onShelfPlayQueueIndexRef?.current?.(index),
+				onShelfDetailRowClick: (payload) => refs.onShelfDetailRowClickRef?.current?.(payload),
 			});
 			handles = {
 				renderer,
@@ -515,5 +518,5 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			handles = null;
 			refs.lifecycleRef.current = null;
 		};
-	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.onShelfPlayQueueIndexRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
+	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.onShelfPlayQueueIndexRef, refs.onShelfDetailRowClickRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
 }

@@ -105,6 +105,22 @@ function makeWheelEvent(opts: {
 	};
 }
 
+function makeClickEvent(opts: {
+	target?: unknown;
+	clientX?: number;
+	clientY?: number;
+}) {
+	const calls: string[] = [];
+	return {
+		clientX: opts.clientX ?? 10,
+		clientY: opts.clientY ?? 20,
+		target: opts.target ?? null,
+		preventDefault: () => calls.push("preventDefault"),
+		stopImmediatePropagation: () => calls.push("stopImmediatePropagation"),
+		calls,
+	};
+}
+
 function makeContextMenuEvent(opts: {
 	target?: unknown;
 	clientX?: number;
@@ -1508,6 +1524,208 @@ test("attachShelfPointerInteractionWiring uses content-list screen targets for o
 	expect(shelfScrolled).toEqual([]);
 	expect(hit.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
 	expect(miss.calls).toEqual([]);
+});
+
+test("attachShelfPointerInteractionWiring clicks open detail screen row and skips first-level shelf actions", () => {
+	const target = new FakePointerTarget();
+	const played: number[] = [];
+	const detailClicks: unknown[] = [];
+	const queriedPointers: Array<{ x: number; y: number }> = [];
+	const row = { id: "song-3", name: "加载中…", artist: "Artist 3" };
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "stage",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				openCardIdx: 2,
+			}),
+			getCenterIdx: () => 0,
+			scrollBy: () => {},
+			openDetail: () => {},
+			hasOpenContent: () => true,
+			getContentList: () => ({
+				pickRowAtScreen: (pointer: { x: number; y: number }) => {
+					queriedPointers.push(pointer);
+					return pointer.x === 320 && pointer.y === 240
+						? { row, index: 3, uv: { x: 0.2, y: 0.8 }, screenPick: true }
+						: null;
+				},
+			}) as never,
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2, { kind: "playQueue", index: 8 }),
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		onShelfPlayQueueIndex: (idx) => played.push(idx),
+		onShelfDetailRowClick: (payload) => detailClicks.push(payload),
+	});
+
+	const event = makeClickEvent({ clientX: 320, clientY: 240 });
+	target.emit("click", event);
+	cleanup();
+
+	expect(queriedPointers).toEqual([{ x: 320, y: 240 }]);
+	expect(detailClicks).toEqual([{ row, index: 3 }]);
+	expect(played).toEqual([]);
+	expect(event.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+});
+
+test("attachShelfPointerInteractionWiring ignores open detail click misses without first-level shelf actions", () => {
+	const target = new FakePointerTarget();
+	const played: number[] = [];
+	const detailClicks: unknown[] = [];
+	const queriedPointers: Array<{ x: number; y: number }> = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "stage",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				openCardIdx: 2,
+			}),
+			getCenterIdx: () => 0,
+			scrollBy: () => {},
+			openDetail: () => {},
+			hasOpenContent: () => true,
+			getContentList: () => ({
+				pickRowAtScreen: (pointer: { x: number; y: number }) => {
+					queriedPointers.push(pointer);
+					return null;
+				},
+			}) as never,
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2, { kind: "playQueue", index: 8 }),
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		onShelfPlayQueueIndex: (idx) => played.push(idx),
+		onShelfDetailRowClick: (payload) => detailClicks.push(payload),
+	});
+
+	const event = makeClickEvent({ clientX: 321, clientY: 240 });
+	target.emit("click", event);
+	cleanup();
+
+	expect(queriedPointers).toEqual([{ x: 321, y: 240 }]);
+	expect(detailClicks).toEqual([]);
+	expect(played).toEqual([]);
+	expect(event.calls).toEqual([]);
+});
+
+test("attachShelfPointerInteractionWiring ignores open detail placeholder row clicks", () => {
+	const target = new FakePointerTarget();
+	const detailClicks: unknown[] = [];
+	let kind: "loading" | "error" | "empty" = "loading";
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "stage",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				openCardIdx: 2,
+			}),
+			getCenterIdx: () => 0,
+			scrollBy: () => {},
+			openDetail: () => {},
+			hasOpenContent: () => true,
+			getContentList: () => ({
+				pickRowAtScreen: () => ({
+					row: { name: kind, kind },
+					index: 0,
+					uv: { x: 0.5, y: 0.5 },
+					screenPick: true,
+				}),
+			}) as never,
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2),
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		onShelfDetailRowClick: (payload) => detailClicks.push(payload),
+	});
+
+	const loading = makeClickEvent({ clientX: 320, clientY: 240 });
+	target.emit("click", loading);
+	kind = "error";
+	const error = makeClickEvent({ clientX: 320, clientY: 240 });
+	target.emit("click", error);
+	kind = "empty";
+	const empty = makeClickEvent({ clientX: 320, clientY: 240 });
+	target.emit("click", empty);
+	cleanup();
+
+	expect(detailClicks).toEqual([]);
+	expect(loading.calls).toEqual([]);
+	expect(error.calls).toEqual([]);
+	expect(empty.calls).toEqual([]);
+});
+
+test("attachShelfPointerInteractionWiring keeps UI splash and off gates ahead of detail row clicks", () => {
+	const target = new FakePointerTarget();
+	const detailClicks: unknown[] = [];
+	const button = {
+		matches: (selector: string) => selector.split(",").includes("button"),
+		closest: (selector: string) => selector.split(",").includes("button") ? button : null,
+	};
+	let splashActive = false;
+	let mode: "stage" | "off" = "stage";
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => mode,
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode,
+				openCardIdx: 2,
+			}),
+			getCenterIdx: () => 0,
+			scrollBy: () => {},
+			openDetail: () => {},
+			hasOpenContent: () => true,
+			getContentList: () => ({
+				pickRowAtScreen: () => ({
+					row: { id: "song-3", name: "Song 3" },
+					index: 3,
+					uv: { x: 0.5, y: 0.5 },
+					screenPick: true,
+				}),
+			}) as never,
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2),
+		getSplashActive: () => splashActive,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		onShelfDetailRowClick: (payload) => detailClicks.push(payload),
+	});
+
+	const ui = makeClickEvent({ target: button, clientX: 320, clientY: 240 });
+	target.emit("click", ui);
+	splashActive = true;
+	const splash = makeClickEvent({ clientX: 320, clientY: 240 });
+	target.emit("click", splash);
+	splashActive = false;
+	mode = "off";
+	const off = makeClickEvent({ clientX: 320, clientY: 240 });
+	target.emit("click", off);
+	cleanup();
+
+	expect(detailClicks).toEqual([]);
+	expect(ui.calls).toEqual([]);
+	expect(splash.calls).toEqual([]);
+	expect(off.calls).toEqual([]);
 });
 
 test("attachShelfPointerInteractionWiring lets injected detail wheel predicate force a miss", () => {

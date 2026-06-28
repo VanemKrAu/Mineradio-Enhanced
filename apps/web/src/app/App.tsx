@@ -261,6 +261,7 @@ export function App(): ReactElement {
 				coverResolution={1.55}
 				splashActive={splashActive}
 				onShelfPlayQueueIndex={(index) => usePlaybackStore.getState().playAt(index)}
+				onShelfDetailRowClick={() => {}}
 			/>
 			<main className="shell">
 			<section className="status-panel">
