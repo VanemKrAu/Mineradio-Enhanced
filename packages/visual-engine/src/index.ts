@@ -111,6 +111,31 @@ export type {
 	SetFocusZoneOptions,
 } from "./runtime/cinema-camera";
 export {
+	applyFreeCameraPointerDelta,
+	applyFreeCameraWheel,
+	createDefaultFreeCameraState,
+	DEFAULT_FREE_CAMERA_POSE,
+	FREE_CAMERA_BASE_FOV,
+	FREE_CAMERA_DEFAULT_POSITION,
+	FREE_CAMERA_FOV_RANGE,
+	FREE_CAMERA_PITCH_RANGE,
+	FREE_CAMERA_POSITION_RANGE,
+	hydrateFreeCameraState,
+	serializeFreeCameraState,
+	startFreeCameraReset,
+	toggleFreeCamera,
+	updateFreeCamera,
+} from "./runtime/free-camera";
+export type {
+	FreeCameraPointer,
+	FreeCameraPointerDelta,
+	FreeCameraPose,
+	FreeCameraResetTween,
+	FreeCameraState,
+	PersistedFreeCameraState,
+	Vec3Like,
+} from "./runtime/free-camera";
+export {
 	FOCUS_ZONE_ACTIVATE_DELAY_MS,
 	FOCUS_ZONE_EXIT_DELAY_MS,
 	FOCUS_ZONE_QUEUE_EXIT_DELAY_MS,
