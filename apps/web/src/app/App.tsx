@@ -6,6 +6,7 @@ import { useLyricsStore } from "../stores/lyrics-store";
 import { usePlaybackStore } from "../stores/playback-store";
 import { useProviderStore } from "../stores/provider-store";
 import { getRuntimeConfig, type RuntimeConfig } from "../tauri/runtime";
+import { EmptyHomeHost } from "../home/EmptyHomeHost";
 import { SplashHost } from "../visual/SplashHost";
 import { VisualEngineHost } from "../visual/VisualEngineHost";
 import { createShelfDetailContentLoader, playShelfDetailRow } from "../visual/shelf-detail-data";
@@ -212,6 +213,7 @@ export function App(): ReactElement {
 					onDismissed={() => setSplashActive(false)}
 				/>
 			)}
+			<EmptyHomeHost />
 			<VisualEngineHost
 				audioElementRef={audioRef}
 				controllerRef={controllerRef}
