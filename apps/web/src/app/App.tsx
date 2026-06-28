@@ -561,6 +561,35 @@ export function App({
 		showToast("登录后同步歌单库");
 	}, [neteaseStatus?.loggedIn, openLoginModal, qqStatus?.loggedIn, searchQuery, showToast]);
 
+	const startWeatherRadio = useCallback(async () => {
+		const client = sidecarClient;
+		if (!client) {
+			searchQuery("雨天 R&B");
+			showToast("天气队列暂时为空，先打开搜索");
+			return;
+		}
+		showToast("正在生成天气电台");
+		try {
+			const result = await client.weatherRadio({
+				city: "上海",
+				timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "auto",
+			});
+			const songs = result.radio.songs;
+			if (!songs.length) {
+				searchQuery(result.radio.seedQueries[0] || "雨天 R&B");
+				showToast("天气队列暂时为空，先打开搜索");
+				return;
+			}
+			usePlaybackStore.getState().setQueue(songs);
+			usePlaybackStore.getState().playAt(0);
+			enterPlaybackSurface();
+			showToast(`${result.radio.title || "天气电台"} · ${songs.length} 首`);
+		} catch {
+			searchQuery("雨天 R&B");
+			showToast("天气队列暂时为空，先打开搜索");
+		}
+	}, [enterPlaybackSurface, searchQuery, showToast, sidecarClient]);
+
 	const openCollectPicker = useCallback((track: Track) => {
 		if (track.provider !== "netease" && track.provider !== "qq") {
 			showToast("当前来源暂不支持收藏到歌单");
@@ -1208,6 +1237,7 @@ export function App({
 					revealConsole();
 					showToast("视觉引导已打开播放器控制台，播放后会进入粒子与歌词舞台");
 				}}
+				onStartWeatherRadio={() => void startWeatherRadio()}
 			/>
 			<SearchShell client={sidecarClient} onFocus={focusSearch} onUpload={() => void importLocalJson()} onResultPlay={enterPlaybackSurface} />
 			<TopRightControls

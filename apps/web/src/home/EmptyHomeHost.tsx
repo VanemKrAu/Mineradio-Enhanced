@@ -7,6 +7,7 @@ export interface EmptyHomeHostProps {
 	onSearchQuery?: (query: string) => void;
 	onUpload?: () => void;
 	onGuide?: () => void;
+	onStartWeatherRadio?: () => void;
 }
 
 const STARTER_TILES = [
@@ -43,7 +44,13 @@ export function EmptyHomeHost(props: EmptyHomeHostProps): ReactElement {
 						<div className="home-card-sub" id="home-daily-sub">登录后同步你的今日歌曲</div>
 						<div className="home-card-art" id="home-daily-art" />
 					</button>
-					<button className="home-card" data-home-tone="playlist" type="button" onClick={() => props.onSearchQuery?.("私人电台") ?? props.onSearchFocus?.()}>
+					<button
+						className="home-card"
+						data-home-tone="playlist"
+						data-home-radio-start="true"
+						type="button"
+						onClick={() => props.onStartWeatherRadio?.()}
+					>
 						<div className="home-card-label">Song</div>
 						<div className="home-card-title" id="home-private-title">私人电台</div>
 						<div className="home-card-sub" id="home-private-sub">从你的推荐和歌单里开播</div>
