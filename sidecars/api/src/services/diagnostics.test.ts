@@ -25,3 +25,39 @@ test("pushRecentError keeps the ring bounded at 20", () => {
     expect(serialized).not.toContain(key);
   }
 });
+
+test("diagnostics redacts sensitive recent error fields recursively", () => {
+  pushRecentError({
+    code: "PROVIDER_LOGIN",
+    cookie: "MUSIC_U=netease-secret; __csrf=csrf-secret",
+    headers: {
+      authorization: "Bearer auth-secret",
+      "x-safe": "kept"
+    },
+    nested: {
+      qm_keyst: "qq-secret",
+      list: [{ qqmusic_key: "qq-music-secret" }, "safe item"],
+      message: "provider failed with wxskey=wechat-secret"
+    }
+  });
+
+  const serialized = JSON.stringify(buildDiagnostics());
+  for (const leaked of [
+    "MUSIC_U",
+    "netease-secret",
+    "__csrf",
+    "csrf-secret",
+    "authorization",
+    "Bearer auth-secret",
+    "qm_keyst",
+    "qq-secret",
+    "qqmusic_key",
+    "qq-music-secret",
+    "wxskey",
+    "wechat-secret"
+  ]) {
+    expect(serialized).not.toContain(leaked);
+  }
+  expect(serialized).toContain("x-safe");
+  expect(serialized).toContain("kept");
+});

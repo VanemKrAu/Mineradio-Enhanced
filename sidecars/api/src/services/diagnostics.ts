@@ -1,6 +1,7 @@
 import type { CapabilityMatrix, ProviderStatusEntry } from "@mineradio/shared";
 import { appVersion, apiVersion, schemaVersion } from "../env";
 import { buildCapabilityMatrix } from "../providers/registry";
+import { redactLogValue } from "./sidecar-log";
 
 const RECENT_ERRORS_MAX = 20;
 const recentErrors: unknown[] = [];
@@ -26,7 +27,7 @@ export function buildDiagnostics(deps: DiagnosticsDeps = {}): DiagnosticsPayload
     apiVersion: apiVersion(),
     schemaVersion: schemaVersion(),
     providers: matrix.providers,
-    recentErrors: [...recentErrors]
+    recentErrors: recentErrors.map((entry) => redactLogValue(entry))
   };
 }
 
