@@ -201,6 +201,129 @@ test("weatherRadio calls sidecar weather radio endpoint with location params", a
 	});
 });
 
+test("podcastSearch GETs baseline podcast search endpoint", async () => {
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		expect(url).toContain("/podcast/search");
+		expect(url).toContain("keywords=%E6%95%85%E4%BA%8B");
+		expect(url).toContain("limit=18");
+		expect(init?.method).toBe("GET");
+		return jsonResponse({
+			ok: true,
+			data: {
+				podcasts: [{
+					id: "r1",
+					rid: "r1",
+					name: "故事电台",
+					coverUrl: "",
+					description: "",
+					djName: "",
+					category: "",
+					programCount: 0,
+					subCount: 0,
+				}],
+				total: 1,
+			},
+		});
+	}) as typeof fetch;
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		const result = await client.podcastSearch("故事", 18);
+		expect(result.podcasts[0].name).toBe("故事电台");
+		expect(result.total).toBe(1);
+	});
+});
+
+test("podcast library methods call hot detail programs and my endpoints", async () => {
+	const seen: string[] = [];
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		seen.push(url.replace(BASE, ""));
+		expect(init?.method).toBe("GET");
+		if (url.includes("/podcast/hot")) {
+			return jsonResponse({ ok: true, data: { podcasts: [], more: false } });
+		}
+		if (url.includes("/podcast/detail")) {
+			return jsonResponse({
+				ok: true,
+				data: {
+					podcast: {
+						id: "r1",
+						rid: "r1",
+						name: "电台",
+						coverUrl: "",
+						description: "",
+						djName: "",
+						category: "",
+						programCount: 0,
+						subCount: 0,
+					},
+				},
+			});
+		}
+		if (url.includes("/podcast/programs")) {
+			return jsonResponse({
+				ok: true,
+				data: { radio: { id: "r1", rid: "r1", name: "电台" }, programs: [], more: false, total: 0 },
+			});
+		}
+		if (url.includes("/podcast/my/items")) {
+			return jsonResponse({
+				ok: true,
+				data: {
+					loggedIn: false,
+					key: "liked",
+					title: "喜欢的声音",
+					sub: "收藏或最近喜欢的声音",
+					itemType: "voice",
+					count: 0,
+					coverUrl: "",
+					items: [],
+				},
+			});
+		}
+		if (url.includes("/podcast/my")) {
+			return jsonResponse({ ok: true, data: { loggedIn: false, collections: [] } });
+		}
+		throw new Error(`unexpected ${url}`);
+	}) as typeof fetch;
+
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		expect((await client.podcastHot(12, 24)).more).toBe(false);
+		expect((await client.podcastDetail("r1")).podcast.name).toBe("电台");
+		expect((await client.podcastPrograms("r1", 30, 0)).total).toBe(0);
+		expect((await client.podcastMy()).loggedIn).toBe(false);
+		expect((await client.podcastMyItems("liked", 36, 12)).key).toBe("liked");
+	});
+
+	expect(seen).toEqual([
+		"/podcast/hot?limit=12&offset=24",
+		"/podcast/detail?id=r1",
+		"/podcast/programs?id=r1&limit=30&offset=0",
+		"/podcast/my",
+		"/podcast/my/items?key=liked&limit=36&offset=12",
+	]);
+});
+
+test("podcastDjBeatmap GETs analyzer endpoint with encoded audio URL", async () => {
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		expect(url).toContain("/podcast/dj-beatmap");
+		expect(url).toContain("url=https%3A%2F%2Fmedia.example%2Fdj.mp3");
+		expect(url).toContain("duration=120");
+		expect(url).toContain("intro=18");
+		expect(init?.method).toBe("GET");
+		return jsonResponse({ ok: true, data: { ok: true, map: { beats: [1, 2] } } });
+	}) as typeof fetch;
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		const result = await client.podcastDjBeatmap("https://media.example/dj.mp3", 120, 18);
+		expect(result.ok).toBe(true);
+		expect(Array.isArray(result.map.beats)).toBe(true);
+	});
+});
+
 test("search throws SidecarClientError on ok:false", async () => {
 	const fake = (async () =>
 		jsonResponse({

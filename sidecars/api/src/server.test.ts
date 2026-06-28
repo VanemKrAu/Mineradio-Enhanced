@@ -194,6 +194,139 @@ test("GET /weather/radio returns weather radio success envelope", async () => {
   expect(b.data.radio.songs[0].id).toBe("1");
 });
 
+test("GET /podcast/search returns mapped podcast radios", async () => {
+  const handler = createRouteHandler({
+    podcast: {
+      async search(params) {
+        expect(params).toEqual({ keywords: "故事", limit: 18 });
+        return {
+          podcasts: [{
+            id: "r1",
+            rid: "r1",
+            name: "故事电台",
+            coverUrl: "",
+            description: "",
+            djName: "",
+            category: "",
+            programCount: 0,
+            subCount: 0
+          }],
+          total: 1
+        };
+      }
+    }
+  });
+
+  const r = await handler(new Request("http://127.0.0.1/podcast/search?keywords=%E6%95%85%E4%BA%8B&limit=18"));
+
+  expect(r.status).toBe(200);
+  const b = await body(r);
+  expect(b.ok).toBe(true);
+  expect(b.data.podcasts[0].name).toBe("故事电台");
+});
+
+test("GET /podcast/programs returns playable podcast programs", async () => {
+  const handler = createRouteHandler({
+    podcast: {
+      async programs(params) {
+        expect(params).toEqual({ rid: "r1", limit: 30, offset: 0 });
+        return {
+          radio: {
+            id: "r1",
+            rid: "r1",
+            name: "电台",
+            coverUrl: "",
+            description: "",
+            djName: "",
+            category: "",
+            programCount: 0,
+            subCount: 0
+          },
+          programs: [{
+            ...routeTrack,
+            type: "podcast",
+            programId: "p1",
+            radioId: "r1",
+            radioName: "电台",
+            djName: "",
+            description: "",
+            createTime: 0,
+            serialNum: 0
+          }],
+          more: false,
+          total: 1
+        };
+      }
+    }
+  });
+
+  const r = await handler(new Request("http://127.0.0.1/podcast/programs?id=r1"));
+
+  expect(r.status).toBe(200);
+  const b = await body(r);
+  expect(b.data.programs[0].type).toBe("podcast");
+  expect(b.data.programs[0].programId).toBe("p1");
+});
+
+test("GET /podcast/my and /podcast/my/items preserve logged-out baseline envelopes", async () => {
+  const handler = createRouteHandler({
+    podcast: {
+      async my() {
+        return {
+          loggedIn: false,
+          collections: [{
+            key: "collect",
+            title: "收藏播客",
+            sub: "你收藏的播客",
+            itemType: "radio",
+            count: 0,
+            coverUrl: ""
+          }]
+        };
+      },
+      async myItems(params) {
+        expect(params.key).toBe("liked");
+        return {
+          loggedIn: false,
+          key: "liked",
+          title: "喜欢的声音",
+          sub: "收藏或最近喜欢的声音",
+          itemType: "voice",
+          count: 0,
+          coverUrl: "",
+          items: []
+        };
+      }
+    }
+  });
+
+  const my = await body(await handler(new Request("http://127.0.0.1/podcast/my")));
+  expect(my.data.loggedIn).toBe(false);
+  expect(my.data.collections[0].key).toBe("collect");
+
+  const items = await body(await handler(new Request("http://127.0.0.1/podcast/my/items?key=liked")));
+  expect(items.data.itemType).toBe("voice");
+});
+
+test("GET /podcast/dj-beatmap validates url before analyzer call", async () => {
+  const handler = createRouteHandler({
+    podcast: {
+      async djBeatmap(params) {
+        expect(params.url).toBe("https://example.com/a.mp3");
+        return { ok: true, map: { visualBeatCount: 3 } };
+      }
+    }
+  });
+
+  const bad = await handler(new Request("http://127.0.0.1/podcast/dj-beatmap?url=file:///bad"));
+  expect(bad.status).toBe(400);
+
+  const good = await handler(new Request("http://127.0.0.1/podcast/dj-beatmap?url=https%3A%2F%2Fexample.com%2Fa.mp3&duration=30&intro=5"));
+  expect(good.status).toBe(200);
+  const b = await body(good);
+  expect(b.data.map.visualBeatCount).toBe(3);
+});
+
 test("GET /providers/netease/login-status returns 200 logged-out when no cookie", async () => {
   const r = await call("/providers/netease/login-status");
   expect(r.status).toBe(200);

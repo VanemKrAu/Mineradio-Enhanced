@@ -9,6 +9,20 @@ import {
 	PlaylistDetailSchema,
 	PlaylistSummary,
 	PlaylistSummaryArraySchema,
+	PodcastBeatmapResponse,
+	PodcastBeatmapResponseSchema,
+	PodcastDetailResponse,
+	PodcastDetailResponseSchema,
+	PodcastHotResponse,
+	PodcastHotResponseSchema,
+	PodcastMyItemsResponse,
+	PodcastMyItemsResponseSchema,
+	PodcastMyResponse,
+	PodcastMyResponseSchema,
+	PodcastProgramsResponse,
+	PodcastProgramsResponseSchema,
+	PodcastSearchResponse,
+	PodcastSearchResponseSchema,
 	PlaylistAddSongAck,
 	PlaylistAddSongAckSchema,
 	ProviderId,
@@ -206,6 +220,72 @@ export class SidecarClient {
 			"GET",
 			`/weather/radio${suffix}`,
 			WeatherRadioResponseSchema,
+		);
+	}
+
+	async podcastSearch(keywords: string, limit = 18): Promise<PodcastSearchResponse> {
+		const params = new URLSearchParams({ keywords, limit: String(limit) });
+		return this.request(
+			"GET",
+			`/podcast/search?${params.toString()}`,
+			PodcastSearchResponseSchema,
+		);
+	}
+
+	async podcastHot(limit = 18, offset = 0): Promise<PodcastHotResponse> {
+		const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+		return this.request(
+			"GET",
+			`/podcast/hot?${params.toString()}`,
+			PodcastHotResponseSchema,
+		);
+	}
+
+	async podcastDetail(id: string): Promise<PodcastDetailResponse> {
+		const params = new URLSearchParams({ id });
+		return this.request(
+			"GET",
+			`/podcast/detail?${params.toString()}`,
+			PodcastDetailResponseSchema,
+		);
+	}
+
+	async podcastPrograms(id: string, limit = 30, offset = 0): Promise<PodcastProgramsResponse> {
+		const params = new URLSearchParams({ id, limit: String(limit), offset: String(offset) });
+		return this.request(
+			"GET",
+			`/podcast/programs?${params.toString()}`,
+			PodcastProgramsResponseSchema,
+		);
+	}
+
+	async podcastMy(): Promise<PodcastMyResponse> {
+		return this.request(
+			"GET",
+			"/podcast/my",
+			PodcastMyResponseSchema,
+		);
+	}
+
+	async podcastMyItems(key: string, limit = 36, offset = 0): Promise<PodcastMyItemsResponse> {
+		const params = new URLSearchParams({ key, limit: String(limit), offset: String(offset) });
+		return this.request(
+			"GET",
+			`/podcast/my/items?${params.toString()}`,
+			PodcastMyItemsResponseSchema,
+		);
+	}
+
+	async podcastDjBeatmap(url: string, durationSec = 0, introSec = 0): Promise<PodcastBeatmapResponse> {
+		const params = new URLSearchParams({
+			url,
+			duration: String(durationSec),
+			intro: String(introSec),
+		});
+		return this.request(
+			"GET",
+			`/podcast/dj-beatmap?${params.toString()}`,
+			PodcastBeatmapResponseSchema,
 		);
 	}
 

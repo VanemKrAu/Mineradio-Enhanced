@@ -4,6 +4,13 @@ import {
   SongUrlRequestSchema,
   TrackSchema,
   WeatherRadioResponseSchema,
+  PodcastBeatmapResponseSchema,
+  PodcastDetailResponseSchema,
+  PodcastHotResponseSchema,
+  PodcastMyItemsResponseSchema,
+  PodcastMyResponseSchema,
+  PodcastProgramsResponseSchema,
+  PodcastSearchResponseSchema,
   ProviderSessionCookieAckSchema,
   SongLikeAckSchema,
   SongLikeCheckAckSchema,
@@ -38,6 +45,10 @@ import {
   type WeatherRadioService
 } from "./services/weather-radio";
 import {
+  podcastService,
+  type PodcastService
+} from "./services/podcast";
+import {
   clearRuntimeProviderCookie,
   setRuntimeProviderCookie
 } from "./services/auth-session";
@@ -48,6 +59,7 @@ export type RouteHandlerDeps = {
   imageProxy?: ImageProxy;
   providerAdapters?: Record<ProviderId, ProviderAdapter>;
   weatherRadio?: WeatherRadioService;
+  podcast?: Partial<PodcastService>;
   logger?: SidecarLogger;
 };
 
@@ -57,6 +69,7 @@ export function createRouteHandler(deps: RouteHandlerDeps = {}) {
   const imageProxy = deps.imageProxy ?? resolveImageProxy;
   const providerAdapters = deps.providerAdapters ?? providers;
   const weatherRadioService = deps.weatherRadio ?? weatherRadio;
+  const podcast = { ...podcastService, ...(deps.podcast ?? {}) };
   const logger = deps.logger ?? createSidecarLogger();
 
   return async function handleRoute(request: Request): Promise<Response> {
@@ -113,6 +126,69 @@ export function createRouteHandler(deps: RouteHandlerDeps = {}) {
       const params = parseWeatherRadioParams(url);
       response = json(ok(WeatherRadioResponseSchema.parse(await weatherRadioService.build(params))));
       await logRequest(logger, { method, path, status: response.status, startedAt, action: "weather-radio" });
+      return response;
+    }
+
+    if (path === "/podcast/search" && method === "GET") {
+      const keywords = url.searchParams.get("keywords") ?? url.searchParams.get("keyword") ?? "";
+      const limit = clampInt(url.searchParams.get("limit"), 6, 30, 18);
+      response = json(ok(PodcastSearchResponseSchema.parse(await podcast.search({ keywords, limit }))));
+      await logRequest(logger, { method, path, status: response.status, startedAt, action: "podcast-search" });
+      return response;
+    }
+
+    if (path === "/podcast/hot" && method === "GET") {
+      const limit = clampInt(url.searchParams.get("limit"), 6, 30, 18);
+      const offset = clampInt(url.searchParams.get("offset"), 0, Number.MAX_SAFE_INTEGER, 0);
+      response = json(ok(PodcastHotResponseSchema.parse(await podcast.hot({ limit, offset }))));
+      await logRequest(logger, { method, path, status: response.status, startedAt, action: "podcast-hot" });
+      return response;
+    }
+
+    if (path === "/podcast/detail" && method === "GET") {
+      const rid = url.searchParams.get("id") ?? url.searchParams.get("rid") ?? "";
+      response = json(ok(PodcastDetailResponseSchema.parse(await podcast.detail({ rid }))));
+      await logRequest(logger, { method, path, status: response.status, startedAt, action: "podcast-detail" });
+      return response;
+    }
+
+    if (path === "/podcast/programs" && method === "GET") {
+      const rid = url.searchParams.get("id") ?? url.searchParams.get("rid") ?? "";
+      const limit = clampInt(url.searchParams.get("limit"), 10, 60, 30);
+      const offset = clampInt(url.searchParams.get("offset"), 0, Number.MAX_SAFE_INTEGER, 0);
+      response = json(ok(PodcastProgramsResponseSchema.parse(await podcast.programs({ rid, limit, offset }))));
+      await logRequest(logger, { method, path, status: response.status, startedAt, action: "podcast-programs" });
+      return response;
+    }
+
+    if (path === "/podcast/my" && method === "GET") {
+      response = json(ok(PodcastMyResponseSchema.parse(await podcast.my())));
+      await logRequest(logger, { method, path, status: response.status, startedAt, action: "podcast-my" });
+      return response;
+    }
+
+    if (path === "/podcast/my/items" && method === "GET") {
+      const key = url.searchParams.get("key") ?? "collect";
+      const limit = clampInt(url.searchParams.get("limit"), 8, 60, 36);
+      const offset = clampInt(url.searchParams.get("offset"), 0, Number.MAX_SAFE_INTEGER, 0);
+      response = json(ok(PodcastMyItemsResponseSchema.parse(await podcast.myItems({ key, limit, offset }))));
+      await logRequest(logger, { method, path, status: response.status, startedAt, action: "podcast-my-items" });
+      return response;
+    }
+
+    if (path === "/podcast/dj-beatmap" && method === "GET") {
+      const audioUrl = url.searchParams.get("url") ?? "";
+      if (!/^https?:\/\//i.test(audioUrl)) {
+        response = json(fail({ code: "BAD_REQUEST", message: "Invalid audio url", retryable: false }), 400);
+        await logRequest(logger, { method, path, status: response.status, startedAt, action: "podcast-dj-beatmap" });
+        return response;
+      }
+      response = json(ok(PodcastBeatmapResponseSchema.parse(await podcast.djBeatmap({
+        url: audioUrl,
+        durationSec: Number(url.searchParams.get("duration") ?? 0) || 0,
+        introSec: Number(url.searchParams.get("intro") ?? 0) || 0
+      }))));
+      await logRequest(logger, { method, path, status: response.status, startedAt, action: "podcast-dj-beatmap" });
       return response;
     }
 
@@ -433,6 +509,13 @@ export const routeHandler = createRouteHandler();
 function parseLimit(limitRaw: string | null): number {
   const limitParsed = limitRaw === null ? NaN : Number(limitRaw);
   return Number.isFinite(limitParsed) && limitParsed > 0 ? Math.floor(limitParsed) : 20;
+}
+
+function clampInt(raw: string | null, min: number, max: number, fallback: number): number {
+  if (raw === null || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
 function parseWeatherRadioParams(url: URL): WeatherRadioParams {
