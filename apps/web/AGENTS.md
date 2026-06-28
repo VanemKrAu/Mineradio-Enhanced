@@ -48,7 +48,7 @@ src/
 | 接 Tauri invoke | 唯一 Tauri 文件 `tauri/runtime.ts` —— `isTauriRuntime()` 检测 `window.__TAURI_INTERNALS__` 后 dynamic-import invoke | 不要在别处 import `@tauri-apps/api`；建立新 invoke 调用时通过 `getRuntimeConfig` 同 handler 模板 |
 | 加 sidecar route 客户端 | `api/sidecar-client.ts` 加方法 + `ApiSuccessSchema(XxxSchema)` parse | 所有响应走 zod shared schemas，不要手写类型守卫 |
 | 加 visual-engine 模块 mount | `visual/useVisualEngine.ts` `useEffect` 中按顺序创建 + `registerStep(slot, fn)` 注册 | 11 个 RenderStepSlot 顺序固定 (见 visual-engine AGENTS.md) |
-| 加 SearchPanel provider | `components/search/SearchPanel.tsx` provider `<select>` 当前仍有 qq short-circuit (`if (provider === "qq") return`)；A6/7c32b2b 已接 sidecar QQ provider，前端行为待移除 gate | 加新 provider 1) 改 `search-store` default 2) 改 SearchPanel provider 数组 3) 删 qq gate；保留 songUrl cookie-gated 错误提示路径 |
+| 加 SearchPanel provider | `components/search/SearchPanel.tsx` provider `<select>` 已启用 netease/qq；A6/7c32b2b 已接 sidecar QQ provider，Stage 2 已移除前端 QQ search gate | 加新 provider 1) 改 `search-store` default 2) 改 SearchPanel provider 数组 3) 保留 songUrl cookie-gated 错误提示路径 |
 | 处理 lyric 索引 | `lyrics/select-current-index.ts` 防御 sort；同一 track 中 `selectCurrentIndex` 在 3 处调用（App timeupdate handler + App useMemo + LyricView useMemo）—— **performance follow-up**，可 memoize 中 |
 | 处理 Tauri 缺失 (SSR/test) | 唯一 guard 点 `tauri/runtime.ts:isTauriRuntime`；其他 SSR-safe（无 jsdom 依赖；所有 WebGL/Canvas 第一次用到时检查 typeof window） | 不要 spread guard 到每个组件；集中 IS ONE TRUTH |
 
@@ -78,7 +78,7 @@ src/
 - **AudioContext handle `handles.audioContext` 当前永远是 `null`**: 这是已知缺陷 — hot-reload 会 orphan 一个 AudioContext（中等优先，先记 follow-up）。改 useVisualEngine 记得 closing 它。
 - **`shelf-store` 是 stub**：当前实际 shelf UI 状态走 raw refs（VisualEngineHost 里 shelfModeRef 等）；未接 store；后续 P9 移到 store-driven。
 - **`update-store` 纯状态 bucket**：无 Tauri updater invoke 实际调用；后续 P10 在 `apps/web/src/visual/UpdateHost.tsx` (待建) 配 update-shop 真接 Tauri updater。
-- **`SearchPanel` 仍有 QQ provider short-circuit + 中文 play state labels**：未知 / 可播放 / 需登录 / VIP / 付费 / 无音源 / 试听；A6 sidecar 已接后下一片应删除 QQ short-circuit，并保留不可播放状态防误点。
+- **`SearchPanel` 中文 play state labels**：未知 / 可播放 / 需登录 / VIP / 付费 / 无音源 / 试听；QQ search gate 已移除，但仍必须保留不可播放状态防误点，尤其是 `login_required`。
 
 ## COMMANDS
 

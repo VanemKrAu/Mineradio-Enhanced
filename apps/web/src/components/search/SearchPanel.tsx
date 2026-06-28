@@ -60,7 +60,6 @@ function SearchPanelImpl({ client }: SearchPanelProps): ReactElement {
 			const trimmed = keywordInput.trim();
 			if (!trimmed) return;
 			setKeyword(trimmed);
-			if (provider === "qq") return;
 			setLoading(true);
 			setError(null);
 			try {
@@ -81,8 +80,6 @@ function SearchPanelImpl({ client }: SearchPanelProps): ReactElement {
 			setResults,
 		],
 	);
-
-	const isQQ = provider === "qq";
 
 	return (
 		<section className="search-panel" data-provider={provider}>
@@ -107,15 +104,10 @@ function SearchPanelImpl({ client }: SearchPanelProps): ReactElement {
 					onChange={(e) => setKeywordInput(e.target.value)}
 					aria-label="keyword"
 				/>
-				<button type="submit" className="search-submit" disabled={loading || isQQ}>
+				<button type="submit" className="search-submit" disabled={loading}>
 					{loading ? "搜索中…" : "搜索"}
 				</button>
 			</form>
-			{isQQ && (
-				<p className="search-provider-note" title="QQ provider 不在 P4.5 接入范围">
-					QQ provider 不在 P4.5 接入范围
-				</p>
-			)}
 			{error && <p className="search-error">{error}</p>}
 			<ul className="search-results">
 				{results.map((track, index) => {
@@ -135,7 +127,7 @@ function SearchPanelImpl({ client }: SearchPanelProps): ReactElement {
 								className="search-row-button"
 								disabled={disabled}
 								onClick={() => {
-									if (isQQ || disabled) return;
+									if (disabled) return;
 									if (!isPlayable(track.playableState)) return;
 									playSearchResult(track);
 								}}
