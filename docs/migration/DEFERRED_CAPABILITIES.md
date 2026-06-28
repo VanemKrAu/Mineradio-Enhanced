@@ -24,7 +24,7 @@
 | 旧 Electron patch JSON 系统 | removed-by-decision | Tauri updater 替代旧 patch 系统，二开项目不兼容旧更新通道 | 无 | 不进入 Tauri 主线 |
 | 旧用户数据自动迁移 | removed-by-decision | 本项目为二开项目，不承诺读取旧安装用户数据 | 无 | 不进入 Tauri 主线 |
 | QQ 独立 sidecar | deferred | 第一版先用一个 Bun API sidecar 内部 provider adapter | QQ provider 复杂到影响主 sidecar 稳定性时拆分 | 视实现复杂度决定 |
-| Tauri 发布 logo / 最终品牌名 | deferred | 开发期只需 Windows RC 资源图标；最终公开发布 logo/品牌名需用户决策 | 用户确认 logo 资产和品牌名后替换 `apps/desktop/src-tauri/icons/` 并更新 productName/identifier | 补齐 |
+| Tauri 发布 logo / 最终品牌名 | done | DECISIONS.md A1/A2 已锁定 app id `com.mineradio.fork.tauri`、productName `Mineradio Tauri Rewrite`，并复用 Electron baseline `build/icon.ico` 作为最终发布 logo | 无 | 见 DECISIONS.md A1/A2；由 `npm run release-identity:check` 防回退 |
 | Tauri dev 期占位图标 | done | `apps/desktop/src-tauri/icons/icon.ico` 复用 Electron baseline `build/icon.ico`，按 `docs/migration/DECISIONS.md` A2 已定为最终发布 logo | 无 | 见 DECISIONS.md A2 |
 
 ## 管理规则
@@ -36,4 +36,4 @@
 - 发布前不能整体延期：启动/Home shell、搜索、播放、队列、歌词、provider adapter、Netease/QQ 核心接口、视觉 parity、3D 歌单架、桌面歌词、Windows 安装/卸载、Tauri updater/release path、license/notices gate。
 - 发布前允许保持非 `done` 的只有已锁定处置项：A7 的 Wallpaper Engine 深联动 / 实验壁纸模式 / hand-canvas 为 `hidden`，旧 Electron patch JSON / 旧用户数据自动迁移为 `removed-by-decision`。
 - `QQ 独立 sidecar` 只是进程边界决策，不是 QQ provider 功能延期；发布前必须决定继续单 Bun sidecar、拆独立 sidecar，或将该项改为 `removed-by-decision`，但 QQ search/songUrl/lyric/playlistDetail/loginStatus/logout parity 仍必须由 capability gate 验收。
-- `Tauri 发布 logo / 最终品牌名` 如继续与 DECISIONS.md A1/A2 保持一致，应在发布前改为 `done`；不得因品牌项未更新而阻塞或改变已锁 app id/productName/logo 决策。
+- `Tauri 发布 logo / 最终品牌名` 已按 DECISIONS.md A1/A2 改为 `done`；不得因品牌项未更新而阻塞或改变已锁 app id/productName/logo 决策。
