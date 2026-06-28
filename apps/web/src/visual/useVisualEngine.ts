@@ -4,6 +4,7 @@ import {
 	createCinemaCamera,
 	createConnectorParticles,
 	createHomeVisual,
+	createDefaultFreeCameraState,
 	createRenderLoop,
 	createRenderer,
 	createShelfManagerWithThree,
@@ -27,6 +28,11 @@ import {
 	type ShelfOpenDetailContentPayload,
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
+import {
+	attachFreeCameraHost,
+	createFreeCameraPoseFromPerspectiveCamera,
+	updateAndApplyFreeCamera,
+} from "./free-camera-host";
 import { attachShelfPointerInteractionWiring } from "./shelf-pointer-interactions";
 import type { ShelfDetailRowClickPayload } from "./shelf-pointer-interactions";
 import type { ShelfDetailContentListWriter } from "./shelf-detail-data";
@@ -80,6 +86,7 @@ interface MountedHandles {
 	offHomeAudio: () => void;
 	offShelfFocus: () => void;
 	offShelfPointerInteractions: () => void;
+	offFreeCamera: () => void;
 }
 
 function prefersReducedMotion(): boolean {
@@ -282,6 +289,10 @@ function disposeHandles(handles: MountedHandles | null): void {
 	} catch {
 	}
 	try {
+		handles.offFreeCamera();
+	} catch {
+	}
+	try {
 		handles.lifecycle.dispose();
 	} catch {
 	}
@@ -349,6 +360,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				camera: renderer.camera,
 				getCurrentTime: () => refs.positionRef.current / 1000,
 			});
+			const freeCamera = createDefaultFreeCameraState();
 			const homeVisual = await createHomeVisual({
 				scene: renderer.scene,
 				coverResolution: refs.coverResolution,
@@ -467,6 +479,13 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				homeVisual.update(ctx);
 			});
 			const offCamera = renderLoop.registerStep(RenderStepSlot.CameraCinematic, (ctx) => {
+				if (updateAndApplyFreeCamera(freeCamera, renderer.camera, ctx.dt, ctx.now, {
+					cameraShake: homeVisual.getFx().cinemaShake,
+					beatCam: cinema.getState().beatCam,
+					camPunch: cinema.getState().cameraPunch,
+				})) {
+					return;
+				}
 				cinema.update(ctx);
 			});
 			const shelfStep = createShelfStep(shelfManager, {
@@ -563,6 +582,17 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				onShelfPlayQueueIndex: (index) => refs.onShelfPlayQueueIndexRef?.current?.(index),
 				onShelfDetailRowClick: (payload) => refs.onShelfDetailRowClickRef?.current?.(payload),
 			});
+			const offFreeCamera = attachFreeCameraHost({
+				target: window,
+				wheelTarget: renderer.renderer.domElement,
+				state: freeCamera,
+				getCameraPose: () => createFreeCameraPoseFromPerspectiveCamera(renderer.camera),
+				getNowMs: () => performance.now(),
+				isPointerOverUi: (event) => {
+					const el = document.elementFromPoint(event.clientX, event.clientY);
+					return !!(el && el.closest?.("#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#drop-overlay"));
+				},
+			});
 			handles = {
 				renderer,
 				audioEngine,
@@ -581,6 +611,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				offHomeAudio,
 				offShelfFocus,
 				offShelfPointerInteractions,
+				offFreeCamera,
 			};
 			renderLoop.start();
 		})();
