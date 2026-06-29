@@ -55,6 +55,10 @@ import { checkForUpdate, getUpdaterStatus } from "../tauri/updater";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
 import { SearchShell } from "../components/shell/SearchShell";
 import {
+  createDesktopLyricsPushState,
+  shouldPushDesktopLyricsPayload,
+} from "../desktop-lyrics/desktop-lyrics-push";
+import {
   SidecarRecoveryNotice,
   type SidecarRecoveryNoticeState,
 } from "../components/shell/SidecarRecoveryNotice";
@@ -390,6 +394,7 @@ export function App({
   const shelfContentListRef = useRef<ShelfDetailContentListController | null>(
     null,
   );
+  const desktopLyricsPushStateRef = useRef(createDesktopLyricsPushState());
 
   const positionRef = useRef(positionMs);
   positionRef.current = positionMs;
@@ -1147,13 +1152,21 @@ export function App({
     const playback = usePlaybackStore.getState();
     const duration = playback.durationMs ?? 0;
     const text = currentDesktopLyricText();
-    await updateDesktopLyricsPayload(
-      buildDesktopLyricsPayloadPatch(
-        useVisualStore.getState().fx,
-        text,
-        duration > 0 ? playback.positionMs / duration : 0,
-      ),
+    const payload = buildDesktopLyricsPayloadPatch(
+      useVisualStore.getState().fx,
+      text,
+      duration > 0 ? playback.positionMs / duration : 0,
     );
+    if (
+      shouldPushDesktopLyricsPayload(
+        desktopLyricsPushStateRef.current,
+        payload,
+        performance.now(),
+        true,
+      )
+    ) {
+      await updateDesktopLyricsPayload(payload);
+    }
     await showDesktopLyricsWindow();
     setDesktopLyricsEnabled(true);
   }, [currentDesktopLyricText, desktopLyricsEnabled]);
@@ -1300,13 +1313,22 @@ export function App({
 
   useEffect(() => {
     if (!desktopLyricsEnabled) return;
-    void updateDesktopLyricsPayload(
-      buildDesktopLyricsPayloadPatch(
-        visualFx,
-        currentDesktopLyricText(),
-        (durationMs ?? 0) > 0 ? positionMs / (durationMs ?? 1) : 0,
-      ),
+    const payload = buildDesktopLyricsPayloadPatch(
+      visualFx,
+      currentDesktopLyricText(),
+      (durationMs ?? 0) > 0 ? positionMs / (durationMs ?? 1) : 0,
     );
+    if (
+      !shouldPushDesktopLyricsPayload(
+        desktopLyricsPushStateRef.current,
+        payload,
+        performance.now(),
+        false,
+      )
+    ) {
+      return;
+    }
+    void updateDesktopLyricsPayload(payload);
   }, [
     currentDesktopLyricText,
     desktopLyricsEnabled,
