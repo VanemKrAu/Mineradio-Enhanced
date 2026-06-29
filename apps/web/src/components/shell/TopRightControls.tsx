@@ -3,6 +3,7 @@ import { type ReactElement, type ReactNode } from "react";
 export interface TopRightControlsProps {
 	onHome?: () => void;
 	onLogin?: () => void;
+	onGuide?: () => void;
 	onHideCapsule?: () => void;
 	capsuleAutoHide?: boolean;
 	loggedIn?: boolean;
@@ -13,6 +14,7 @@ export interface TopRightControlsProps {
 export function TopRightControls({
 	onHome,
 	onLogin,
+	onGuide,
 	onHideCapsule,
 	capsuleAutoHide = false,
 	loggedIn = false,
@@ -32,6 +34,16 @@ export function TopRightControls({
 				aria-pressed={capsuleAutoHide}
 			>
 				{capsuleAutoHide ? "›" : "‹"}
+			</button>
+			<button
+				id="visual-guide-btn"
+				className="icon-btn"
+				type="button"
+				onClick={onGuide}
+				title="查看使用引导"
+				aria-label="查看使用引导"
+			>
+				?
 			</button>
 			<button
 				id="home-btn"

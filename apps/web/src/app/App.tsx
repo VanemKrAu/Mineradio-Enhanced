@@ -79,6 +79,11 @@ import {
   type SidecarRecoveryNoticeState,
 } from "../components/shell/SidecarRecoveryNotice";
 import { TopRightControls } from "../components/shell/TopRightControls";
+import {
+  VISUAL_GUIDE_SEEN_STORE_KEY,
+  VisualGuideHost,
+  type VisualGuideStep,
+} from "../components/shell/VisualGuideHost";
 import { UpdateHost } from "../components/shell/UpdateHost";
 import { EmptyHomeHost, type HomeListenRecord, type HomeListenSummary } from "../home/EmptyHomeHost";
 import { SplashHost, type SplashHostProps } from "../visual/SplashHost";
@@ -758,6 +763,7 @@ export function App({
     readBooleanPreference(USER_CAPSULE_AUTO_HIDE_STORE_KEY, false),
   );
   const [userCapsulePeek, setUserCapsulePeek] = useState(false);
+  const [visualGuideOpen, setVisualGuideOpen] = useState(false);
   const [playbackQualityReloadSeq, setPlaybackQualityReloadSeq] = useState(0);
   const [customLyricModalOpen, setCustomLyricModalOpen] = useState(false);
   const [customLyricText, setCustomLyricText] = useState("");
@@ -977,6 +983,31 @@ export function App({
     if (!next) setUserCapsulePeek(false);
     showToast(next ? "账号胶囊已自动隐藏" : "账号胶囊已固定显示");
   }, [showToast, userCapsuleAutoHide]);
+
+  const closeVisualGuide = useCallback((markSeen: boolean) => {
+    if (markSeen) saveBooleanPreference(VISUAL_GUIDE_SEEN_STORE_KEY, true);
+    setVisualGuideOpen(false);
+  }, []);
+
+  const prepareVisualGuideStep = useCallback(
+    (step: VisualGuideStep) => {
+      if (step.selector === "#search-box") {
+        setHomeSuppressed(false);
+        focusSearch();
+      }
+      if (step.selector === "#bottom-bar") revealConsole();
+      if (step.selector === "#fx-fab") {
+        const panel = typeof document === "undefined" ? null : document.getElementById("fx-panel");
+        const button = typeof document === "undefined" ? null : document.getElementById("fx-fab");
+        if (button && "click" in button && !panel?.classList.contains("show")) button.click();
+      }
+      if (step.target === "shelf") {
+        setShelfMode("side");
+        useShelfStore.getState().openShelf();
+      }
+    },
+    [focusSearch, revealConsole, setShelfMode],
+  );
 
   const patchCustomCoverTrack = useCallback((target: Track, nextTrack: Track) => {
     const key = customCoverKeyForTrack(target);
@@ -1424,9 +1455,9 @@ export function App({
   }, [currentTrack, finalizeHomeListenSession, positionMs]);
 
   const openHomeProductGuide = useCallback(() => {
-    revealConsole();
-    showToast("视觉引导已打开播放器控制台，播放后会进入粒子与歌词舞台");
-  }, [revealConsole, showToast]);
+    setHomeSuppressed(false);
+    setVisualGuideOpen(true);
+  }, []);
 
   const openHomeLibrary = useCallback(() => {
     if (homeDiscover?.loggedIn || neteaseStatus?.loggedIn || qqStatus?.loggedIn) {
@@ -2270,6 +2301,7 @@ export function App({
     document.body.classList.toggle("home-controls-locked", homeControlsLocked);
     document.body.classList.toggle("user-capsule-auto-hide", userCapsuleAutoHide);
     document.body.classList.toggle("user-capsule-peek", userCapsuleAutoHide && userCapsulePeek);
+    document.body.classList.toggle("visual-guide-active", visualGuideOpen);
     return () => {
       document.body.classList.remove(
         "splash-active",
@@ -2279,6 +2311,7 @@ export function App({
         "home-controls-locked",
         "user-capsule-auto-hide",
         "user-capsule-peek",
+        "visual-guide-active",
       );
     };
   }, [
@@ -2288,6 +2321,7 @@ export function App({
     splashActive,
     userCapsuleAutoHide,
     userCapsulePeek,
+    visualGuideOpen,
   ]);
 
   useEffect(() => {
@@ -2926,6 +2960,7 @@ export function App({
       <TopRightControls
         onHome={goHome}
         onLogin={openLoginModal}
+        onGuide={openHomeProductGuide}
         onHideCapsule={toggleUserCapsuleAutoHide}
         capsuleAutoHide={userCapsuleAutoHide}
         loggedIn={!!neteaseStatus?.loggedIn || !!qqStatus?.loggedIn}
@@ -2947,6 +2982,11 @@ export function App({
             />
           </div>
         }
+      />
+      <VisualGuideHost
+        open={visualGuideOpen}
+        onClose={closeVisualGuide}
+        onPrepareStep={prepareVisualGuideStep}
       />
       <BottomControlsHost
         visible={consoleVisible}

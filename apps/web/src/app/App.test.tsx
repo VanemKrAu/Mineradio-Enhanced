@@ -88,6 +88,8 @@ test("App keeps the empty-home music page mounted behind the splash gate", () =>
 	expect(html).toContain('id="empty-home"');
 	expect(html).toContain('id="search-area"');
 	expect(html).toContain('id="top-right"');
+	expect(html).toContain('id="visual-guide-btn"');
+	expect(html).toContain('id="visual-guide"');
 	expect(html).toContain('id="fx-fab"');
 	expect(html).toContain('id="fx-panel"');
 	expect(html).toContain('id="bottom-handle"');
@@ -1435,7 +1437,7 @@ test("App plays centered shelf playlist hotspots by loading the playlist into th
 	}
 });
 
-test("App routes the logged-out Home library card to the product guide instead of login", async () => {
+test("App routes the logged-out Home library card to the baseline visual guide instead of login", async () => {
 	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
 	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
 	localStorage.clear();
@@ -1472,8 +1474,25 @@ test("App routes the logged-out Home library card to the product guide instead o
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(host.querySelector("#login-modal")).toBeNull();
+		expect(host.querySelector("#visual-guide")?.classList.contains("show")).toBe(true);
+		expect(document.body.classList.contains("visual-guide-active")).toBe(true);
+		expect(host.querySelector("#visual-guide-title")?.textContent).toBe("Mineradio 是用来听歌的视觉播放器");
+		expect(host.querySelector("#visual-guide-progress")?.textContent).toBe("1 / 6");
+
+		(host.querySelector("#visual-guide-next") as HTMLButtonElement).click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(host.querySelector("#visual-guide-progress")?.textContent).toBe("2 / 6");
+
+		(host.querySelector("#visual-guide-next") as HTMLButtonElement).click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(host.querySelector("#bottom-bar")?.classList.contains("visible")).toBe(true);
-		expect(host.querySelector("#toast.show")?.textContent).toContain("视觉引导");
+
+		for (let i = 0; i < 4; i += 1) {
+			(host.querySelector("#visual-guide-next") as HTMLButtonElement).click();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+		expect(localStorage.getItem("mineradio-visual-guide-seen-v2")).toBe("1");
+		expect(host.querySelector("#visual-guide")?.classList.contains("show")).toBe(false);
 	} finally {
 		root.unmount();
 		host.remove();
