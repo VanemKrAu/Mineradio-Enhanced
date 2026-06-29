@@ -172,6 +172,17 @@ test("VisualControlPanelHost mirrors baseline fx fab auto-hide preference and pe
     clientX: window.innerWidth - 20,
     clientY: window.innerHeight - 20,
   });
+  for (let i = 0; i < 5; i += 1) {
+    window.dispatchEvent(pointerMove);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  expect(document.body.classList.contains("fx-fab-peek")).toBe(false);
+
+  window.dispatchEvent(new window.MouseEvent("mousemove", {
+    clientX: window.innerWidth - 220,
+    clientY: window.innerHeight - 220,
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
   for (let i = 0; i < 5 && !document.body.classList.contains("fx-fab-peek"); i += 1) {
     window.dispatchEvent(pointerMove);
     await new Promise((resolve) => setTimeout(resolve, 0));

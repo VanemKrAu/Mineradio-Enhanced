@@ -459,6 +459,8 @@ export function VisualControlPanelHost(
   const [open, setOpen] = useState(false);
   const [autoHide, setAutoHide] = useState(readFxFabAutoHidePreference);
   const [peek, setPeek] = useState(false);
+  const revealArmedRef = useRef(true);
+  const previousAutoHideRef = useRef(autoHide);
   const preset = Math.max(0, Math.min(6, Math.round(props.preset ?? 0)));
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -471,21 +473,29 @@ export function VisualControlPanelHost(
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!autoHide) {
+      revealArmedRef.current = true;
+      previousAutoHideRef.current = false;
       setPeek(false);
       return;
     }
+    if (!previousAutoHideRef.current) revealArmedRef.current = false;
+    previousAutoHideRef.current = true;
     const updateFromPointer = (event: MouseEvent) => {
       const nearBottomRight = event.clientX > window.innerWidth - 126 && event.clientY > window.innerHeight - 158;
-      setPeek(nearBottomRight);
+      if (!nearBottomRight) revealArmedRef.current = true;
+      setPeek(open || (nearBottomRight && revealArmedRef.current));
     };
-    const clearPeek = () => setPeek(false);
+    const clearPeek = () => {
+      revealArmedRef.current = true;
+      setPeek(false);
+    };
     window.addEventListener("mousemove", updateFromPointer);
     window.addEventListener("mouseleave", clearPeek);
     return () => {
       window.removeEventListener("mousemove", updateFromPointer);
       window.removeEventListener("mouseleave", clearPeek);
     };
-  }, [autoHide]);
+  }, [autoHide, open]);
   const changePreset = useCallback(
     (next: number) => {
       props.onPresetChange?.(next);
@@ -533,6 +543,7 @@ export function VisualControlPanelHost(
   const toggleAutoHide = useCallback(() => {
     const next = !autoHide;
     saveFxFabAutoHidePreference(next);
+    revealArmedRef.current = !next;
     setAutoHide(next);
     setPeek(false);
     props.onNotice?.(next ? "视觉控制台按钮已自动隐藏" : "视觉控制台按钮已固定显示");
