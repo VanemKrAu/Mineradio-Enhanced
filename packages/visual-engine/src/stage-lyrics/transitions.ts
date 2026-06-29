@@ -90,12 +90,12 @@ export function playStageLineInTimeline(
 ): GsapTimelineLike | null {
 	const easings = opts.easings ?? defaultTransitionEasings();
 	const rest = restOf(group);
-	const inX = opts.inX ?? -60;
-	const inY = opts.inY ?? 40;
-	const inZ = opts.inZ ?? -160;
-	const inRotX = degToRad(opts.inRotXdeg ?? 28);
-	const inRotY = degToRad(opts.inRotYdeg ?? -22);
-	const inScale = opts.inScale ?? 0.7;
+	const inX = opts.inX ?? -0.04;
+	const inY = opts.inY ?? 0.08;
+	const inZ = opts.inZ ?? -0.08;
+	const inRotX = degToRad(opts.inRotXdeg ?? 2);
+	const inRotY = degToRad(opts.inRotYdeg ?? -2);
+	const inScale = opts.inScale ?? 0.96;
 	const inDur = LYRIC_TRANSITION_DURATIONS.LYR_IN_MS / 1000;
 	const opacityDur = inDur * LYRIC_TRANSITION_DURATIONS.LYR_IN_OPACITY_REACH_FRACTION;
 	const tl = gsap.timeline({
@@ -141,14 +141,14 @@ export function playStageLineBobTimeline(
 	const posTarget = group.position as unknown as Vec3Like;
 	const rotTarget = group.rotation as unknown as Vec3Like;
 	const scaleTarget = group.scale as unknown as Vec3Like;
-	tl.to(posTarget, { x: rest.x + 6, y: rest.y - 7, z: rest.z + 12, duration: phaseDur, ease: easings.bobEase }, startOffset);
-	tl.to(rotTarget, { x: degToRad(2), y: degToRad(-1.5), duration: phaseDur, ease: easings.bobEase }, startOffset);
+	tl.to(posTarget, { x: rest.x + 0.035, y: rest.y - 0.045, z: rest.z + 0.060, duration: phaseDur, ease: easings.bobEase }, startOffset);
+	tl.to(rotTarget, { x: degToRad(1.1), y: degToRad(-0.8), duration: phaseDur, ease: easings.bobEase }, startOffset);
 	tl.to(scaleTarget, { x: 1.01, y: 1.01, z: 1.01, duration: phaseDur, ease: easings.bobEase }, startOffset);
-	tl.to(posTarget, { x: rest.x, y: rest.y + 3, z: rest.z, duration: phaseDur, ease: easings.bobEase }, startOffset + phaseDur);
-	tl.to(rotTarget, { x: degToRad(-1.5), y: 0, duration: phaseDur, ease: easings.bobEase }, startOffset + phaseDur);
+	tl.to(posTarget, { x: rest.x, y: rest.y + 0.030, z: rest.z, duration: phaseDur, ease: easings.bobEase }, startOffset + phaseDur);
+	tl.to(rotTarget, { x: degToRad(-0.9), y: 0, duration: phaseDur, ease: easings.bobEase }, startOffset + phaseDur);
 	tl.to(scaleTarget, { x: 0.99, y: 0.99, z: 0.99, duration: phaseDur, ease: easings.bobEase }, startOffset + phaseDur);
-	tl.to(posTarget, { x: rest.x - 6, y: rest.y - 4, z: rest.z + 8, duration: phaseDur, ease: easings.bobEase }, startOffset + 2 * phaseDur);
-	tl.to(rotTarget, { x: degToRad(1.2), y: degToRad(1.5), duration: phaseDur, ease: easings.bobEase }, startOffset + 2 * phaseDur);
+	tl.to(posTarget, { x: rest.x - 0.040, y: rest.y - 0.030, z: rest.z + 0.050, duration: phaseDur, ease: easings.bobEase }, startOffset + 2 * phaseDur);
+	tl.to(rotTarget, { x: degToRad(0.7), y: degToRad(0.8), duration: phaseDur, ease: easings.bobEase }, startOffset + 2 * phaseDur);
 	tl.to(scaleTarget, { x: 1.005, y: 1.005, z: 1.005, duration: phaseDur, ease: easings.bobEase }, startOffset + 2 * phaseDur);
 	tl.to(posTarget, { x: rest.x, y: rest.y, z: rest.z, duration: phaseDur, ease: easings.bobEase }, startOffset + 3 * phaseDur);
 	tl.to(rotTarget, { x: 0, y: 0, duration: phaseDur, ease: easings.bobEase }, startOffset + 3 * phaseDur);
@@ -163,12 +163,12 @@ export function playStageLineOutTimeline(
 ): GsapTimelineLike | null {
 	const easings = opts.easings ?? defaultTransitionEasings();
 	const rest = restOf(group);
-	const outX = opts.outX ?? 60;
-	const outY = opts.outY ?? -40;
-	const outZ = opts.outZ ?? -120;
-	const outRotX = degToRad(opts.outRotXdeg ?? -22);
-	const outRotY = degToRad(opts.outRotYdeg ?? 18);
-	const outScale = opts.outScale ?? 0.78;
+	const outX = opts.outX ?? 0.04;
+	const outY = opts.outY ?? -0.08;
+	const outZ = opts.outZ ?? -0.10;
+	const outRotX = degToRad(opts.outRotXdeg ?? -2);
+	const outRotY = degToRad(opts.outRotYdeg ?? 2);
+	const outScale = opts.outScale ?? 0.98;
 	const outDur = LYRIC_TRANSITION_DURATIONS.LYR_OUT_MS / 1000;
 	const tl = gsap.timeline({
 		defaults: { ease: easings.outEase },

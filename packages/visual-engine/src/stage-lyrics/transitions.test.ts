@@ -122,24 +122,24 @@ test("playStageLineInTimeline uses 900ms duration + target transforms from rest 
 	expect(toVars.value).toBe(1);
 });
 
-test("playStageLineInTimeline initial-from transforms encode (-60/+40/-160)=(28deg,-22deg) scale 0.7", () => {
+test("playStageLineInTimeline default from transforms stay in Three world units instead of legacy pixels", () => {
 	const rec: RecordedCall[] = [];
 	const gsap = makeFakeGsap(rec);
 	const { group, position, rotation, scale } = makeFakeGroup();
 	playStageLineInTimeline(gsap, group as never, {});
 	const fromTos = rec.filter((c) => c.method === "tl.fromTo");
 	const posFromTo = fromTos.find((c) => c.args[0] === position)!.args[1] as Record<string, unknown>;
-	expect(posFromTo.x).toBeCloseTo(0.1 - 60, 4);
-	expect(posFromTo.y).toBeCloseTo(0.2 + 40, 4);
-	expect(posFromTo.z).toBeCloseTo(1.46 - 160, 3);
+	expect(Math.abs((posFromTo.x as number) - 0.1)).toBeLessThanOrEqual(0.12);
+	expect(Math.abs((posFromTo.y as number) - 0.2)).toBeLessThanOrEqual(0.12);
+	expect(Math.abs((posFromTo.z as number) - 1.46)).toBeLessThanOrEqual(0.12);
 	const rotFromTo = fromTos.find((c) => c.args[0] === rotation)!.args[1] as Record<string, unknown>;
-	expect(rotFromTo.x).toBeCloseTo((28 * Math.PI) / 180, 4);
-	expect(rotFromTo.y).toBeCloseTo((-22 * Math.PI) / 180, 4);
+	expect(Math.abs(rotFromTo.x as number)).toBeLessThanOrEqual((3 * Math.PI) / 180);
+	expect(Math.abs(rotFromTo.y as number)).toBeLessThanOrEqual((3 * Math.PI) / 180);
 	const scaleFromTo = fromTos.find((c) => c.args[0] === scale)!.args[1] as Record<string, unknown>;
-	expect(scaleFromTo.x).toBeCloseTo(0.7, 4);
+	expect(scaleFromTo.x).toBeCloseTo(0.96, 4);
 });
 
-test("playStageLineBobTimeline uses 5600ms / 4 phase durations of 1.4s each + 0.9s start offset", () => {
+test("playStageLineBobTimeline uses 5600ms timing but only subtle Three-world drift", () => {
 	const rec: RecordedCall[] = [];
 	const gsap = makeFakeGsap(rec);
 	const { group, position } = makeFakeGroup();
@@ -150,13 +150,19 @@ test("playStageLineBobTimeline uses 5600ms / 4 phase durations of 1.4s each + 0.
 	expect(phaseDur).toBeCloseTo(1400, 4);
 	expect(tos[0].args[2]).toBeCloseTo(0.9, 4);
 	expect(tos[2].args[2]).toBeCloseTo(0.9 + 2.8 + 0.0001, 2);
+	for (const call of tos) {
+		const vars = call.args[1] as Record<string, unknown>;
+		if (typeof vars.x === "number") expect(Math.abs(vars.x - 0.1)).toBeLessThanOrEqual(0.08);
+		if (typeof vars.y === "number") expect(Math.abs(vars.y - 0.2)).toBeLessThanOrEqual(0.08);
+		if (typeof vars.z === "number") expect(Math.abs(vars.z - 1.46)).toBeLessThanOrEqual(0.08);
+	}
 });
 
 function todos_longer_than(tos: RecordedCall[], n: number): boolean {
 	return tos.length === n;
 }
 
-test("playStageLineOutTimeline uses 700ms duration + target transforms (60/-40/-120, -22deg/18deg, 0.78)", () => {
+test("playStageLineOutTimeline uses 700ms duration with subtle baseline-compatible drift", () => {
 	const rec: RecordedCall[] = [];
 	const gsap = makeFakeGsap(rec);
 	const { group, position, rotation, scale } = makeFakeGroup();
@@ -167,15 +173,15 @@ test("playStageLineOutTimeline uses 700ms duration + target transforms (60/-40/-
 	const scaleTo = tos.find((c) => c.args[0] === scale);
 	expect(posTo).not.toBeUndefined();
 	expect(((posTo!.args[1] as Record<string, unknown>).duration as number) * 1000).toBe(700);
-	expect((posTo!.args[1] as Record<string, unknown>).x).toBeCloseTo(0.1 + 60, 5);
-	expect((posTo!.args[1] as Record<string, unknown>).y).toBeCloseTo(0.2 - 40, 5);
-	expect((posTo!.args[1] as Record<string, unknown>).z).toBeCloseTo(1.46 - 120, 4);
+	expect(Math.abs(((posTo!.args[1] as Record<string, unknown>).x as number) - 0.1)).toBeLessThanOrEqual(0.12);
+	expect(Math.abs(((posTo!.args[1] as Record<string, unknown>).y as number) - 0.2)).toBeLessThanOrEqual(0.12);
+	expect(Math.abs(((posTo!.args[1] as Record<string, unknown>).z as number) - 1.46)).toBeLessThanOrEqual(0.12);
 	expect(rotTo).not.toBeUndefined();
 	expect(((rotTo!.args[1] as Record<string, unknown>).duration as number) * 1000).toBe(700);
-	expect((rotTo!.args[1] as Record<string, unknown>).x).toBeCloseTo((-22 * Math.PI) / 180, 5);
-	expect((rotTo!.args[1] as Record<string, unknown>).y).toBeCloseTo((18 * Math.PI) / 180, 5);
+	expect(Math.abs((rotTo!.args[1] as Record<string, unknown>).x as number)).toBeLessThanOrEqual((3 * Math.PI) / 180);
+	expect(Math.abs((rotTo!.args[1] as Record<string, unknown>).y as number)).toBeLessThanOrEqual((3 * Math.PI) / 180);
 	expect(scaleTo).not.toBeUndefined();
-	expect((scaleTo!.args[1] as Record<string, unknown>).x).toBeCloseTo(0.78, 5);
+	expect((scaleTo!.args[1] as Record<string, unknown>).x).toBeCloseTo(0.98, 5);
 });
 
 test("playStageLineBobTimeline returns null when reduceMotion enabled", () => {

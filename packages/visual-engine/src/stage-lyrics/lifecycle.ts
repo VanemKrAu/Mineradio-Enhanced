@@ -1,5 +1,5 @@
 import type * as THREE from "three";
-import type { ThreeFactory } from "../runtime/renderer-setup";
+import type { ThreeFactory, ThreeModule } from "../runtime/renderer-setup";
 import type { FrameContext } from "../runtime/frame-context";
 import type { AudioSnapshot } from "../audio/audio-snapshot";
 import { RenderStepSlot } from "../runtime/render-step-slot";
@@ -16,6 +16,8 @@ import {
 } from "./lyric-builder";
 import type { LyricPalette } from "./palette";
 import { DEFAULT_LYRIC_PALETTE, resolveLyricPalette } from "./palette";
+import { lyricThreeColor } from "./color-utils";
+import { makeDotTexture } from "./lyric-dot-texture";
 import { LyricPaletteRuntime } from "./palette-runtime";
 import { createLyricPaletteDriver, type PaletteDriver } from "./palette-driver";
 import {
@@ -233,10 +235,14 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		beatGlow: 0,
 		beatPulse: 0,
 		bass: 0,
+		mid: 0,
 		glowFollowX: 0,
 		glowFollowY: 0,
 		glowFollowRoll: 0,
 		starRiver: null as THREE.Object3D | null,
+		starRiverWidth: 4.2,
+		starRiverHeight: 0.58,
+		three: null as ThreeModule | null,
 		shelfVisibility: 0,
 		lines: [] as LyricLine[],
 		gsap: null as GsapLike | null,
@@ -624,10 +630,10 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		setGroupQuaternion(group, targetQuat, layout.lyricTiltX, layout.lyricTiltY);
 	}
 
-	function getShelfProfile() {
+	function getShelfProfile(preset?: number) {
 		const sv = getShelfVisibility();
-		const shelfDetailOpen = sv > 0.5;
-		const skullShelfDetailOpen = shelfDetailOpen && getSkullShelfOpen();
+		const shelfDetailOpen = getShelfHasOpenContent();
+		const skullShelfDetailOpen = shelfDetailOpen && ((preset ?? getLyricLayoutOptions().preset) === 6 || getSkullShelfOpen());
 		const profile = shelfDetailOpen
 			? {
 					opacity: skullShelfDetailOpen ? 0.30 : 0.38,
@@ -646,6 +652,161 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 					easeDown: 0.16,
 				};
 		return { sv, shelfDetailOpen, skullShelfDetailOpen, profile };
+	}
+
+	function colorValue(THREE: ThreeModule, css: string | undefined, fallback: string, minLum: number) {
+		const rgb = lyricThreeColor(css, fallback, minLum);
+		try {
+			return new THREE.Color(rgb.r, rgb.g, rgb.b);
+		} catch {
+			return rgb;
+		}
+	}
+
+	function copyColor(target: unknown, value: unknown): void {
+		const t = target as { copy?: (v: unknown) => unknown; r?: number; g?: number; b?: number } | null | undefined;
+		const v = value as { r?: number; g?: number; b?: number } | null | undefined;
+		if (!t || !v) return;
+		if (typeof t.copy === "function") {
+			t.copy(value);
+			return;
+		}
+		if (typeof v.r === "number") t.r = v.r;
+		if (typeof v.g === "number") t.g = v.g;
+		if (typeof v.b === "number") t.b = v.b;
+	}
+
+	function ensureLyricStarRiver(): THREE.Object3D | null {
+		if (!state.group) return null;
+		if (state.starRiver) return state.starRiver;
+		const THREE = state.three;
+		if (!THREE) return null;
+		const count = 420;
+		const geo = new THREE.BufferGeometry();
+		const seeds = new Float32Array(count);
+		const lanes = new Float32Array(count);
+		const depths = new Float32Array(count);
+		const rand = opts.rand ?? Math.random;
+		for (let i = 0; i < count; i++) {
+			seeds[i] = rand() * 1000;
+			lanes[i] = rand();
+			depths[i] = rand();
+		}
+		geo.setAttribute("seed", new THREE.BufferAttribute(seeds, 1));
+		geo.setAttribute("lane", new THREE.BufferAttribute(lanes, 1));
+		geo.setAttribute("depthSeed", new THREE.BufferAttribute(depths, 1));
+		const pal = state.paletteRuntime.get();
+		const mat = new THREE.ShaderMaterial({
+			uniforms: {
+				uMap: { value: opts.dotTexture ?? makeDotTexture(THREE) },
+				uTime: { value: 0 },
+				uPixel: { value: opts.pixelScale ?? 1 },
+				uBass: { value: 0 },
+				uBeat: { value: 0 },
+				uWidth: { value: state.starRiverWidth || 4.2 },
+				uHeight: { value: state.starRiverHeight || 0.58 },
+				uOpacity: { value: 0 },
+				uColorA: { value: colorValue(THREE, pal.secondary || pal.primary, "#9cffdf", 0.42) },
+				uColorB: { value: colorValue(THREE, pal.highlight || pal.primary, "#fff7d2", 0.44) },
+			},
+			vertexShader: [
+				"precision highp float;",
+				"attribute float seed,lane,depthSeed;",
+				"uniform float uTime,uPixel,uBass,uBeat,uWidth,uHeight;",
+				"varying float vSeed,vLane,vGlow;",
+				"float hash(float n){return fract(sin(n)*43758.5453123);}",
+				"void main(){",
+				"  float laneBand = floor(lane * 5.0);",
+				"  float laneLocal = fract(lane * 5.0);",
+				"  float speed = 0.030 + hash(seed * 1.71) * 0.055 + laneBand * 0.005;",
+				"  float flow = fract(hash(seed * 2.13) + uTime * speed);",
+				"  float x = (flow - 0.5) * uWidth * (1.08 + hash(seed * 5.1) * 0.18);",
+				"  float curve = sin(flow * 6.2831853 * (0.92 + hash(seed * 4.0) * 0.46) + seed * 0.071 + uTime * 0.34);",
+				"  float breath = sin(uTime * (0.42 + hash(seed * 6.9) * 0.42) + seed * 0.093);",
+				"  float y = (laneBand - 2.0) * uHeight * 0.135 + curve * uHeight * (0.20 + hash(seed * 9.0) * 0.18) + (laneLocal - 0.5) * uHeight * 0.16 + breath * uHeight * 0.10;",
+				"  float z = -0.08 + (depthSeed - 0.5) * 0.44 + sin(uTime * (0.18 + hash(seed) * 0.24) + seed) * 0.08;",
+				"  vec3 pos = vec3(x, y, z);",
+				"  float edge = smoothstep(0.0, 0.18, flow) * (1.0 - smoothstep(0.82, 1.0, flow));",
+				"  vSeed = seed;",
+				"  vLane = lane;",
+				"  vGlow = edge * (0.62 + 0.38 * sin(uTime * (0.9 + hash(seed * 8.0) * 0.7) + seed));",
+				"  vec4 mv = modelViewMatrix * vec4(pos, 1.0);",
+				"  float dist = max(0.45, -mv.z);",
+				"  float size = (0.030 + hash(seed * 12.0) * 0.040 + vGlow * 0.024 + uBeat * 0.010) * (1.0 + uBass * 0.18);",
+				"  gl_PointSize = clamp(size * uPixel * 120.0 / dist, 1.0, 7.2);",
+				"  gl_Position = projectionMatrix * mv;",
+				"}",
+			].join("\n"),
+			fragmentShader: [
+				"precision highp float;",
+				"uniform sampler2D uMap;",
+				"uniform vec3 uColorA,uColorB;",
+				"uniform float uOpacity,uTime,uBeat;",
+				"varying float vSeed,vLane,vGlow;",
+				"void main(){",
+				"  vec4 tex = texture2D(uMap, gl_PointCoord);",
+				"  if(tex.a < 0.02) discard;",
+				"  float tw = pow(0.5 + 0.5 * sin(uTime * (0.55 + fract(vSeed) * 0.35) + vSeed), 4.0);",
+				"  vec3 col = mix(uColorA, uColorB, smoothstep(0.12, 0.92, vLane) * 0.45 + tw * 0.42 + vGlow * 0.26);",
+				"  float alpha = tex.a * uOpacity * (0.20 + vGlow * 0.78 + tw * 0.32 + uBeat * 0.10);",
+				"  gl_FragColor = vec4(col * (0.82 + vGlow * 0.72 + tw * 0.32), alpha);",
+				"}",
+			].join("\n"),
+			transparent: true,
+			depthWrite: false,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		} as THREE.ShaderMaterialParameters) as THREE.ShaderMaterial;
+		const points = new THREE.Points(geo, mat);
+		(points as unknown as { renderOrder: number; frustumCulled: boolean }).renderOrder = 45;
+		(points as unknown as { renderOrder: number; frustumCulled: boolean }).frustumCulled = false;
+		setGroupPosition(points as unknown as { position?: { set?: (x: number, y: number, z: number) => void; x: number; y: number; z: number } }, 0, 0.20, 1.53);
+		(state.group as unknown as { add: (c: unknown) => void }).add(points);
+		state.starRiver = points;
+		return points;
+	}
+
+	function updateLyricStarRiver(dt: number, t: number, skullPreset: boolean): void {
+		const river = ensureLyricStarRiver() as unknown as {
+			visible?: boolean;
+			position?: { y: number; z: number };
+			rotation?: { z: number };
+			material?: { uniforms?: Record<string, { value: unknown }> };
+		} | null;
+		if (!river?.material?.uniforms) return;
+		const u = river.material.uniforms;
+		if (skullPreset) {
+			river.visible = false;
+			if (u.uOpacity) u.uOpacity.value = 0;
+			return;
+		}
+		const data = (state.current?.group as unknown as { userData?: { lyric?: { textWorldW?: number; worldW?: number; textWorldH?: number; worldH?: number } } } | null)?.userData?.lyric ?? null;
+		const targetW = data ? clamp((data.textWorldW || data.worldW || 4.2) * 1.12 + 0.80, 2.25, 7.20) : 3.4;
+		const targetH = data ? clamp((data.textWorldH || data.worldH || 0.58) * 1.85 + 0.18, 0.52, 1.35) : 0.58;
+		state.starRiverWidth += (targetW - state.starRiverWidth) * Math.min(1, dt * 5.2);
+		state.starRiverHeight += (targetH - state.starRiverHeight) * Math.min(1, dt * 4.6);
+		if (u.uWidth) u.uWidth.value = state.starRiverWidth;
+		if (u.uHeight) u.uHeight.value = state.starRiverHeight;
+		if (u.uTime) u.uTime.value = t;
+		if (u.uBass) u.uBass.value = state.bass;
+		if (u.uBeat) u.uBeat.value = state.beatGlow;
+		const lyricGlowStrength = opts.lyricGlowStrengthSupplier ? Math.min(0.85, Math.max(0, opts.lyricGlowStrengthSupplier())) : 0;
+		const targetOpacity = state.current && opts.lyricGlowParticlesSupplier?.()
+			? clamp(0.22 + lyricGlowStrength * 0.58 + state.highBloom * 0.16 + state.beatGlow * 0.12, 0.16, 0.86)
+			: 0;
+		const opacity = Number(u.uOpacity?.value ?? 0);
+		if (u.uOpacity) u.uOpacity.value = opacity + (targetOpacity - opacity) * (targetOpacity > opacity ? 0.10 : 0.055);
+		const pal = state.paletteRuntime.get();
+		if (state.three) {
+			copyColor(u.uColorA?.value, colorValue(state.three, pal.secondary || pal.primary, "#9cffdf", 0.42));
+			copyColor(u.uColorB?.value, colorValue(state.three, pal.highlight || pal.primary, "#fff7d2", 0.46));
+		}
+		river.visible = Number(u.uOpacity?.value ?? 0) > 0.01 || !!state.current;
+		if (river.position) {
+			river.position.y += ((0.18 + Math.sin(t * 0.44) * 0.035 + Math.sin(t * 0.91 + 1.7) * 0.018) - river.position.y) * 0.08;
+			river.position.z += ((1.54 + Math.cos(t * 0.31) * 0.060) - river.position.z) * 0.08;
+		}
+		if (river.rotation) river.rotation.z = Math.sin(t * 0.22) * 0.012;
 	}
 
 	function uniforms<TLyric extends LyricGroup>(lyric: TLyric, key: string): SizeOfMaterial | null {
@@ -693,6 +854,31 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		}
 	}
 
+	function disposeStarRiver(): void {
+		const river = state.starRiver as unknown as {
+			parent?: { remove?: (c: unknown) => void };
+			geometry?: { dispose?: () => void };
+			material?: { dispose?: () => void; uniforms?: Record<string, { value?: { dispose?: () => void } }> };
+		} | null;
+		if (!river) return;
+		try {
+			river.parent?.remove?.(river);
+		} catch {
+			void 0;
+		}
+		try {
+			river.geometry?.dispose?.();
+		} catch {
+			void 0;
+		}
+		try {
+			river.material?.dispose?.();
+		} catch {
+			void 0;
+		}
+		state.starRiver = null;
+	}
+
 	function clearStageLyrics(): void {
 		disposeCurrent();
 		state.currentIdx = -1;
@@ -715,6 +901,45 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			}
 			disposeLyricGroupSafe(entry.lyric);
 		}
+	}
+
+	function setScalar(target: unknown, scale: number): void {
+		const s = target as { setScalar?: (v: number) => void; set?: (x: number, y: number, z: number) => void; x?: number; y?: number; z?: number } | null | undefined;
+		if (!s) return;
+		if (typeof s.setScalar === "function") {
+			s.setScalar(scale);
+			return;
+		}
+		if (typeof s.set === "function") {
+			s.set(scale, scale, scale);
+			return;
+		}
+		s.x = scale;
+		s.y = scale;
+		s.z = scale;
+	}
+
+	function setVector3(target: unknown, x: number, y: number, z: number): void {
+		const p = target as { set?: (x: number, y: number, z: number) => void; x?: number; y?: number; z?: number } | null | undefined;
+		if (!p) return;
+		if (typeof p.set === "function") {
+			p.set(x, y, z);
+			return;
+		}
+		p.x = x;
+		p.y = y;
+		p.z = z;
+	}
+
+	function getUniformValue(mat: unknown, key: string, fallback: number): number {
+		const u = (mat as { uniforms?: Record<string, { value?: unknown }> } | null | undefined)?.uniforms?.[key];
+		const v = Number(u?.value);
+		return Number.isFinite(v) ? v : fallback;
+	}
+
+	function setUniformValue(mat: unknown, key: string, value: number): void {
+		const u = (mat as { uniforms?: Record<string, { value?: unknown }> } | null | undefined)?.uniforms?.[key];
+		if (u) u.value = value;
 	}
 
 	function showStageLine(text: string, redrawOnly: boolean): void {
@@ -911,21 +1136,49 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		if (!mesh) return;
 		const userData = (mesh.group as unknown as { userData: Record<string, unknown> }).userData;
 		userData.age = finiteOr((userData.age as number) ?? 0, 0) + dt;
+		const a = (() => {
+			const raw = Math.min(1, Number(userData.age || 0) / 0.52);
+			return raw * raw * (3 - 2 * raw);
+		})();
 		const uOpacity = uniforms(mesh, "uOpacity");
 		const uSolar = uniforms(mesh, "uSolar");
 		const readabilityMat = mesh.readabilityMat as { opacity: number };
 		const glowMat = mesh.glowMat as { opacity: number };
 		const sunMat = mesh.sunMat as { opacity: number };
+		const data = userData.lyric as {
+			glow?: { position?: unknown; rotation?: { z: number } };
+			sun?: { position?: unknown; rotation?: { z: number }; scale?: unknown };
+			sparks?: { visible?: boolean; position?: unknown; rotation?: { x: number; z: number }; geometry?: { attributes?: { position?: { array: Float32Array; needsUpdate: boolean } } } };
+			basePositions?: Float32Array;
+			sparkMat?: unknown;
+		} | undefined;
 		const lyricGlowStrength = opts.lyricGlowStrengthSupplier ? Math.min(0.85, Math.max(0, opts.lyricGlowStrengthSupplier())) : 0;
+		const lyricGlowParticles = opts.lyricGlowParticlesSupplier ? !!opts.lyricGlowParticlesSupplier() : false;
+		const glowBeatFlag = opts.lyricGlowBeatFlagSupplier ? !!opts.lyricGlowBeatFlagSupplier() : false;
+		const layout = getLyricLayoutOptions();
+		const skullMouthLyrics = !!layout.skullMouthLyrics;
 		const glowDrive = Math.min(1.7, Math.max(0, lyricGlowStrength / 0.5));
+		const glowX = state.glowFollowX;
+		const glowY = state.glowFollowY;
+		const glowRoll = state.glowFollowRoll;
+		if (data?.glow) {
+			setVector3(data.glow.position, glowX * 0.14, glowY * 0.12, -0.006);
+			if (data.glow.rotation) data.glow.rotation.z = glowRoll * 0.30;
+		}
+		if (data?.sun) {
+			setVector3(data.sun.position, glowX * 0.42, 0.02 + glowY * 0.34, -0.035);
+			if (data.sun.rotation) data.sun.rotation.z = glowRoll * 0.36;
+		}
+		if (data?.sparks) {
+			setVector3(data.sparks.position, glowX * 0.24, glowY * 0.22, 0.010);
+			if (data.sparks.rotation) data.sparks.rotation.z = glowRoll * 0.22;
+		}
 		const currentOpacity = uOpacity ? uOpacity.value : 0;
 		const opacityTarget = shelf.profile.opacity;
 		const opacityEase =
 			shelf.shelfDetailOpen && currentOpacity > opacityTarget ? shelf.profile.easeDown : 0.16;
 		const newOpacity = clamp(goLerp(currentOpacity, opacityTarget, opacityEase), 0, 1);
 		if (uOpacity) (uOpacity as SizeOfMaterial).value = newOpacity;
-		void t;
-		void snapshot;
 		if (readabilityMat) {
 			const readabilityTarget = newOpacity * shelf.profile.readability;
 			const reassEase =
@@ -939,18 +1192,88 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			(uSolar as SizeOfMaterial).value += (solarTarget - (uSolar as SizeOfMaterial).value) * solarEase;
 		}
 		if (glowMat) {
-			const glowTarget = lyricGlowStrength > 0 ? Math.min(shelf.profile.glowCap, (0.075 + state.highBloom * 0.34 + state.beatGlow * 0.16 * shelf.profile.bloom) * Math.min(3.0, glowDrive)) : 0;
+			const solar = state.highBloom * shelf.profile.bloom;
+			const glowTarget = lyricGlowStrength > 0 ? Math.min(shelf.profile.glowCap, (0.075 + solar * 0.34 + state.beatGlow * 0.16 * shelf.profile.bloom) * Math.min(3.0, glowDrive)) : 0;
 			glowMat.opacity += (glowTarget - glowMat.opacity) * (glowTarget > glowMat.opacity ? 0.095 : (shelf.shelfDetailOpen ? 0.20 : 0.055));
+		}
+		const solar = state.highBloom * shelf.profile.bloom;
+		if (data?.sparkMat) {
+			const sparkTarget = lyricGlowStrength > 0 && lyricGlowParticles && !shelf.shelfDetailOpen ? Math.min(0.42, (0.10 + solar * 0.14 + state.beatGlow * 0.10) * Math.min(1.6, glowDrive)) : 0;
+			const sparkOpacity = getUniformValue(data.sparkMat, "uOpacity", 0);
+			setUniformValue(data.sparkMat, "uOpacity", sparkOpacity + (sparkTarget - sparkOpacity) * (sparkTarget > sparkOpacity ? 0.13 : (shelf.shelfDetailOpen ? 0.22 : 0.075)));
+			const sparkSizeTarget = lyricGlowParticles && !shelf.shelfDetailOpen ? (0.050 + solar * 0.016 + state.beatGlow * 0.026 + state.bass * 0.008) : 0.035;
+			const sparkSize = getUniformValue(data.sparkMat, "uSize", 0.052);
+			setUniformValue(data.sparkMat, "uSize", sparkSize + (sparkSizeTarget - sparkSize) * 0.12);
 		}
 		if (sunMat) {
 			const sunTarget = lyricGlowStrength > 0 && !shelf.shelfDetailOpen ? Math.min(0.88, (Math.pow(Math.min(1.35, state.highBloom), 1.08) * 0.28 + state.beatGlow * 0.20) * Math.min(2.4, glowDrive)) : 0;
 			sunMat.opacity += (sunTarget - sunMat.opacity) * (shelf.shelfDetailOpen ? 0.18 : 0.055);
 		}
+		const seed = Number(userData.floatSeed || 0);
+		if (data?.sun) {
+			const sunPulse = solar;
+			const beatScale = glowBeatFlag ? state.beatGlow * 0.24 : 0;
+			const sx = 0.82 + sunPulse * 0.36 + beatScale + Math.sin(t * 1.6) * sunPulse * 0.018;
+			const sy = 0.60 + sunPulse * 0.34 + beatScale * 0.72 + Math.cos(t * 1.25) * sunPulse * 0.020;
+			const s = data.sun.scale as { set?: (x: number, y: number, z: number) => void; x?: number; y?: number; z?: number } | undefined;
+			if (s?.set) s.set(sx, sy, 1);
+			else if (s) {
+				s.x = sx;
+				s.y = sy;
+				s.z = 1;
+			}
+			if (data.sun.rotation) data.sun.rotation.z += Math.sin(t * 0.32 + seed) * 0.010 * sunPulse;
+		}
+		const beatPulse = fallbackNumber(snapshot.beatPulse, 0);
+		const bass = fallbackNumber(snapshot.bass, 0);
+		const mid = fallbackNumber(snapshot.mid, 0);
+		const breathe = Math.sin(t * 0.92 + seed) * 0.050 + Math.sin(t * 0.41 + seed * 0.7) * 0.028;
+		const group = mesh.group as unknown as { position: Vec3Like; scale: unknown; rotation?: { z: number } };
+		if (skullMouthLyrics) {
+			const mouthMeshY = -0.070 + Math.sin(t * 0.50 + seed) * 0.018 + Math.sin(t * 1.12 + seed) * 0.006;
+			const mouthMeshZ = 0.018 + Math.cos(t * 0.46 + seed) * 0.007;
+			const mouthMeshScale = 1.08 + a * 0.040 + breathe * 0.12 + bass * 0.024 + beatPulse * 0.014;
+			if (!userData.skullMouthMeshLocked) {
+				setGroupPosition(group, 0, mouthMeshY, mouthMeshZ);
+				userData.skullMouthMeshLocked = true;
+			} else {
+				group.position.x += (0 - group.position.x) * 0.18;
+				group.position.y += (mouthMeshY - group.position.y) * 0.16;
+				group.position.z += (mouthMeshZ - group.position.z) * 0.18;
+			}
+			setScalar(group.scale, mouthMeshScale);
+			if (group.rotation) group.rotation.z = Math.sin(t * 0.30 + seed) * 0.010;
+		} else {
+			userData.skullMouthMeshLocked = false;
+			setScalar(group.scale, 0.96 + a * 0.055 + breathe + bass * 0.038 + beatPulse * 0.014);
+			group.position.y += ((0.18 + Math.sin(t * 0.55 + seed) * 0.055 + Math.sin(t * 1.35 + seed) * 0.014) - group.position.y) * 0.075;
+			group.position.z += ((1.48 + Math.cos(t * 0.48 + seed) * 0.080) - group.position.z) * 0.080;
+			if (group.rotation) group.rotation.z = Math.sin(t * 0.34 + seed) * 0.018;
+		}
+		const sparkOpacity = data?.sparkMat ? getUniformValue(data.sparkMat, "uOpacity", 0) : 0;
+		if (data?.sparks) data.sparks.visible = lyricGlowParticles || sparkOpacity > 0.015;
+		const attr = data?.sparks?.geometry?.attributes?.position;
+		const base = data?.basePositions;
+		if (attr?.array && base) {
+			const arr = attr.array;
+			if (data?.sparks?.rotation) {
+				data.sparks.rotation.z += ((lyricGlowParticles ? 0.0009 : 0.00025) + state.beatGlow * 0.0007) * (dt * 60);
+				data.sparks.rotation.x = Math.sin(t * 0.12 + seed) * 0.012;
+			}
+			for (let si = 0; si < arr.length / 3; si++) {
+				const s = si * 12.989 + seed;
+				const particleBeat = lyricGlowParticles ? state.beatGlow : 0;
+				const dustBreath = lyricGlowParticles ? (0.62 + 0.38 * Math.sin(t * (0.32 + (si % 7) * 0.025) + s)) : 0.18;
+				const drift = lyricGlowParticles ? 1 : 0.30;
+				arr[si * 3] = base[si * 3] + Math.sin(t * (0.18 + (si % 5) * 0.025) + s) * (0.045 + bass * 0.030 + particleBeat * 0.052) * drift + Math.cos(t * 0.11 + s) * 0.018 * dustBreath;
+				arr[si * 3 + 1] = base[si * 3 + 1] + Math.cos(t * (0.16 + (si % 6) * 0.024) + s) * (0.042 + mid * 0.026 + particleBeat * 0.046) * drift + Math.sin(t * 0.13 + s) * 0.016 * dustBreath;
+				arr[si * 3 + 2] = base[si * 3 + 2] + Math.sin(t * (0.24 + (si % 4) * 0.035) + s) * (0.036 + particleBeat * 0.028) * drift;
+			}
+			attr.needsUpdate = true;
+		}
 	}
 
 	function tickOutgoingMeshes(dt: number, shelf: ReturnType<typeof getShelfProfile>, _snapshot: AudioSnapshot, _t: number): void {
-		void _snapshot;
-		void _t;
 		for (let i = state.outgoing.length - 1; i >= 0; i--) {
 			const entry = state.outgoing[i];
 			entry.age += dt;
@@ -963,13 +1286,20 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			const readabilityMat = lyric.readabilityMat as { opacity: number };
 			const glowMat = lyric.glowMat as { opacity: number };
 			const sunMat = lyric.sunMat as { opacity: number };
+			const data = userData.lyric as { sparkMat?: unknown } | undefined;
 			const lyricGlowStrength = opts.lyricGlowStrengthSupplier ? Math.min(0.85, Math.max(0, opts.lyricGlowStrengthSupplier())) : 0;
+			const lyricGlowParticles = opts.lyricGlowParticlesSupplier ? !!opts.lyricGlowParticlesSupplier() : false;
 			const opacity = (1 - aSmooth) * 0.72 * shelf.profile.outgoing;
 			if (uOpacity) (uOpacity as SizeOfMaterial).value = opacity;
 			if (readabilityMat) readabilityMat.opacity = opacity * (shelf.shelfDetailOpen ? shelf.profile.readability : 0.58);
 			const uSolar = uniforms(lyric, "uSolar");
 			if (uSolar) (uSolar as SizeOfMaterial).value *= shelf.shelfDetailOpen ? 0.72 : 0.86;
 			if (glowMat) glowMat.opacity = lyricGlowStrength > 0 ? (shelf.shelfDetailOpen ? Math.min(shelf.profile.glowCap * 0.40, opacity * 0.05 * lyricGlowStrength) : opacity * 0.08 * lyricGlowStrength) : 0;
+			if (data?.sparkMat) {
+				const outgoingSpark = lyricGlowStrength > 0 && lyricGlowParticles && !shelf.shelfDetailOpen ? Math.max(opacity * 0.24 * lyricGlowStrength, (1 - aSmooth) * 0.18 * lyricGlowStrength) : 0;
+				setUniformValue(data.sparkMat, "uOpacity", outgoingSpark);
+				setUniformValue(data.sparkMat, "uSize", 0.046 + (1 - aSmooth) * 0.020);
+			}
 			if (sunMat) sunMat.opacity = lyricGlowStrength > 0 && !shelf.shelfDetailOpen ? opacity * 0.08 * lyricGlowStrength : 0;
 			const pos = lyric.group.position as unknown as Vec3Like;
 			pos.z -= dt * 0.26;
@@ -1007,7 +1337,6 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		state.glowFollowX = finiteOr(state.glowFollowX, 0);
 		state.glowFollowY = finiteOr(state.glowFollowY, 0);
 		state.glowFollowRoll = finiteOr(state.glowFollowRoll, 0);
-		const shelf = getShelfProfile();
 		const lyricGlowStrength = opts.lyricGlowStrengthSupplier ? Math.min(0.85, Math.max(0, opts.lyricGlowStrengthSupplier())) : 0;
 		const glowBeatFlag = opts.lyricGlowBeatFlagSupplier ? opts.lyricGlowBeatFlagSupplier() : false;
 		const glowDrive = Math.min(1.7, Math.max(0, lyricGlowStrength / 0.5));
@@ -1016,6 +1345,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		const beatPulseValue = fallbackNumber(snapshot.beatPulse, 0);
 		state.beatPulse = clamp(beatPulseValue, 0, 1.4);
 		state.bass = clamp(fallbackNumber(snapshot.bass, 0), 0, 1.2);
+		state.mid = clamp(fallbackNumber(snapshot.mid, 0), 0, 1.2);
 		const musicBloom = Math.max(lyricSunEnergy, beatPulseValue * 0.10);
 		const kicks = opts.getBeatCamKick ? opts.getBeatCamKick() : null;
 		const beatGlowRaw = glowBeatFlag && lyricGlowStrength > 0
@@ -1024,6 +1354,8 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		state.beatGlow += (beatGlowRaw - state.beatGlow) * (beatGlowRaw > state.beatGlow ? 0.32 : 0.10);
 		state.beatGlow = finiteOr(state.beatGlow, 0);
 		const layout = getLyricLayoutOptions();
+		const shelf = getShelfProfile(layout.preset);
+		(state.group as unknown as { renderOrder: number }).renderOrder = shelf.shelfDetailOpen ? 24 : 38;
 		const skullLyricPreset = layout.preset === 6;
 		let solarBloom = lyricGlowStrength > 0
 			? (0.18 + glowBreath * 0.16 + musicBloom * 0.90 + state.beatGlow * 1.18 + Math.sin(t * 0.37 + 1.2) * 0.035) * glowDrive
@@ -1041,6 +1373,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		const solarBloomClamped = Math.max(0, Math.min(1.45, solarBloom));
 		state.highBloom += (solarBloomClamped - state.highBloom) * (solarBloomClamped > state.highBloom ? (skullLyricPreset ? 0.22 : 0.075) : (skullLyricPreset ? 0.070 : 0.050));
 		state.highBloom = finiteOr(state.highBloom, 0);
+		updateLyricStarRiver(dt, t, skullLyricPreset);
 		const followDrive = glowBeatFlag && lyricGlowStrength > 0 ? Math.min(1.35, state.beatGlow) : 0;
 		const followXTarget = followDrive * ((kicks?.thetaKick ?? 0) * 34 + (kicks?.rollKick ?? 0) * 8);
 		const followYTarget = followDrive * ((kicks?.phiKick ?? 0) * 42 - (kicks?.radiusKick ?? 0) * 0.48);
@@ -1063,9 +1396,11 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		},
 		async mount(parent?: THREE.Scene): Promise<THREE.Group> {
 			const THREE = await threeFactory();
+			state.three = THREE;
 			const scene = parent ?? opts.scene ?? null;
 			if (state.group) {
 				if (scene) (scene as unknown as { add: (c: unknown) => void }).add(state.group);
+				ensureLyricStarRiver();
 				return state.group;
 			}
 			const group = new THREE.Group() as THREE.Group;
@@ -1073,11 +1408,13 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			(group as unknown as { userData: Record<string, unknown> }).userData = { isStageLyricsGroup: true };
 			state.group = group;
 			if (scene) (scene as unknown as { add: (c: unknown) => void }).add(group);
+			ensureLyricStarRiver();
 			state.reduceMotionFlag = opts.reduceMotion ? !!opts.reduceMotion() : false;
 			return group;
 		},
 		unmount() {
 			clearStageLyrics();
+			disposeStarRiver();
 			if (state.group) {
 				const g = state.group;
 				const parent = (g as unknown as { parent?: unknown }).parent as { remove?: (c: unknown) => void } | null | undefined;
@@ -1150,6 +1487,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			if (state.disposed) return;
 			state.disposed = true;
 			clearStageLyrics();
+			disposeStarRiver();
 			if (state.group) {
 				const g = state.group;
 				const parent = (g as unknown as { parent?: unknown }).parent as { remove?: (c: unknown) => void } | null | undefined;

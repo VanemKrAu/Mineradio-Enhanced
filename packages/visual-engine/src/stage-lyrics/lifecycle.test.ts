@@ -168,6 +168,7 @@ function makeFakeThree(): ThreeFactory {
 			visible: true,
 			userData: {} as Record<string, unknown>,
 			position: { x: 0, y: 0, z: 0, set(this: { x: number; y: number; z: number }, x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; } },
+			rotation: { x: 0, y: 0, z: 0 },
 			scale: { x: 1, y: 1, z: 1, set(this: { x: number; y: number; z: number }, x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; } },
 		};
 	}
@@ -179,7 +180,7 @@ function makeFakeThree(): ThreeFactory {
 			renderOrder: 0,
 			visible: true,
 			frustumCulled: true,
-			position: { x: 0, y: 0, z: 0 },
+			position: { x: 0, y: 0, z: 0, set(this: { x: number; y: number; z: number }, x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; } },
 			scale: { x: 1, y: 1, z: 1 },
 			rotation: { x: 0, y: 0, z: 0 },
 			updateMatrixWorld() {},
@@ -307,6 +308,10 @@ function makeCtx(now: number, dt: number, snap?: Partial<AudioSnapshot>): FrameC
 	};
 }
 
+function findLyricChild(group: { children: Array<{ userData?: { lyric?: unknown } }> }) {
+	return group.children.find((c) => c.userData?.lyric);
+}
+
 async function buildLifecycleWithCurrent(opts: {
 	lyrics: Array<{ t: number; text: string }>;
 	currentTime: number;
@@ -364,6 +369,29 @@ test("mount() creates a group with renderOrder=38 and adds to scene", async () =
 	expect((scene.children as unknown[]).length).toBe(1);
 });
 
+test("mount() creates baseline lyric star river under the stage group", async () => {
+	const scene = makeFakeScene();
+	const lc = createStageLyricsLifecycle({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		dotTexture: makeFakeDotTexture(),
+	});
+	const group = await lc.mount(scene as never) as unknown as { children: Array<{ isPoints?: boolean; renderOrder?: number; frustumCulled?: boolean; position?: { x: number; y: number; z: number }; geometry?: { attributes?: Record<string, { count: number }> }; material?: { uniforms?: Record<string, { value: unknown }> } }> };
+	const river = group.children.find((child) => child.isPoints && child.renderOrder === 45);
+	expect(river).not.toBeUndefined();
+	expect(river?.frustumCulled).toBe(false);
+	expect(river?.position?.x).toBe(0);
+	expect(river?.position?.y).toBeCloseTo(0.20, 6);
+	expect(river?.position?.z).toBeCloseTo(1.53, 6);
+	expect(river?.geometry?.attributes?.seed?.count).toBe(420);
+	expect(river?.geometry?.attributes?.lane?.count).toBe(420);
+	expect(river?.geometry?.attributes?.depthSeed?.count).toBe(420);
+	expect(river?.material?.uniforms?.uOpacity?.value).toBe(0);
+	expect(river?.material?.uniforms?.uWidth?.value).toBeCloseTo(4.2, 6);
+	expect(river?.material?.uniforms?.uHeight?.value).toBeCloseTo(0.58, 6);
+	lc.dispose();
+});
+
 test("tickLyricsParticles advances currentIdx to 1 when currentTime reaches line B", async () => {
 	const { lifecycle, scene } = await buildLifecycleWithCurrent({
 		lyrics: [{ t: 0, text: "A" }, { t: 2, text: "B" }],
@@ -405,7 +433,7 @@ test("tickLyricsParticles passes live lyric text options into the built lyric gr
 	lifecycle.update(makeCtx(0.5, 0.1));
 	await lifecycle.whenIdle();
 	const groupA = lifecycle.group as unknown as { children: Array<{ userData: { lyric?: { mask?: { fontSize: number; lineHeight: number }; textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } } }> };
-	const firstLyric = groupA.children[0]?.userData.lyric;
+	const firstLyric = findLyricChild(groupA)?.userData?.lyric as { mask?: { fontSize: number; lineHeight: number }; textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } | undefined;
 	expect(firstLyric?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.12|1.24|800");
 	expect(firstLyric?.mask?.lineHeight).toBeGreaterThan((firstLyric?.mask?.fontSize ?? 0) * 1.2);
 
@@ -413,7 +441,7 @@ test("tickLyricsParticles passes live lyric text options into the built lyric gr
 	lifecycle.update(makeCtx(0.6, 0.1));
 	await lifecycle.whenIdle();
 	const groupB = lifecycle.group as unknown as { children: Array<{ userData: { lyric?: { textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } } }> };
-	expect(groupB.children[0]?.userData.lyric?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.03|1.24|800");
+	expect((findLyricChild(groupB)?.userData?.lyric as { textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } | undefined)?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.03|1.24|800");
 	lifecycle.dispose();
 });
 
@@ -542,7 +570,7 @@ test("newly built current lyric is processed by the stage tick before it can ren
 		currentTime: 0.5,
 	});
 	const group = lifecycle.group as unknown as { children: Array<{ userData: { lyric?: { textMat?: { uniforms?: { uOpacity?: { value: number } } } } } }> };
-	const current = group.children[0];
+	const current = findLyricChild(group) as { userData: { lyric?: { textMat?: { uniforms?: { uOpacity?: { value: number } } } } } };
 	expect(current.userData.lyric?.textMat?.uniforms?.uOpacity?.value ?? 0).toBeGreaterThan(0);
 	lifecycle.dispose();
 });
@@ -1248,32 +1276,43 @@ test("tickLyricsParticles clears stage when no fallback text and currentTime < f
 	lc.dispose();
 });
 
-test("update() drives uOpacity toward 0.38 when shelfVisibility > 0.5 (non-skull)", async () => {
-	const { lifecycle } = await buildLifecycleWithCurrent({
-		lyrics: [{ t: 0, text: "hello world" }],
-		currentTime: 0.5,
-		shelfVisibility: 0.8,
-	});
-	lifecycle.setShelfVisibility(0.8);
+test("update() drives uOpacity toward 0.38 when side shelf detail content is open (non-skull)", async () => {
+	const scene = makeFakeScene();
+	const lifecycle = createStageLyricsLifecycle({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		lyricLinesSupplier: () => [{ t: 0, text: "hello world" }] as never,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		getShelfHasOpenContent: () => true,
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0,
+		lyricGlowBeatFlagSupplier: () => false,
+		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		dotTexture: makeFakeDotTexture(),
+		rand: () => 0.35,
+	} as never);
+	await lifecycle.mount(scene as never);
+	lifecycle.setLyricLines([{ t: 0, text: "hello world" }]);
+	lifecycle.update(makeCtx(0.5, 0.016, { beatPulse: 0 }));
+	await lifecycle.whenIdle();
 	for (let i = 0; i < 60; i++) {
 		lifecycle.update(makeCtx(0.5 + i * 0.016, 0.016, { beatPulse: 0 }));
 	}
 	await lifecycle.whenIdle();
 	lifecycle.update(makeCtx(5, 0.016, { beatPulse: 0 }));
-	const group = lifecycle.group as unknown as { children: unknown[] };
-	const current = group.children[0] as { userData: { lyric?: { textMat?: { uniforms?: { uOpacity?: { value: number } } } } } };
+	const group = lifecycle.group as unknown as { children: Array<{ userData?: { lyric?: unknown } }> };
+	const current = findLyricChild(group) as { userData: { lyric?: { textMat?: { uniforms?: { uOpacity?: { value: number } } } } } };
 	const opacity = current.userData.lyric?.textMat?.uniforms?.uOpacity?.value ?? 0;
 	expect(opacity).toBeGreaterThan(0.30);
 	expect(opacity).toBeLessThanOrEqual(0.38 + 0.005);
 	lifecycle.dispose();
 });
 
-test("update() drives uOpacity toward 0.30 when shelfVisibility > 0.5 with skullShelfDetailOpen", async () => {
-	const { lifecycle } = await buildLifecycleWithCurrent({
-		lyrics: [{ t: 0, text: "dark mode" }],
-		currentTime: 0.5,
-		shelfVisibility: 0.8,
-	});
+test("update() drives uOpacity toward 0.30 when skull shelf detail content is open", async () => {
 	const lc2 = createStageLyricsLifecycle({
 		threeFactory: makeFakeThree(),
 		gsapProvider: () => makeFakeGsap([]),
@@ -1282,12 +1321,12 @@ test("update() drives uOpacity toward 0.30 when shelfVisibility > 0.5 with skull
 		currentTimeSupplier: () => 0.5,
 		isPlayingSupplier: () => true,
 		audioDurationSupplier: () => 9999,
-		getShelfVisibility: () => 0.8,
-		getSkullShelfOpen: () => true,
+		getShelfHasOpenContent: () => true,
 		particleLyricsFlagSupplier: () => true,
 		lyricGlowStrengthSupplier: () => 0,
 		lyricGlowBeatFlagSupplier: () => false,
 		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		lyricLayoutOptionsSupplier: () => ({ preset: 6 }),
 		dotTexture: makeFakeDotTexture(),
 		rand: () => 0.35,
 	} as never);
@@ -1296,18 +1335,16 @@ test("update() drives uOpacity toward 0.30 when shelfVisibility > 0.5 with skull
 	lc2.setLyricLines([{ t: 0, text: "dark mode" }]);
 	lc2.update(makeCtx(0.5, 0.016, { beatPulse: 0 }));
 	await lc2.whenIdle();
-	lc2.setShelfVisibility(0.8);
 	for (let i = 0; i < 80; i++) {
 		lc2.update(makeCtx(0.5 + i * 0.016, 0.016, { beatPulse: 0 }));
 	}
 	await lc2.whenIdle();
-	const g2 = lc2.group as unknown as { children: unknown[] };
-	const cur2 = g2.children[0] as { userData: { lyric?: { textMat?: { uniforms?: { uOpacity?: { value: number } } } } } };
+	const g2 = lc2.group as unknown as { children: Array<{ userData?: { lyric?: unknown } }> };
+	const cur2 = findLyricChild(g2) as { userData: { lyric?: { textMat?: { uniforms?: { uOpacity?: { value: number } } } } } };
 	const opacity = cur2.userData.lyric?.textMat?.uniforms?.uOpacity?.value ?? 0;
 	expect(opacity).toBeGreaterThan(0.25);
 	expect(opacity).toBeLessThanOrEqual(0.30 + 0.005);
 	lc2.dispose();
-	(async () => { void lifecycle.dispose(); })();
 });
 
 test("getMotionSnapshot exposes clamped live bloom and audio fields for desktop lyrics", async () => {
@@ -1346,6 +1383,125 @@ test("getMotionSnapshot exposes clamped live bloom and audio fields for desktop 
 	expect(snapshot.beatGlow).toBeLessThanOrEqual(1.7);
 	expect(snapshot.beatPulse).toBe(1.1);
 	expect(snapshot.bass).toBe(0.64);
+	lifecycle.dispose();
+});
+
+test("update drives baseline star river width height opacity and hides it for skull preset", async () => {
+	let preset = 0;
+	const lifecycle = createStageLyricsLifecycle({
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowParticlesSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0.85,
+		lyricGlowBeatFlagSupplier: () => true,
+		lyricSunEnergyHolder: { get: () => 1.1, set: () => {} },
+		getBeatCamKick: () => ({ thetaKick: 0, phiKick: 0, rollKick: 0, radiusKick: 1, punch: 1 }),
+		lyricLayoutOptionsSupplier: () => ({ preset }),
+		dotTexture: makeFakeDotTexture(),
+		rand: () => 0.35,
+	} as never);
+	const scene = makeFakeScene();
+	await lifecycle.mount(scene as never);
+	lifecycle.setLyricLines([{ t: 0, text: "star river lyric" }]);
+	lifecycle.update(makeCtx(0.5, 0.1, { beatPulse: 1, bass: 0.4 }));
+	await lifecycle.whenIdle();
+	lifecycle.update(makeCtx(0.6, 0.1, { beatPulse: 1, bass: 0.4 }));
+	const group = lifecycle.group as unknown as { children: Array<{ isPoints?: boolean; renderOrder?: number; visible?: boolean; material?: { uniforms?: Record<string, { value: number }> } }> };
+	const river = group.children.find((child) => child.isPoints && child.renderOrder === 45);
+	expect(river).not.toBeUndefined();
+	expect(river?.visible).toBe(true);
+	expect(river?.material?.uniforms?.uWidth?.value).toBeGreaterThan(4.2);
+	expect(river?.material?.uniforms?.uHeight?.value).toBeGreaterThan(0.58);
+	expect(river?.material?.uniforms?.uOpacity?.value).toBeGreaterThan(0);
+
+	preset = 6;
+	lifecycle.update(makeCtx(0.7, 0.1, { beatPulse: 1, bass: 0.4 }));
+	expect(river?.visible).toBe(false);
+	expect(river?.material?.uniforms?.uOpacity?.value).toBe(0);
+	lifecycle.dispose();
+});
+
+test("shelf detail open lowers stage lyric renderOrder from 38 to 24 using open-content state", async () => {
+	let open = false;
+	const lifecycle = createStageLyricsLifecycle({
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		particleLyricsFlagSupplier: () => true,
+		getShelfVisibility: () => 0,
+		getShelfHasOpenContent: () => open,
+		dotTexture: makeFakeDotTexture(),
+		rand: () => 0.35,
+	} as never);
+	const scene = makeFakeScene();
+	await lifecycle.mount(scene as never);
+	lifecycle.update(makeCtx(0.5, 0.016));
+	expect((lifecycle.group as unknown as { renderOrder: number }).renderOrder).toBe(38);
+	open = true;
+	lifecycle.update(makeCtx(0.6, 0.016));
+	expect((lifecycle.group as unknown as { renderOrder: number }).renderOrder).toBe(24);
+	lifecycle.dispose();
+});
+
+test("current lyric mesh uses baseline local breathing and spark/sun/glow motion", async () => {
+	const lifecycle = createStageLyricsLifecycle({
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowParticlesSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0.85,
+		lyricGlowBeatFlagSupplier: () => true,
+		lyricSunEnergyHolder: { get: () => 1.2, set: () => {} },
+		getBeatCamKick: () => ({ thetaKick: 0.5, phiKick: 0.25, rollKick: 0.2, radiusKick: 0.8, punch: 0.9 }),
+		dotTexture: makeFakeDotTexture(),
+		rand: () => 0.35,
+	} as never);
+	const scene = makeFakeScene();
+	await lifecycle.mount(scene as never);
+	lifecycle.setLyricLines([{ t: 0, text: "moving lyric" }]);
+	lifecycle.update(makeCtx(0.5, 0.1, { beatPulse: 1, bass: 0.5, mid: 0.4 }));
+	await lifecycle.whenIdle();
+	lifecycle.update(makeCtx(1.0, 0.1, { beatPulse: 1, bass: 0.5, mid: 0.4 }));
+	const group = lifecycle.group as unknown as { children: Array<{ userData?: { lyric?: unknown }; position?: { y: number; z: number }; scale?: { x: number }; rotation?: { z: number } }> };
+	const current = findLyricChild(group) as unknown as {
+		position: { x: number; y: number; z: number };
+		scale: { x: number; y: number; z: number };
+		rotation: { z: number };
+		userData: {
+			lyric: {
+				glow: { position: { x: number; y: number; z: number }; rotation: { z: number } };
+				sun: { position: { x: number; y: number; z: number }; rotation: { z: number }; scale: { x: number; y: number; z: number } };
+				sparks: { visible: boolean; position: { x: number; y: number; z: number }; rotation: { x: number; z: number }; geometry: { attributes: { position: { array: Float32Array; needsUpdate: boolean } } } };
+				basePositions: Float32Array;
+				sparkMat: { uniforms: { uOpacity: { value: number }; uSize: { value: number } } };
+			};
+		};
+	};
+	expect(current.position.y).toBeGreaterThan(0.18);
+	expect(current.position.y).toBeLessThan(0.27);
+	expect(current.position.z).toBeGreaterThan(1.45);
+	expect(current.position.z).toBeLessThan(1.56);
+	expect(Math.abs(current.scale.x - 0.96)).toBeGreaterThan(0.001);
+	expect(Math.abs(current.rotation.z)).toBeGreaterThan(0);
+	expect(Math.abs(current.userData.lyric.glow.position.x)).toBeGreaterThan(0);
+	expect(current.userData.lyric.sun.scale.x).toBeGreaterThan(0.82);
+	expect(current.userData.lyric.sparks.visible).toBe(true);
+	expect(current.userData.lyric.sparkMat.uniforms.uOpacity.value).toBeGreaterThan(0);
+	expect(current.userData.lyric.sparkMat.uniforms.uSize.value).toBeGreaterThan(0.035);
+	expect(current.userData.lyric.sparks.geometry.attributes.position.needsUpdate).toBe(true);
+	expect(current.userData.lyric.sparks.geometry.attributes.position.array[0]).not.toBe(current.userData.lyric.basePositions[0]);
 	lifecycle.dispose();
 });
 
