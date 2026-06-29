@@ -14,6 +14,8 @@ test("applyVisualThemeToRoot mirrors baseline UI accent and visual tint CSS vari
   expect(root.style.getPropertyValue("--fc-accent")).toBe("#12abef");
   expect(root.style.getPropertyValue("--fc-accent-hov")).toBe("#12abef");
   expect(root.style.getPropertyValue("--fc-accent-rgb")).toBe("18,171,239");
+  expect(root.style.getPropertyValue("--home-accent")).toBe("#12abef");
+  expect(root.style.getPropertyValue("--home-accent-rgb")).toBe("18,171,239");
   expect(root.style.getPropertyValue("--glass-border")).toBe("rgba(18,171,239,.30)");
   expect(root.style.getPropertyValue("--visual-tint")).toBe("#223344");
 });

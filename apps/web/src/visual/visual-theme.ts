@@ -7,6 +7,8 @@ export function applyVisualThemeToRoot(root: HTMLElement, fx: Pick<FxState, "uiA
   root.style.setProperty("--fc-accent", accent);
   root.style.setProperty("--fc-accent-hov", accent);
   root.style.setProperty("--fc-accent-rgb", `${rgb.r},${rgb.g},${rgb.b}`);
+  root.style.setProperty("--home-accent", accent);
+  root.style.setProperty("--home-accent-rgb", `${rgb.r},${rgb.g},${rgb.b}`);
   root.style.setProperty("--glass-border", `rgba(${rgb.r},${rgb.g},${rgb.b},.30)`);
   root.style.setProperty(
     "--glass-shadow-focus",
