@@ -10,7 +10,7 @@ src/
 ├── lib.rs            # RuntimeConfig + AppState + run() orchestrator + sidecar setup hook
 ├── commands.rs       # Tauri command handlers + reserved window labels
 ├── sidecar.rs        # 协程：端口分配 / 命令构造 / 原生 TcpStream 健康轮询 / HealthInfo 解析 + SidecarError enum
-├── paths.rs          # dirs::data_dir()/Mineradio + MINERADIO_APP_DATA_DIR/MINERADIO_LOG_DIR env 覆盖
+├── paths.rs          # dirs::data_dir()/Mineradio Tauri Rewrite + MINERADIO_APP_DATA_DIR/MINERADIO_LOG_DIR env 覆盖
 └── updater.rs        # P10.a updater status/check mapping；签名 gate 显式阻挡 download/install
 
 capabilities/
@@ -30,7 +30,7 @@ build.rs               # tauri_build::build()
 | 改 sidecar 拉起 | `lib.rs::run()` 内 `setup` 闭包调 `sidecar::build_sidecar_command_with_resource_dir(port, app_data_dir, log_dir, app_version, resource_dir)` + `spawn_sidecar` + `wait_for_health(base_url, 2s deadline)` | setup 失败不挂 startup（仅 `eprintln!`）—— 给 tauri dev run 无 Bun PATH 时容错；未来要加 panic-back 给通知 |
 | 改 sidecar binary args | `sidecar.rs::build_sidecar_command_with_resource_dir`：dev fallback 用 `bun` + `["run", "sidecars/api/src/server.ts"]`；打包态优先 `MINERADIO_SIDECAR_BIN` 或 Tauri resource/exe 同目录 `mineradio-sidecar-api-<target-triple>[.exe]`；所有路径都注入 `MINERADIO_SIDECAR_PORT/APP_DATA_DIR/LOG_DIR/APP_VERSION/SIDECAR_LOG_FILE` | 不要 hardcode port，用 `allocate_port()` |
 | 加 Tauri 多窗口 | `commands.rs labels::DESKTOP_LYRICS / WALLPAPER / LOGIN_NETEASE / LOGIN_QQ` 已 reserved；创窗 Tauri Rust 创建 `WebviewWindowBuilder`，挂对应 capabilities (`windows:["desktop-lyrics",...]`) | login 窗口对应 sidecar 登录流程；不要在 Rust 存 cookie |
-| 改 path 行为 | `paths.rs::resolve_app_data_dir` / `resolve_log_dir`；env 覆盖 helper `with_override(dir, fallback)` | 新目录只能在 `Mineradio/*` 下，不要扩到其他 app id 区分 |
+| 改 path 行为 | `paths.rs::resolve_app_data_dir` / `resolve_log_dir`；env 覆盖 helper `with_override(dir, fallback)` | 默认目录必须保持 `Mineradio Tauri Rewrite`，不要回退到旧 Electron 裸 `Mineradio` 用户目录；改动后跑 `npm run app-data-policy:check` |
 | updater | `updater.rs` 输出结构化 `UpdaterStatus`，`commands.rs::check_for_update` 走 Rust `tauri-plugin-updater` API，`get_updater_status` 返回当前签名 gate 状态 | 不暴露 JS updater plugin commands；B2 无 pubkey/私钥，download/install 不能假装可用 |
 | ticking sidecar 健康过短过长 | `sidecar.rs::wait_for_health(base_url, deadline)`：200ms sleep 重试直到 deadline；level too short 可能识别不上 sidecar | 2s 在 tauri dev 可能短，要看 cold-start 平测 |
 
