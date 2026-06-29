@@ -122,7 +122,7 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 		};
 		const leaveControls = () => {
 			hovering = false;
-			scheduleHide(70);
+			scheduleHide(480);
 			wakeBottomHandle(900);
 		};
 		const enterHandle = () => {

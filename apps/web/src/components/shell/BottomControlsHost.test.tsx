@@ -59,7 +59,7 @@ test("BottomControlsHost mirrors baseline bottom handle wake and auto-hide hover
 	await import("../../../../../packages/visual-engine/src/runtime/happy-dom-preload");
 	document.body.className = "";
 	const calls: string[] = [];
-	const timers: Array<() => void> = [];
+	const timers: Array<{ callback: () => void; delay?: number }> = [];
 	const cleared: number[] = [];
 	const container = document.createElement("div");
 	document.body.appendChild(container);
@@ -70,8 +70,8 @@ test("BottomControlsHost mirrors baseline bottom handle wake and auto-hide hover
 			onReveal: () => calls.push("reveal"),
 			onHide: () => calls.push("hide"),
 			deps: {
-				setTimeoutRef: ((callback: () => void) => {
-					timers.push(callback);
+				setTimeoutRef: ((callback: () => void, delay?: number) => {
+					timers.push({ callback, delay });
 					return timers.length;
 				}) as typeof window.setTimeout,
 				clearTimeoutRef: ((id: number) => {
@@ -90,16 +90,18 @@ test("BottomControlsHost mirrors baseline bottom handle wake and auto-hide hover
 
 	handle.dispatchEvent(new window.MouseEvent("mouseleave", { bubbles: true }));
 	expect(timers.length).toBeGreaterThanOrEqual(2);
-	timers[timers.length - 2]?.();
+	expect(timers[timers.length - 2]?.delay).toBe(480);
+	timers[timers.length - 2]?.callback();
 	expect(calls).toEqual(["reveal", "hide"]);
-	timers[timers.length - 1]?.();
+	timers[timers.length - 1]?.callback();
 	expect(document.body.classList.contains("controls-handle-awake")).toBe(false);
 
 	bar.dispatchEvent(new window.MouseEvent("mouseenter", { bubbles: true }));
 	expect(document.body.classList.contains("controls-handle-awake")).toBe(true);
 	expect(cleared.length).toBeGreaterThan(0);
 	bar.dispatchEvent(new window.MouseEvent("mouseleave", { bubbles: true }));
-	timers[timers.length - 2]?.();
+	expect(timers[timers.length - 2]?.delay).toBe(480);
+	timers[timers.length - 2]?.callback();
 	expect(calls).toEqual(["reveal", "hide", "hide"]);
 
 	root.unmount();

@@ -114,6 +114,14 @@ test("App keeps hidden wallpaper capability placeholder copy out of the product 
 	expect(html).not.toContain('id="t-wallpaperMode"');
 });
 
+test("desktop shell CSS keeps only the outer corner transparent while the app interior stays opaque", async () => {
+	const css = await fetch(new URL("../styles.css", import.meta.url)).then((response) => response.text());
+	expect(css).toContain("border-radius: 18px;");
+	expect(css).toContain("clip-path: inset(0 round 18px);");
+	expect(css).toContain("background: #000;");
+	expect(css).not.toContain("clip-path: inset(0 round 34px);");
+});
+
 test("App unmounts SplashHost after splash dismissed instead of leaving hidden splash listeners alive", async () => {
 	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
 	const host = document.createElement("div");
