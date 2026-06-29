@@ -118,6 +118,7 @@ export async function buildLyricGroup(
 		lyricFont: opts.lyricFont,
 		lyricLetterSpacing: opts.lyricLetterSpacing,
 		lyricLineHeight: opts.lyricLineHeight,
+		lyricWeight: opts.lyricWeight,
 	};
 	const mask = makeLyricMask(cleaned, THREE, { ...(opts.maskOptions ?? {}), ...maskTextOpts });
 	const worldW = 6.1;
@@ -160,6 +161,7 @@ export async function buildLyricGroup(
 		lyricFont: opts.lyricFont,
 		lyricLetterSpacing: opts.lyricLetterSpacing,
 		lyricLineHeight: opts.lyricLineHeight,
+		lyricWeight: opts.lyricWeight,
 		...(opts.glowOptions ?? {}),
 	};
 	const glowTex = makeLyricGlowTexture(cleaned, mask.fontSize, mask.textWidth, mask.lines, mask.lineHeight, mask.fitScaleX, THREE, glowOptions);
@@ -188,6 +190,7 @@ export async function buildLyricGroup(
 		lyricFont: opts.lyricFont,
 		lyricLetterSpacing: opts.lyricLetterSpacing,
 		lyricLineHeight: opts.lyricLineHeight,
+		lyricWeight: opts.lyricWeight,
 		...(opts.readabilityOptions ?? {}),
 	};
 	const readabilityTex = makeLyricReadabilityTexture(mask, THREE, readabilityOptions);
@@ -267,6 +270,9 @@ export async function buildLyricGroup(
 		textWorldH,
 		worldW,
 		worldH,
+	};
+	(textMat as unknown as { uniforms: Record<string, { value: unknown }> }).uniforms.uTextOptionsSignature = {
+		value: `${maskTextOpts.lyricFont ?? ""}|${maskTextOpts.lyricLetterSpacing ?? ""}|${maskTextOpts.lyricLineHeight ?? ""}|${maskTextOpts.lyricWeight ?? ""}`,
 	};
 
 	updateLyricGroupProgress(

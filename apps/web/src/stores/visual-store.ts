@@ -8,6 +8,20 @@ import { cloneFxState, type FxState } from "@mineradio/visual-engine";
 export const VISUAL_SETTINGS_STORE_KEY = "mineradio-tauri-visual-settings-v1";
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
+const LYRIC_FONT_KEYS = new Set([
+	"sans",
+	"hei",
+	"song",
+	"bold-song",
+	"stone-song",
+	"kai-song",
+	"serif-en",
+	"gothic",
+	"editorial",
+	"humanist",
+	"mono",
+	"display",
+]);
 
 function clamp(value: unknown, fallback: number, min: number, max: number): number {
 	const n = typeof value === "number" ? value : Number(value);
@@ -18,6 +32,11 @@ function clamp(value: unknown, fallback: number, min: number, max: number): numb
 function booleanValue(value: unknown, fallback: boolean): boolean {
 	if (typeof value === "boolean") return value;
 	return fallback;
+}
+
+function lyricFontValue(value: unknown, fallback: string): string {
+	const key = typeof value === "string" ? value.trim().toLowerCase() : "";
+	return LYRIC_FONT_KEYS.has(key) ? key : fallback;
 }
 
 export function normalizeVisualFxState(input?: Partial<FxState> | null): FxState {
@@ -38,6 +57,7 @@ export function normalizeVisualFxState(input?: Partial<FxState> | null): FxState
 		desktopLyricsClickThrough: booleanValue(input.desktopLyricsClickThrough, fx.desktopLyricsClickThrough),
 		desktopLyricsCinema: booleanValue(input.desktopLyricsCinema, fx.desktopLyricsCinema),
 		desktopLyricsHighlight: booleanValue(input.desktopLyricsHighlight, fx.desktopLyricsHighlight),
+		lyricFont: lyricFontValue(input.lyricFont, fx.lyricFont),
 		wallpaperMode: false,
 		floatLayer: booleanValue(input.floatLayer, fx.floatLayer),
 		cinema: booleanValue(input.cinema, fx.cinema),
@@ -61,6 +81,7 @@ export interface VisualState {
 	setIntensity: (intensity: number) => void;
 	setNumberSetting: (key: keyof FxState, value: number) => void;
 	setBooleanSetting: (key: keyof FxState, value: boolean) => void;
+	setStringSetting: (key: keyof FxState, value: string) => void;
 	setFxPatch: (patch: Partial<FxState>) => void;
 	setCustom: (key: string, value: unknown) => void;
 	serialize: () => PersistedVisualState;
@@ -125,6 +146,10 @@ export const useVisualStore = create<VisualState>()((set, get) => ({
 		return { fx, preset: fx.preset, intensity: fx.intensity };
 	}),
 	setBooleanSetting: (key, value) => set((state) => {
+		const fx = normalizeVisualFxState({ ...state.fx, [key]: value });
+		return { fx, preset: fx.preset, intensity: fx.intensity };
+	}),
+	setStringSetting: (key, value) => set((state) => {
 		const fx = normalizeVisualFxState({ ...state.fx, [key]: value });
 		return { fx, preset: fx.preset, intensity: fx.intensity };
 	}),

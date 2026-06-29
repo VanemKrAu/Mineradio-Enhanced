@@ -41,6 +41,7 @@ export function makeLyricMask(text: string, THREE: ThreeModule, opts: MakeLyricM
 		lyricFont: opts.lyricFont,
 		lyricLetterSpacing: opts.lyricLetterSpacing,
 		lyricLineHeight: opts.lyricLineHeight,
+		lyricWeight: opts.lyricWeight,
 	};
 	const cleaned = String(text ?? "")
 		.replace(/\s+/g, " ")

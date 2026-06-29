@@ -27,6 +27,7 @@ declare module "bun:test" {
   export interface ExpectHelpers {
     arrayContaining(expected: readonly unknown[]): unknown;
     objectContaining(expected: Record<string, unknown>): unknown;
+    closeTo(expected: number, precision?: number): unknown;
     any(constructor: unknown): unknown;
     anything(): unknown;
   }

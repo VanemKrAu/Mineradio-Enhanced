@@ -2,10 +2,39 @@ export interface LyricTextOptions {
 	lyricFont?: string;
 	lyricLetterSpacing?: number;
 	lyricLineHeight?: number;
+	lyricWeight?: number;
 }
 
 const DEFAULT_FONT_STACK = '"PingFang SC","Microsoft YaHei","Segoe UI",system-ui,-apple-system,sans-serif';
 const DEFAULT_FONT_WEIGHT = 700;
+const FONT_STACKS: Record<string, string> = {
+	sans: DEFAULT_FONT_STACK,
+	hei: '"Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Segoe UI",sans-serif',
+	song: '"Songti SC","SimSun","Noto Serif CJK SC",serif',
+	"bold-song": '"Songti SC","SimSun","Noto Serif CJK SC",serif',
+	"stone-song": '"Songti SC","SimSun","Noto Serif CJK SC",serif',
+	"kai-song": '"KaiTi","STKaiti","Songti SC","SimSun",serif',
+	"serif-en": 'Georgia,"Times New Roman","Songti SC",serif',
+	gothic: '"Yu Gothic","Meiryo","Microsoft YaHei","PingFang SC",sans-serif',
+	editorial: '"Didot","Bodoni 72","Songti SC",serif',
+	humanist: '"Optima","Gill Sans","PingFang SC","Microsoft YaHei",sans-serif',
+	mono: '"SFMono-Regular","Cascadia Code","Consolas","Microsoft YaHei",monospace',
+	display: '"Arial Black","Impact","Microsoft YaHei","PingFang SC",sans-serif',
+};
+const FONT_WEIGHTS: Record<string, number> = {
+	sans: 760,
+	hei: 900,
+	song: 760,
+	"bold-song": 900,
+	"stone-song": 860,
+	"kai-song": 760,
+	"serif-en": 740,
+	gothic: 820,
+	editorial: 760,
+	humanist: 740,
+	mono: 760,
+	display: 900,
+};
 
 function clampRange(v: number, min: number, max: number): number {
 	if (Number.isNaN(v)) return min;
@@ -19,13 +48,18 @@ export interface LyricFontConfig {
 
 export function normalizeFontKey(key: string | undefined): string {
 	const k = String(key ?? "").trim().toLowerCase();
-	return k === "stone-song" ? "stone-song" : "default";
+	return Object.prototype.hasOwnProperty.call(FONT_STACKS, k) ? k : "hei";
 }
 
 export function resolveFontConfig(opts: LyricTextOptions | undefined): LyricFontConfig {
+	const key = normalizeFontKey(opts?.lyricFont);
+	const rawWeight = Number(opts?.lyricWeight);
+	const weight = Number.isFinite(rawWeight)
+		? Math.round(clampRange(rawWeight, 500, 900) / 50) * 50
+		: FONT_WEIGHTS[key] ?? DEFAULT_FONT_WEIGHT;
 	return {
-		weight: DEFAULT_FONT_WEIGHT,
-		stack: DEFAULT_FONT_STACK,
+		weight,
+		stack: FONT_STACKS[key] ?? DEFAULT_FONT_STACK,
 	};
 }
 

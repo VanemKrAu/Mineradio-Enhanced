@@ -453,6 +453,15 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				isPlayingSupplier: () => refs.isPlayingRef.current,
 				lyricLinesSupplier: () => refs.lyricLinesRef.current,
 				getShelfVisibility: () => shelfManager.getShelfVisibility(),
+				lyricTextOptionsSupplier: () => {
+					const fx = mergeFxState(mergeFxState(cloneFxState(), refs.fxDefaults), refs.fxRef?.current);
+					return {
+						lyricFont: fx.lyricFont,
+						lyricLetterSpacing: fx.lyricLetterSpacing,
+						lyricLineHeight: fx.lyricLineHeight,
+						lyricWeight: fx.lyricWeight,
+					};
+				},
 				pixelScale: 1,
 				reduceMotion: prefersReducedMotion,
 			});

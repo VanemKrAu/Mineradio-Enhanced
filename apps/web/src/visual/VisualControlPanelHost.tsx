@@ -102,6 +102,7 @@ export interface VisualControlPanelHostProps {
 	onPresetChange?: (preset: number) => void;
 	onNumberSettingChange?: (key: keyof FxState, value: number) => void;
 	onBooleanSettingChange?: (key: keyof FxState, value: boolean) => void;
+	onStringSettingChange?: (key: keyof FxState, value: string) => void;
 }
 
 function numberValue(props: VisualControlPanelHostProps, key: keyof FxState): number {
@@ -216,7 +217,15 @@ export function VisualControlPanelHost(props: VisualControlPanelHostProps): Reac
 						<div className="fx-section-label">歌词字体</div>
 						<div className="fx-font-grid expanded" id="lyric-font-grid">
 							{LYRIC_FONTS.map(([key, label]) => (
-								<button key={key} type="button" data-font={key} className={(props.settings?.lyricFont ?? FX_DEFAULTS.lyricFont) === key ? "active" : ""}>{label}</button>
+								<button
+									key={key}
+									type="button"
+									data-font={key}
+									className={(props.settings?.lyricFont ?? FX_DEFAULTS.lyricFont) === key ? "active" : ""}
+									onClick={() => props.onStringSettingChange?.("lyricFont", key)}
+								>
+									{label}
+								</button>
 							))}
 						</div>
 						{LYRIC_LAYOUT_SLIDERS.map(slider)}

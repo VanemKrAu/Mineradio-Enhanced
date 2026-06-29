@@ -253,6 +253,7 @@ export function App({
 	const setVisualPreset = useVisualStore((s) => s.setPreset);
 	const setVisualNumberSetting = useVisualStore((s) => s.setNumberSetting);
 	const setVisualBooleanSetting = useVisualStore((s) => s.setBooleanSetting);
+	const setVisualStringSetting = useVisualStore((s) => s.setStringSetting);
 	const consoleVisible = useUiStore((s) => s.consoleVisible);
 	const setConsole = useUiStore((s) => s.setConsole);
 	const miniQueueOpen = useUiStore((s) => s.miniQueueOpen);
@@ -804,6 +805,11 @@ export function App({
 		if (key === "wallpaperMode") showToast("壁纸模式开发中，暂不可用");
 	}, [setVisualBooleanSetting, showToast]);
 
+	const updateVisualStringSetting = useCallback((key: keyof typeof visualFx, value: string) => {
+		setVisualStringSetting(key, value);
+		saveVisualFxToStorage();
+	}, [setVisualStringSetting]);
+
 	const setPlaybackQuality = useCallback((quality: PlaybackQuality) => {
 		setPlaybackQualityState(quality);
 		savePlaybackQualityPreference(quality);
@@ -1277,6 +1283,7 @@ export function App({
 				onPresetChange={updateVisualPreset}
 				onNumberSettingChange={updateVisualNumberSetting}
 				onBooleanSettingChange={updateVisualBooleanSetting}
+				onStringSettingChange={updateVisualStringSetting}
 			/>
 			<EmptyHomeHost
 				onSearchFocus={focusSearch}

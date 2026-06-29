@@ -58,6 +58,7 @@ test("VisualControlPanelHost opens the panel and emits baseline preset/setting c
 			onPresetChange: (preset) => calls.push(`preset:${preset}`),
 			onNumberSettingChange: (key, value) => calls.push(`${key}:${value}`),
 			onBooleanSettingChange: (key, value) => calls.push(`${key}:${value}`),
+			onStringSettingChange: (key, value) => calls.push(`${key}:${value}`),
 		}),
 	);
 	await new Promise((resolve) => setTimeout(resolve, 0));
@@ -72,12 +73,14 @@ test("VisualControlPanelHost opens the panel and emits baseline preset/setting c
 	const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
 	valueSetter?.call(intensity, "1.2");
 	intensity.dispatchEvent(new window.Event("input", { bubbles: true }));
+	(container.querySelector('[data-font="stone-song"]') as HTMLButtonElement).click();
 	(container.querySelector("#t-cinema") as HTMLButtonElement).click();
 	(container.querySelector("#t-wallpaperMode") as HTMLButtonElement).click();
 
 	expect(calls).toEqual([
 		"preset:4",
 		"intensity:1.2",
+		"lyricFont:stone-song",
 		"cinema:false",
 	]);
 	root.unmount();

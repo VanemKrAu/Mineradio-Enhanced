@@ -301,6 +301,48 @@ test("tickLyricsParticles advances currentIdx to 1 when currentTime reaches line
 	expect((scene.children as unknown[]).length).toBe(0);
 });
 
+test("tickLyricsParticles passes live lyric text options into the built lyric group and rebuilds when they change", async () => {
+	const textOptions = {
+		lyricFont: "stone-song",
+		lyricLetterSpacing: 0.12,
+		lyricLineHeight: 1.24,
+		lyricWeight: 800,
+	};
+	const scene = makeFakeScene();
+	const lifecycle = createStageLyricsLifecycle({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		lyricLinesSupplier: () => [{ t: 0, text: "Stone lyric" }] as never,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		dotTexture: makeFakeDotTexture(),
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0,
+		lyricGlowBeatFlagSupplier: () => false,
+		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		lyricTextOptionsSupplier: () => textOptions,
+		rand: () => 0.35,
+	});
+	await lifecycle.mount(scene as never);
+	lifecycle.setLyricLines([{ t: 0, text: "Stone lyric" }]);
+	lifecycle.update(makeCtx(0.5, 0.1));
+	await lifecycle.whenIdle();
+	const groupA = lifecycle.group as unknown as { children: Array<{ userData: { lyric?: { mask?: { fontSize: number; lineHeight: number }; textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } } }> };
+	const firstLyric = groupA.children[0]?.userData.lyric;
+	expect(firstLyric?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.12|1.24|800");
+	expect(firstLyric?.mask?.lineHeight).toBeGreaterThan((firstLyric?.mask?.fontSize ?? 0) * 1.2);
+
+	textOptions.lyricLetterSpacing = 0.03;
+	lifecycle.update(makeCtx(0.6, 0.1));
+	await lifecycle.whenIdle();
+	const groupB = lifecycle.group as unknown as { children: Array<{ userData: { lyric?: { textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } } }> };
+	expect(groupB.children[0]?.userData.lyric?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.03|1.24|800");
+	lifecycle.dispose();
+});
+
 test("tickLyricsParticles intro fallback sets currentIdx=-2 when currentTime < first line t", async () => {
 	const intros: RecordedCall[] = [];
 	const lc = createStageLyricsLifecycle({

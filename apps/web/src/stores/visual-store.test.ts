@@ -25,6 +25,7 @@ test("visual store actions update state and serialize", () => {
 	useVisualStore.getState().setIntensity(0.3);
 	useVisualStore.getState().setNumberSetting("depth", 1.4);
 	useVisualStore.getState().setBooleanSetting("cinema", false);
+	useVisualStore.getState().setStringSetting("lyricFont", "stone-song");
 	useVisualStore.getState().setCustom("hue", 200);
 	const serialized = useVisualStore.getState().serialize();
 	expect(serialized.preset).toBe("4");
@@ -32,6 +33,7 @@ test("visual store actions update state and serialize", () => {
 	expect(serialized.custom.hue).toBe(200);
 	expect(useVisualStore.getState().fx.depth).toBe(1.4);
 	expect(useVisualStore.getState().fx.cinema).toBe(false);
+	expect(useVisualStore.getState().fx.lyricFont).toBe("stone-song");
 });
 
 test("loadVisualFxFromStorage accepts baseline numeric fx state and keeps wallpaper mode disabled", () => {
@@ -45,10 +47,25 @@ test("loadVisualFxFromStorage accepts baseline numeric fx state and keeps wallpa
 		intensity: 1.2,
 		wallpaperMode: true,
 		cinema: false,
+		lyricFont: "kai-song",
 	}));
 	const fx = loadVisualFxFromStorage(fakeStorage);
 	expect(fx?.preset).toBe(6);
 	expect(fx?.intensity).toBe(1.2);
 	expect(fx?.cinema).toBe(false);
 	expect(fx?.wallpaperMode).toBe(false);
+	expect(fx?.lyricFont).toBe("kai-song");
+});
+
+test("loadVisualFxFromStorage normalizes unsupported lyric font keys", () => {
+	const storage = new Map<string, string>();
+	const fakeStorage = {
+		getItem: (key: string) => storage.get(key) ?? null,
+		setItem: (key: string, value: string) => { storage.set(key, value); },
+	};
+	fakeStorage.setItem(VISUAL_SETTINGS_STORE_KEY, JSON.stringify({
+		lyricFont: "Papyrus",
+	}));
+	const fx = loadVisualFxFromStorage(fakeStorage);
+	expect(fx?.lyricFont).toBe("hei");
 });

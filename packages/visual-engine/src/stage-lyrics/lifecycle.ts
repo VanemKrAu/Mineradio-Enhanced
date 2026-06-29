@@ -31,6 +31,7 @@ import {
 	getLyricLineProgress,
 	type LyricLine,
 } from "./lyric-line-progress";
+import { normalizeFontKey, type LyricTextOptions } from "./lyric-text";
 
 export interface StageLyricsLifecycleOpts {
 	scene?: THREE.Scene | null;
@@ -49,6 +50,7 @@ export interface StageLyricsLifecycleOpts {
 	lyricGlowParticlesSupplier?: () => boolean;
 	lyricGlowStrengthSupplier?: () => number;
 	lyricGlowBeatFlagSupplier?: () => boolean;
+	lyricTextOptionsSupplier?: () => LyricTextOptions;
 	lyricSunEnergyHolder?: { get(): number; set(v: number): void };
 	getBeatCamKick?: () => {
 		thetaKick: number;
@@ -153,6 +155,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		activeBobTimeline: null as GsapTimelineLike | null,
 		buildToken: 0,
 		activeBuilds: 0,
+		textOptionsSignature: "",
 		pendingBuildPromise: null as Promise<void> | null,
 		paletteRuntime: new LyricPaletteRuntime(opts.palette),
 		reduceMotionFlag: false,
@@ -201,6 +204,20 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 
 	function getSkullShelfOpen(): boolean {
 		return typeof opts.getSkullShelfOpen === "function" ? !!opts.getSkullShelfOpen() : false;
+	}
+
+	function getLyricTextOptions(): LyricTextOptions {
+		const raw = opts.lyricTextOptionsSupplier?.() ?? {};
+		return {
+			lyricFont: normalizeFontKey(raw.lyricFont),
+			lyricLetterSpacing: clamp(Number(raw.lyricLetterSpacing) || 0, -0.04, 0.18),
+			lyricLineHeight: clamp(Number(raw.lyricLineHeight) || 1, 0.86, 1.35),
+			lyricWeight: Math.round(clamp(Number(raw.lyricWeight) || 900, 500, 900) / 50) * 50,
+		};
+	}
+
+	function textOptionsSignature(opts0: LyricTextOptions): string {
+		return `${opts0.lyricFont ?? ""}|${opts0.lyricLetterSpacing ?? ""}|${opts0.lyricLineHeight ?? ""}|${opts0.lyricWeight ?? ""}`;
 	}
 
 	function getShelfProfile() {
@@ -329,6 +346,8 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			state.current = null;
 		}
 		state.currentText = text;
+		const textOptions = getLyricTextOptions();
+		state.textOptionsSignature = textOptionsSignature(textOptions);
 		state.buildToken += 1;
 		const token = state.buildToken;
 		state.activeBuilds += 1;
@@ -342,6 +361,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 					pixelScale: opts.pixelScale,
 					lyricGlowParticles: opts.lyricGlowParticlesSupplier ? opts.lyricGlowParticlesSupplier() : false,
 					lyricsHasNativeKaraoke,
+					...textOptions,
 					rand: opts.rand,
 				});
 				if (state.disposed || token !== state.buildToken) {
@@ -449,6 +469,18 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			showStageLine(lines[newIdx].text || "", false);
 		}
 		if (state.current) {
+			const signature = textOptionsSignature(getLyricTextOptions());
+			if (state.currentText && signature !== state.textOptionsSignature) {
+				const progress = (state.current.group as unknown as { userData: { lastLyricProgress?: number } }).userData.lastLyricProgress ?? 0;
+				showStageLine(state.currentText, true);
+				if (state.current) {
+					updateLyricGroupProgress(
+						{ group: state.current.group, textMat: state.current.textMat },
+						progress,
+					);
+				}
+				return;
+			}
 			const curLine = lines[newIdx] || ({ t: nowSeconds } as LyricLine);
 			const nextLine = lines[newIdx + 1];
 			const audioDur = opts.audioDurationSupplier ? opts.audioDurationSupplier() : NaN;
