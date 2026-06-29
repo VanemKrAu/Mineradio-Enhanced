@@ -2052,6 +2052,7 @@ export function App({
         controllerRef={controllerRef}
         lyricsPayload={lyricsPayload}
         positionMs={positionMs}
+        durationMs={durationMs}
         isPlaying={isPlaying}
         queue={queue}
         playlists={shelfPlaylists}

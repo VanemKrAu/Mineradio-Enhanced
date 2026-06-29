@@ -21,13 +21,18 @@ export function mapQueueToShelfItems(queue: Track[], currentTrack: Track | null)
 	});
 }
 
-function providerTag(provider: PlaylistSummary["provider"]): string {
-	return provider === "netease" ? "网易云" : "QQ 音乐";
+function providerAbbr(provider: PlaylistSummary["provider"]): string {
+	return provider === "netease" ? "NE" : "QQ";
 }
 
-function playlistSub(trackCount: number | undefined): string {
-	if (typeof trackCount !== "number") return "";
-	return `${trackCount} 首`;
+function playlistTag(playlist: PlaylistSummary): string {
+	return playlist.subscribed ? "收藏歌单" : "我的歌单";
+}
+
+function playlistSub(provider: PlaylistSummary["provider"], trackCount: number | undefined): string {
+	const prefix = providerAbbr(provider);
+	if (typeof trackCount !== "number") return prefix;
+	return `${prefix} · ${trackCount} 首`;
 }
 
 export function mapPlaylistsToShelfItems(playlists: PlaylistSummary[]): ShelfItem[] {
@@ -36,9 +41,9 @@ export function mapPlaylistsToShelfItems(playlists: PlaylistSummary[]): ShelfIte
 		.map((playlist) => ({
 			type: "playlist",
 			title: playlist.name,
-			sub: playlistSub(playlist.trackCount),
+			sub: playlistSub(playlist.provider, playlist.trackCount),
 			cover: playlist.coverUrl,
-			tag: providerTag(playlist.provider),
+			tag: playlistTag(playlist),
 			playlistId: playlist.id,
 			provider: playlist.provider,
 		}));

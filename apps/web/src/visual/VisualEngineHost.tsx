@@ -22,6 +22,7 @@ export interface VisualEngineHostProps {
 	controllerRef: RefObject<PlayerController | null>;
 	lyricsPayload: LyricPayload | null;
 	positionMs: number;
+	durationMs?: number | null;
 	isPlaying: boolean;
 	queue?: Track[];
 	playlists?: PlaylistSummary[];
@@ -46,6 +47,8 @@ export interface VisualEngineHostProps {
 }
 
 export type DesktopLyricsMotionSnapshot = StageLyricsMotionSnapshot;
+
+export { createStageLyricsHostSuppliers } from "./useVisualEngine";
 
 export function resolveVisualShelfSettings(
 	fxDefaults: Partial<FxState> | undefined,
@@ -130,12 +133,23 @@ export function syncDesktopLyricsMotionRef(
 	target.current = lifecycle.getMotionSnapshot();
 }
 
+function trackFallbackText(track: Track | null | undefined): string {
+	if (!track) return "";
+	const title = String(track.title || "").trim();
+	const artist = (track.artists ?? []).map((name) => String(name || "").trim()).filter(Boolean).join(" / ");
+	if (title && artist) return `${title} - ${artist}`;
+	return title || artist;
+}
+
 export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const hostRef = useRef<HTMLDivElement | null>(null);
 	const [shelfPane, setShelfPane] = useState<ShelfPane>("mine");
 	const positionRef = useRef<number>(props.positionMs);
+	const durationMsRef = useRef<number | null | undefined>(props.durationMs ?? props.currentTrack?.durationMs ?? null);
 	const isPlayingRef = useRef<boolean>(props.isPlaying);
 	const lyricLinesRef = useRef<VisualLyricLine[]>(mapLyricPayload(props.lyricsPayload));
+	const fallbackTextRef = useRef<string>(trackFallbackText(props.currentTrack));
+	const lyricsHasNativeKaraokeRef = useRef<boolean>(props.lyricsPayload?.isWordByWord === true);
 	const shelfItemsRef = useRef<ShelfItem[]>([]);
 	const shelfItemsVersionRef = useRef<number>(0);
 	const coverUrlRef = useRef<string>(resolveVisualCoverUrlForSidecar(resolveVisualCoverUrl(props.currentCoverUrl, props.currentTrack), props.sidecarBaseUrl));
@@ -164,7 +178,10 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const fxStateRef = useRef<Partial<FxState> | undefined>(props.fxState);
 
 	positionRef.current = props.positionMs;
+	durationMsRef.current = props.durationMs ?? props.currentTrack?.durationMs ?? null;
 	isPlayingRef.current = props.isPlaying;
+	fallbackTextRef.current = trackFallbackText(props.currentTrack);
+	lyricsHasNativeKaraokeRef.current = props.lyricsPayload?.isWordByWord === true;
 	splashActiveRef.current = props.splashActive ?? false;
 	homeActiveRef.current = props.homeActive ?? false;
 	secondaryLeftDisplaySeamGuardRef.current = props.secondaryLeftDisplaySeamGuardActive ?? false;
@@ -251,8 +268,11 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		hostRef,
 		audioElementRef: props.audioElementRef,
 		positionRef,
+		durationMsRef,
 		isPlayingRef,
 		lyricLinesRef,
+		fallbackTextRef,
+		lyricsHasNativeKaraokeRef,
 		shelfItemsRef,
 		shelfItemsVersionRef,
 		coverUrlRef,

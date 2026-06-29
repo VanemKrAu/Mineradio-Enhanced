@@ -1230,6 +1230,107 @@ test("ShelfManager detail group intro settles against visual uTime instead of wa
 	expect(settledGroup?.scale.x).toBeCloseTo(detail.scale, 5);
 });
 
+test("ShelfManager starts baseline rowSettle intro when detail rows finish loading", async () => {
+	const three = await import("three");
+	const scene = new three.Scene();
+	const group = new three.Group();
+	scene.add(group);
+	const camera = new three.OrthographicCamera(-5, 5, 4, -4, 0.1, 100);
+	camera.position.set(0, 0, 10);
+	camera.lookAt(0, 0, 0);
+	camera.updateMatrixWorld(true);
+	camera.updateProjectionMatrix();
+	const uniforms = createRuntimeUniforms();
+	uniforms.uTime.value = 2;
+	const m = createShelfManager({ scene, group, three, document: makeCanvasDocument() });
+
+	m.setShelfVisibility(1);
+	m.openDetail(0, { playlistId: "p1", title: "Detail" });
+	m.update({
+		...makeCtx(uniforms, 16),
+		camera: camera as unknown as FrameContext["camera"],
+		pointerParallax: { x: 0, y: 0 },
+		viewport: { width: 1000, height: 800 },
+	} as FrameContext & { viewport: { width: number; height: number } });
+	expect(group.userData.rowSettle ?? 0).toBe(0);
+
+	m.getContentList()?.setRows([{ id: "song-0", name: "Song 0", artist: "Artist 0" }]);
+	m.update({
+		...makeCtx(uniforms, 32),
+		camera: camera as unknown as FrameContext["camera"],
+		pointerParallax: { x: 0, y: 0 },
+		viewport: { width: 1000, height: 800 },
+	} as FrameContext & { viewport: { width: number; height: number } });
+	expect(group.userData.rowSettle).toBe(1);
+
+	uniforms.uTime.value = 2.38;
+	m.update({
+		...makeCtx(uniforms, 48),
+		camera: camera as unknown as FrameContext["camera"],
+		pointerParallax: { x: 0, y: 0 },
+		viewport: { width: 1000, height: 800 },
+	} as FrameContext & { viewport: { width: number; height: number } });
+	expect(group.userData.rowSettle).toBeGreaterThan(0);
+	expect(group.userData.rowSettle).toBeLessThan(1);
+
+	uniforms.uTime.value = 2.9;
+	m.update({
+		...makeCtx(uniforms, 64),
+		camera: camera as unknown as FrameContext["camera"],
+		pointerParallax: { x: 0, y: 0 },
+		viewport: { width: 1000, height: 800 },
+	} as FrameContext & { viewport: { width: number; height: number } });
+	expect(group.userData.rowSettle).toBe(0);
+});
+
+test("ShelfManager does not replay rowSettle intro while scrolling already-loaded detail rows", async () => {
+	const three = await import("three");
+	const scene = new three.Scene();
+	const group = new three.Group();
+	scene.add(group);
+	const camera = new three.OrthographicCamera(-5, 5, 4, -4, 0.1, 100);
+	camera.position.set(0, 0, 10);
+	camera.lookAt(0, 0, 0);
+	camera.updateMatrixWorld(true);
+	camera.updateProjectionMatrix();
+	const uniforms = createRuntimeUniforms();
+	uniforms.uTime.value = 4;
+	const m = createShelfManager({ scene, group, three, document: makeCanvasDocument() });
+
+	m.setShelfVisibility(1);
+	m.openDetail(0, { playlistId: "p1", title: "Detail" });
+	m.getContentList()?.setRows(Array.from({ length: 20 }, (_, index) => ({
+		id: `song-${index}`,
+		name: `Song ${index}`,
+		artist: `Artist ${index}`,
+	})));
+	m.update({
+		...makeCtx(uniforms, 16),
+		camera: camera as unknown as FrameContext["camera"],
+		pointerParallax: { x: 0, y: 0 },
+		viewport: { width: 1000, height: 800 },
+	} as FrameContext & { viewport: { width: number; height: number } });
+	expect(group.userData.rowSettle).toBe(1);
+
+	uniforms.uTime.value = 4.9;
+	m.update({
+		...makeCtx(uniforms, 32),
+		camera: camera as unknown as FrameContext["camera"],
+		pointerParallax: { x: 0, y: 0 },
+		viewport: { width: 1000, height: 800 },
+	} as FrameContext & { viewport: { width: number; height: number } });
+	expect(group.userData.rowSettle).toBe(0);
+
+	m.getContentList()?.scrollBy(8);
+	m.update({
+		...makeCtx(uniforms, 48),
+		camera: camera as unknown as FrameContext["camera"],
+		pointerParallax: { x: 0, y: 0 },
+		viewport: { width: 1000, height: 800 },
+	} as FrameContext & { viewport: { width: number; height: number } });
+	expect(group.userData.rowSettle).toBe(0);
+});
+
 test("ShelfManager refreshes detail group world matrix before syncing screen targets", async () => {
 	const three = await import("three");
 	const scene = new three.Scene();

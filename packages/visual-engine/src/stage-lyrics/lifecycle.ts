@@ -67,6 +67,7 @@ export interface StageLyricsLifecycleOpts {
 	fallbackTextSupplier?: () => string;
 	particleLyricsFlagSupplier?: () => boolean;
 	lyricsHasNativeKaraoke?: boolean;
+	lyricsHasNativeKaraokeSupplier?: () => boolean;
 	reduceMotion?: () => boolean;
 	rand?: () => number;
 }
@@ -701,7 +702,9 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		const promise = (async () => {
 			try {
 				const palette = state.paletteRuntime.get();
-				const lyricsHasNativeKaraoke = !!opts.lyricsHasNativeKaraoke;
+				const lyricsHasNativeKaraoke = opts.lyricsHasNativeKaraokeSupplier
+					? !!opts.lyricsHasNativeKaraokeSupplier()
+					: !!opts.lyricsHasNativeKaraoke;
 				const lyric = await buildLyricGroup(text, palette, {
 					threeFactory,
 					dotTexture: opts.dotTexture,

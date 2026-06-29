@@ -8,6 +8,7 @@ import {
 	resolveVisualShelfSettings,
 	syncRuntimeShelfModeOverride,
 	syncDesktopLyricsMotionRef,
+	createStageLyricsHostSuppliers,
 	mapLyricPayload,
 	countShelfPanePlaylists,
 	VisualEngineHost,
@@ -145,4 +146,20 @@ test("syncDesktopLyricsMotionRef copies lifecycle motion snapshot into a mutable
 		beatPulse: 1.1,
 		bass: 0.64,
 	});
+});
+
+test("createStageLyricsHostSuppliers bridges baseline duration, fallback, particles and native karaoke flags", () => {
+	const suppliers = createStageLyricsHostSuppliers({
+		durationMsRef: { current: 210000 },
+		fallbackTextRef: { current: "Song A - Artist" },
+		lyricsHasNativeKaraokeRef: { current: true },
+		fxDefaults: { particleLyrics: true, lyricGlowParticles: false },
+		fxRef: { current: { particleLyrics: false, lyricGlowParticles: true } },
+	});
+
+	expect(suppliers.audioDurationSupplier()).toBe(210);
+	expect(suppliers.fallbackTextSupplier()).toBe("Song A - Artist");
+	expect(suppliers.particleLyricsFlagSupplier()).toBe(false);
+	expect(suppliers.lyricGlowParticlesSupplier()).toBe(true);
+	expect(suppliers.lyricsHasNativeKaraokeSupplier()).toBe(true);
 });

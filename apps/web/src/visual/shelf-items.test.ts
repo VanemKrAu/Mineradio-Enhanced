@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlaylistSummary, PodcastCollection, Track } from "@mineradio/shared";
-import { mapPodcastCollectionsToShelfItems, mapQueueToShelfItems, resolveShelfItems } from "./shelf-items";
+import { mapPlaylistsToShelfItems, mapPodcastCollectionsToShelfItems, mapQueueToShelfItems, resolveShelfItems } from "./shelf-items";
 
 function track(
 	id: string,
@@ -96,21 +96,53 @@ test("resolveShelfItems prefers merged provider playlists over queue fallback fo
 		{
 			type: "playlist",
 			title: "我喜欢的音乐",
-			sub: "12 首",
+			sub: "NE · 12 首",
 			cover: "cover-like",
-			tag: "网易云",
+			tag: "我的歌单",
 			playlistId: "101",
 			provider: "netease",
 		},
 		{
 			type: "playlist",
 			title: "QQ 收藏",
-			sub: "3 首",
+			sub: "QQ · 3 首",
 			cover: "cover-qq",
-			tag: "QQ 音乐",
+			tag: "收藏歌单",
 			playlistId: "201",
 			provider: "qq",
 		},
+	]);
+});
+
+test("mapPlaylistsToShelfItems uses baseline provider abbreviations and mine/favorite tags", () => {
+	const playlists: PlaylistSummary[] = [
+		{
+			provider: "netease",
+			id: "mine",
+			name: "网易自建",
+			coverUrl: "mine-cover",
+			trackCount: 21,
+			trackIds: [],
+			subscribed: false,
+		},
+		{
+			provider: "qq",
+			id: "fav",
+			name: "QQ 收藏",
+			coverUrl: "fav-cover",
+			trackCount: 8,
+			trackIds: [],
+			subscribed: true,
+		},
+	];
+
+	expect(mapPlaylistsToShelfItems(playlists).map((item) => ({
+		title: item.title,
+		sub: item.sub,
+		tag: item.tag,
+	}))).toEqual([
+		{ title: "网易自建", sub: "NE · 21 首", tag: "我的歌单" },
+		{ title: "QQ 收藏", sub: "QQ · 8 首", tag: "收藏歌单" },
 	]);
 });
 
@@ -180,9 +212,9 @@ test("resolveShelfItems appends podcast collections after provider playlists bef
 		{
 			type: "playlist",
 			title: "我喜欢的音乐",
-			sub: "12 首",
+			sub: "NE · 12 首",
 			cover: "cover-like",
-			tag: "网易云",
+			tag: "我的歌单",
 			playlistId: "101",
 			provider: "netease",
 		},
@@ -226,9 +258,9 @@ test("resolveShelfItems hides podcast collections when the baseline content swit
 	})).toEqual([{
 		type: "playlist",
 		title: "我的歌单",
-		sub: "12 首",
+		sub: "NE · 12 首",
 		cover: "cover-like",
-		tag: "网易云",
+		tag: "我的歌单",
 		playlistId: "101",
 		provider: "netease",
 	}]);

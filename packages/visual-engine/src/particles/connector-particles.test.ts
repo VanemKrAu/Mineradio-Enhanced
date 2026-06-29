@@ -8,7 +8,27 @@ import type { RuntimeUniforms } from "../runtime/uniforms";
 
 function makeFakeThree(): ThreeFactory {
 	const Points = function (geo: unknown, mat: unknown) {
-		return { isPoints: true, geometry: geo, material: mat, frustumCulled: true, renderOrder: 0, visible: true };
+		return {
+			isPoints: true,
+			geometry: geo,
+			material: mat,
+			frustumCulled: true,
+			renderOrder: 0,
+			visible: true,
+			position: { x: 0, y: 0, z: 0, set(x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; } },
+		};
+	} as never;
+	const Mesh = function (geo: unknown, mat: unknown) {
+		return {
+			isMesh: true,
+			geometry: geo,
+			material: mat,
+			frustumCulled: true,
+			renderOrder: 0,
+			visible: true,
+			position: { x: 0, y: 0, z: 0, set(x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; } },
+			rotation: { x: 0, y: 0, z: 0 },
+		};
 	} as never;
 	const ShaderMaterial = function (params: Record<string, unknown>) {
 		return {
@@ -30,6 +50,7 @@ function makeFakeThree(): ThreeFactory {
 	const BufferGeometry = function () {
 		return {
 			attributes: {} as Record<string, { array: Float32Array; itemSize: number; count: number }>,
+			parameters: {},
 			disposed: false,
 			setAttribute(name: string, attr: { array: Float32Array; itemSize: number; count: number }) {
 				this.attributes[name] = attr;
@@ -37,11 +58,24 @@ function makeFakeThree(): ThreeFactory {
 			dispose() { this.disposed = true; },
 		};
 	} as never;
+	const PlaneGeometry = function (width: number, height: number) {
+		return { parameters: { width, height }, disposed: false, dispose() { this.disposed = true; } };
+	} as never;
+	const CanvasTexture = function (canvas: unknown) {
+		return { canvas, generateMipmaps: true, disposed: false, dispose() { this.disposed = true; } };
+	} as never;
+	const MeshBasicMaterial = function (params: Record<string, unknown>) {
+		return { ...params, disposed: false, dispose() { this.disposed = true; } };
+	} as never;
 	const module = {
 		Points,
+		Mesh,
 		ShaderMaterial,
 		BufferAttribute,
 		BufferGeometry,
+		PlaneGeometry,
+		CanvasTexture,
+		MeshBasicMaterial,
 		AdditiveBlending: 2,
 	};
 	return (() => module) as unknown as ThreeFactory;
@@ -58,7 +92,7 @@ function makeFakeScene() {
 	};
 }
 
-test("createConnectorParticles builds geometry with position(3)*36 / aRand(1)*36 / aT(1)*36", async () => {
+test("createConnectorParticles builds baseline stage extras with 80 colored random points", async () => {
 	const scene = makeFakeScene();
 	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
 	const geo = (cp.object as unknown as {
@@ -68,19 +102,18 @@ test("createConnectorParticles builds geometry with position(3)*36 / aRand(1)*36
 	}).geometry;
 	const attrs = geo.attributes;
 	expect(attrs.position.itemSize).toBe(3);
-	expect(attrs.position.count).toBe(36);
-	expect(attrs.position.array.length).toBe(3 * 36);
+	expect(attrs.position.count).toBe(80);
+	expect(attrs.position.array.length).toBe(3 * 80);
+	expect(attrs.aColor.itemSize).toBe(3);
+	expect(attrs.aColor.count).toBe(80);
 	expect(attrs.aRand.itemSize).toBe(1);
-	expect(attrs.aRand.count).toBe(36);
-	expect(attrs.aT.itemSize).toBe(1);
-	expect(attrs.aT.count).toBe(36);
+	expect(attrs.aRand.count).toBe(80);
 });
 
 test("createConnectorParticles adds Points to scene; frustumCulled=false; material additive/transparent/depthTest=false", async () => {
 	const scene = makeFakeScene();
 	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
-	expect((scene.tracked as unknown[]).length).toBe(1);
-	expect(scene.tracked[0]).toBe(cp.object);
+	expect((scene.tracked as unknown[])).toContain(cp.object);
 	const obj = cp.object as unknown as { frustumCulled: boolean };
 	expect(obj.frustumCulled).toBe(false);
 	const mat = (cp.object as unknown as { material: Record<string, unknown> }).material;
@@ -92,16 +125,19 @@ test("createConnectorParticles adds Points to scene; frustumCulled=false; materi
 test("createConnectorParticles starts hidden at shelf connector render order", async () => {
 	const scene = makeFakeScene();
 	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
-	const obj = cp.object as unknown as { visible: boolean; renderOrder: number };
+	const obj = cp.object as unknown as { visible: boolean; renderOrder: number; position: { x: number; y: number; z: number } };
 	expect(obj.visible).toBe(false);
 	expect(obj.renderOrder).toBe(49);
+	expect(obj.position.x).toBe(0);
+	expect(obj.position.y).toBe(-2.2);
+	expect(obj.position.z).toBe(0);
 });
 
-test("uniforms match baseline connector/shelf-center names (uTime/uEnergy/uIntensity/uColorMix/uPixel/uTrackScale=1)", async () => {
+test("uniforms match baseline connector names and expose dot texture", async () => {
 	const scene = makeFakeScene();
 	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
 	const uniforms = (cp.object as unknown as { material: { uniforms: Record<string, { value: unknown }> } }).material.uniforms;
-	const expected = ["uTime", "uEnergy", "uIntensity", "uColorMix", "uPixel", "uTrackScale"];
+	const expected = ["uTime", "uEnergy", "uIntensity", "uColorMix", "uPixel", "uTrackScale", "uDotTex"];
 	for (const name of expected) {
 		expect(Object.prototype.hasOwnProperty.call(uniforms, name)).toBe(true);
 	}
@@ -111,12 +147,26 @@ test("uniforms match baseline connector/shelf-center names (uTime/uEnergy/uInten
 	expect(uniforms.uIntensity.value).toBe(0);
 });
 
-test("fragment shader multiplies particle alpha by uIntensity for shelf fade", async () => {
+test("fragment shader samples the baseline dot texture and multiplies alpha by uIntensity", async () => {
 	const scene = makeFakeScene();
 	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
 	const shader = (cp.object as unknown as { material: { fragmentShader: string } }).material.fragmentShader;
 	expect(shader).toContain("uniform float uIntensity;");
+	expect(shader).toContain("texture2D(uDotTex, gl_PointCoord)");
 	expect(shader).toContain("* uIntensity");
+});
+
+test("createConnectorParticles adds baseline floor mirror under the stage extras", async () => {
+	const scene = makeFakeScene();
+	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
+	const mirror = (cp as unknown as { floorMirror: { position: { x: number; y: number; z: number }; rotation: { x: number }; material: { opacity: number } } | null }).floorMirror;
+	expect((scene.tracked as unknown[]).length).toBe(2);
+	expect(mirror).toBeTruthy();
+	expect(mirror?.position.x).toBe(0);
+	expect(mirror?.position.y).toBe(-2.85);
+	expect(mirror?.position.z).toBe(0.4);
+	expect(mirror?.rotation.x).toBeCloseTo(-Math.PI / 2, 6);
+	expect(mirror?.material.opacity).toBe(0.55);
 });
 
 test("update(ctx) flows snapshot.energy into uEnergy and reads uTime from ctx.uniforms.uTime.value", async () => {
@@ -176,11 +226,17 @@ test("reset() rewrites aRand/aT with the given seed", async () => {
 test("dispose removes Points from scene and disposes geometry/material", async () => {
 	const scene = makeFakeScene();
 	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });
+	const points = cp.object;
+	const mirror = (cp as unknown as { floorMirror: { geometry: { disposed: boolean }; material: { disposed: boolean; map?: { disposed: boolean } | null } } | null }).floorMirror;
 	const geo = (cp.object as unknown as { geometry: { dispose: () => void; disposed: boolean } }).geometry;
 	const mat = (cp.object as unknown as { material: { dispose: () => void; disposed: boolean } }).material;
 	cp.dispose();
-	expect((scene.removed as unknown[]).length).toBe(1);
+	expect((scene.removed as unknown[])).toContain(points);
 	expect(geo.disposed).toBe(true);
 	expect(mat.disposed).toBe(true);
+	expect(mirror?.geometry.disposed).toBe(true);
+	expect(mirror?.material.disposed).toBe(true);
+	if (mirror?.material.map) expect(mirror.material.map.disposed).toBe(true);
 	expect(cp.object).toBe(null);
+	expect((cp as unknown as { floorMirror: unknown }).floorMirror).toBe(null);
 });

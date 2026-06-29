@@ -23,8 +23,10 @@ import {
 	CONTENT_MAX_RENDER,
 	computeContentPanelOpacity,
 	createShelfContentList,
+	isShelfContentLoadingRow,
 	type ShelfContentKind,
 	type ShelfContentList,
+	type ShelfContentRow,
 	type ShelfContentSourceCard,
 	type ShelfContentScreenBounds,
 	type ShelfContentScreenRow,
@@ -160,6 +162,8 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 	let detailPanel: ShelfContentPanelSprite | null = null;
 	const detailRows = new Map<number, ShelfContentRowSprite>();
 	let detailRowsSig = "";
+	let detailRowsLoadedContentSig = "";
+	let rowSettleStartedAt = -Infinity;
 
 	return {
 		getState() {
@@ -187,6 +191,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 				state.centerSmooth = state.centerTarget;
 			}
 			if (contentList.isOpen()) contentList.advance(ctx.uniforms.uTime.value);
+			advanceRowSettle(ctx.uniforms.uTime.value);
 			updateShelfVisibility();
 
 			breathPulseLast = computeBreathPulse(
@@ -729,6 +734,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		}).join("|");
 
 		if (sig !== detailRowsSig) {
+			maybeStartRowsLoadedIntro(rows, ctx.uniforms.uTime.value);
 			for (const [index, sprite] of detailRows) {
 				if (indexes.includes(index)) continue;
 				disposeDetailRow(sprite);
@@ -863,6 +869,38 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		return Number.isFinite(rowSettle) ? rowSettle! : 0;
 	}
 
+	function maybeStartRowsLoadedIntro(rows: ShelfContentRow[], nowSeconds: number): void {
+		if (!group || !group.userData) return;
+		if (rows.length === 0) return;
+		if (rows.every((row) => isShelfContentLoadingRow(row))) return;
+		const contentSig = rows.map((row, index) => [
+			index,
+			row.id || "",
+			row.name || "",
+			row.artist || "",
+			row.kind || "",
+			row.provider || "",
+		].join(":")).join("|");
+		if (!contentSig || contentSig === detailRowsLoadedContentSig) return;
+		detailRowsLoadedContentSig = contentSig;
+		rowSettleStartedAt = nowSeconds;
+		group.userData.rowSettle = 1;
+	}
+
+	function advanceRowSettle(nowSeconds: number): void {
+		if (!group || !group.userData) return;
+		const current = group.userData.rowSettle;
+		if (!Number.isFinite(current) || current <= 0) return;
+		const elapsed = nowSeconds - rowSettleStartedAt;
+		if (!Number.isFinite(elapsed) || elapsed <= 0) return;
+		if (elapsed >= 0.76) {
+			group.userData.rowSettle = 0;
+			return;
+		}
+		const t = Math.max(0, Math.min(1, elapsed / 0.76));
+		group.userData.rowSettle = Math.pow(2, -10 * t);
+	}
+
 	function disposeDetailContentMeshes(): void {
 		disposeDetailRows();
 		if (detailPanel) {
@@ -880,6 +918,9 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 			}
 			detailGroup = null;
 		}
+		detailRowsLoadedContentSig = "";
+		rowSettleStartedAt = -Infinity;
+		if (group?.userData) group.userData.rowSettle = 0;
 	}
 
 	function disposeDetailRows(): void {

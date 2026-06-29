@@ -33,6 +33,7 @@ import {
 	type ShelfPane,
 	type ShelfSelectSoundPlayer,
 	type StageLyricsLifecycle,
+	type StageLyricsLifecycleOpts,
 	type StageLyricsMotionSnapshot,
 } from "@mineradio/visual-engine";
 import {
@@ -56,8 +57,11 @@ export interface VisualEngineRefs {
 	hostRef: RefObject<HTMLDivElement | null>;
 	audioElementRef: RefObject<HTMLAudioElement | null>;
 	positionRef: RefObject<number>;
+	durationMsRef?: RefObject<number | null | undefined>;
 	isPlayingRef: RefObject<boolean>;
 	lyricLinesRef: RefObject<VisualLyricLine[]>;
+	fallbackTextRef?: RefObject<string>;
+	lyricsHasNativeKaraokeRef?: RefObject<boolean>;
 	shelfItemsRef: RefObject<ShelfItem[]>;
 	shelfItemsVersionRef: RefObject<number>;
 	splashActiveRef: RefObject<boolean>;
@@ -126,6 +130,31 @@ function mergeFxState(target: FxState, source: Partial<FxState> | undefined): Fx
 	Object.assign(target, source);
 	if (source.mouseXy) target.mouseXy = { ...target.mouseXy, ...source.mouseXy };
 	return target;
+}
+
+export interface StageLyricsHostSupplierRefs {
+	durationMsRef?: RefObject<number | null | undefined>;
+	fallbackTextRef?: RefObject<string>;
+	lyricsHasNativeKaraokeRef?: RefObject<boolean>;
+	fxDefaults?: Partial<FxState>;
+	fxRef?: RefObject<Partial<FxState> | undefined>;
+}
+
+export function createStageLyricsHostSuppliers(input: StageLyricsHostSupplierRefs): Required<Pick<
+	StageLyricsLifecycleOpts,
+	"audioDurationSupplier" | "fallbackTextSupplier" | "particleLyricsFlagSupplier" | "lyricGlowParticlesSupplier" | "lyricsHasNativeKaraokeSupplier"
+>> {
+	const readFx = (): FxState => mergeFxState(mergeFxState(cloneFxState(), input.fxDefaults), input.fxRef?.current);
+	return {
+		audioDurationSupplier: () => {
+			const ms = input.durationMsRef?.current;
+			return typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? ms / 1000 : NaN;
+		},
+		fallbackTextSupplier: () => input.fallbackTextRef?.current ?? "",
+		particleLyricsFlagSupplier: () => readFx().particleLyrics !== false,
+		lyricGlowParticlesSupplier: () => readFx().lyricGlowParticles === true,
+		lyricsHasNativeKaraokeSupplier: () => input.lyricsHasNativeKaraokeRef?.current === true,
+	};
 }
 
 async function initAudioSource(el: HTMLAudioElement | null): Promise<AudioFrameSource> {
@@ -501,6 +530,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				currentTimeSupplier: () => refs.positionRef.current / 1000,
 				isPlayingSupplier: () => refs.isPlayingRef.current,
 				lyricLinesSupplier: () => refs.lyricLinesRef.current,
+				...createStageLyricsHostSuppliers(refs),
 				getShelfVisibility: () => shelfManager.getShelfVisibility(),
 				getShelfMode: () => refs.shelfModeRef?.current ?? refs.fxDefaults?.shelf ?? "side",
 				getShelfHasOpenContent: () => shelfManager.hasOpenContent(),
@@ -654,6 +684,9 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 					shelfManager.getData().length > 0;
 				if (connectorParticles.object) {
 					connectorParticles.object.visible = connectorVisible;
+				}
+				if (connectorParticles.floorMirror) {
+					connectorParticles.floorMirror.visible = connectorVisible;
 				}
 				connectorParticles.setIntensity(connectorVisible ? shelfManager.getShelfVisibility() : 0);
 				connectorParticles.update(ctx);
