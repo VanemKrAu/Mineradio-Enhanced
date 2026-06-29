@@ -18,6 +18,7 @@ import type { SidecarStatus, RuntimeConfig } from "../tauri/runtime";
 import { useLyricsStore } from "../stores/lyrics-store";
 import { usePlaybackStore } from "../stores/playback-store";
 import { useSearchStore } from "../stores/search-store";
+import { useShelfStore } from "../stores/shelf-store";
 import { CUSTOM_LYRIC_PREF_STORE_KEY, CUSTOM_LYRIC_STORE_KEY } from "../lyrics/custom-lyrics";
 import { SidecarClientError, type SidecarClient } from "../api/sidecar-client";
 import type { VisualEngineHostProps } from "../visual/VisualEngineHost";
@@ -202,6 +203,60 @@ test("shouldShowEmptyHome follows baseline force/suppress/playback gates", () =>
 	expect(shouldShowEmptyHome({ ...base, shelfPinnedOpen: true })).toBe(false);
 	expect(shouldShowEmptyHome({ ...base, splashActive: true, homeForcedOpen: true })).toBe(false);
 	expect(shouldShowEmptyHome({ ...base, hasCurrentTrack: true, homeForcedOpen: true })).toBe(true);
+});
+
+test("App suppresses baseline Home while shelf is pinned and the Home button restores the Home pane", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	document.body.className = "";
+	usePlaybackStore.getState().clearQueue();
+	useShelfStore.setState({
+		mode: "side",
+		cameraMode: "static",
+		presence: "always",
+		showPodcasts: true,
+		mergeCollections: false,
+		open: true,
+		selectedPlaylistId: "playlist-1",
+	});
+
+	let dismissSplash: (() => void) | null = null;
+	function MockSplash(props: SplashHostProps) {
+		dismissSplash = () => props.onDismissed?.();
+		return <div className="visual-splash-root" />;
+	}
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+
+	try {
+		flushSync(() => root.render(<App SplashComponent={MockSplash} VisualComponent={() => <div id="visual-host" />} />));
+		flushSync(() => dismissSplash?.());
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(useShelfStore.getState().open).toBe(true);
+		expect(document.body.classList.contains("empty-home-active")).toBe(false);
+
+		(host.querySelector("#home-btn") as HTMLButtonElement).click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(useShelfStore.getState().open).toBe(false);
+		expect(useShelfStore.getState().selectedPlaylistId).toBeNull();
+		expect(document.body.classList.contains("empty-home-active")).toBe(true);
+	} finally {
+		root.unmount();
+		host.remove();
+		document.body.className = "";
+		usePlaybackStore.getState().clearQueue();
+		useShelfStore.setState({
+			mode: "side",
+			cameraMode: "static",
+			presence: "always",
+			showPodcasts: true,
+			mergeCollections: false,
+			open: false,
+			selectedPlaylistId: null,
+		});
+	}
 });
 
 function sidecarStatus(overrides: Partial<SidecarStatus> = {}): SidecarStatus {

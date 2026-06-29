@@ -805,12 +805,15 @@ export function App({
   const shelfPresence = useShelfStore((s) => s.presence);
   const shelfShowPodcasts = useShelfStore((s) => s.showPodcasts);
   const shelfMergeCollections = useShelfStore((s) => s.mergeCollections);
+  const shelfOpen = useShelfStore((s) => s.open);
   const setShelfMode = useShelfStore((s) => s.setMode);
   const setShelfCameraMode = useShelfStore((s) => s.setCameraMode);
   const setShelfPresence = useShelfStore((s) => s.setPresence);
   const setShelfShowPodcasts = useShelfStore((s) => s.setShowPodcasts);
   const setShelfMergeCollections = useShelfStore((s) => s.setMergeCollections);
   const applyShelfSettings = useShelfStore((s) => s.applySettings);
+  const closeShelf = useShelfStore((s) => s.closeShelf);
+  const selectShelfPlaylist = useShelfStore((s) => s.selectPlaylist);
   const visualFx = useVisualStore((s) => s.fx);
   const visualPreset = useVisualStore((s) => s.preset);
   const visualIntensity = useVisualStore((s) => s.intensity);
@@ -912,6 +915,7 @@ export function App({
     hasCurrentTrack: !!currentTrack,
     queueLength: queue.length,
     isPlaying,
+    shelfPinnedOpen: shelfOpen,
   });
   const emptyHomeActive = shouldShowEmptyHome({
     splashActive,
@@ -920,6 +924,7 @@ export function App({
     hasCurrentTrack: !!currentTrack,
     queueLength: queue.length,
     isPlaying,
+    shelfPinnedOpen: shelfOpen,
   });
   const homeControlsLocked =
     emptyHomeActive &&
@@ -1185,6 +1190,8 @@ export function App({
       setHomeSuppressed(true);
       setConsole(false);
       setMiniQueue(false);
+      closeShelf();
+      selectShelfPlaylist(null);
       showToast("已关闭 Home");
       return;
     }
@@ -1192,12 +1199,16 @@ export function App({
     setHomeForcedOpen(true);
     setConsole(false);
     setMiniQueue(false);
+    closeShelf();
+    selectShelfPlaylist(null);
     focusSearch();
     showToast("已回到 Home");
   }, [
+    closeShelf,
     emptyHomeActive,
     focusSearch,
     homeForcedOpen,
+    selectShelfPlaylist,
     setConsole,
     setMiniQueue,
     showToast,
