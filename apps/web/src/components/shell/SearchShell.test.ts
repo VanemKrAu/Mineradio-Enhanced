@@ -16,7 +16,7 @@ function makeTrack(id: string, provider: ProviderId = "netease"): Track {
 	};
 }
 
-test("searchTracksForMode routes All and Podcast through cross-source search", async () => {
+test("searchTracksForMode routes All through cross-source search", async () => {
 	const calls: string[] = [];
 	const client = {
 		search: async (provider: ProviderId, keyword: string, limit: number) => {
@@ -30,9 +30,8 @@ test("searchTracksForMode routes All and Podcast through cross-source search", a
 	};
 
 	await searchTracksForMode(client, "song", "遇见", 30);
-	await searchTracksForMode(client, "podcast", "播客", 30);
 
-	expect(calls).toEqual(["all:遇见:30", "all:播客:30"]);
+	expect(calls).toEqual(["all:遇见:30"]);
 });
 
 test("searchTracksForMode keeps explicit provider modes provider-specific", async () => {

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, type KeyboardEvent, type ReactElement } from "react";
-import type { ProviderId, Track } from "@mineradio/shared";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
+import type { ProviderId, PodcastRadio, Track } from "@mineradio/shared";
 import { SidecarClient } from "../../api/sidecar-client";
 import { isPlayable, playSearchResult } from "../search/play-search-result";
 import { useSearchStore } from "../../stores/search-store";
@@ -18,6 +18,8 @@ export interface SearchShellProps {
 	isResultLikeBusy?: (track: Track) => boolean;
 	hasCustomCover?: boolean;
 	peek?: boolean;
+	requestedMode?: SearchMode;
+	onPodcastOpen?: (radio: PodcastRadio) => void;
 }
 
 const HISTORY_CHIPS: Array<{ label: string; mode?: SearchMode; keyword: string }> = [
@@ -97,6 +99,8 @@ export function SearchShell({
 	isResultLikeBusy,
 	hasCustomCover = false,
 	peek = false,
+	requestedMode,
+	onPodcastOpen,
 }: SearchShellProps): ReactElement {
 	const provider = useSearchStore((s) => s.provider);
 	const keyword = useSearchStore((s) => s.keyword);
@@ -111,6 +115,7 @@ export function SearchShell({
 	const reset = useSearchStore((s) => s.reset);
 	const modeRef = useRef<SearchMode>("song");
 	const searchSeqRef = useRef(0);
+	const [podcastResults, setPodcastResults] = useState<PodcastRadio[]>([]);
 
 	const runSearch = useCallback(
 		async (nextKeyword: string, nextMode: SearchMode = modeRef.current) => {
@@ -118,6 +123,35 @@ export function SearchShell({
 			setKeyword(nextKeyword);
 			modeRef.current = nextMode;
 			setProvider(providerFromMode(nextMode));
+			if (nextMode === "podcast") {
+				setResults([]);
+				if (!client) {
+					setPodcastResults([]);
+					setError("sidecar 尚未就绪，稍后再试");
+					return;
+				}
+				const seq = searchSeqRef.current + 1;
+				searchSeqRef.current = seq;
+				setLoading(true);
+				setError(null);
+				try {
+					const podcastClient = client as Pick<SidecarClient, "podcastSearch" | "podcastHot">;
+					const detail = trimmed
+						? await podcastClient.podcastSearch(trimmed, 30)
+						: await podcastClient.podcastHot(18, 0);
+					if (searchSeqRef.current === seq) {
+						setPodcastResults(detail.podcasts);
+						setLoading(false);
+					}
+				} catch (e) {
+					if (searchSeqRef.current !== seq) return;
+					setPodcastResults([]);
+					const message = e instanceof Error ? e.message : "播客加载失败";
+					setError(message);
+				}
+				return;
+			}
+			setPodcastResults([]);
 			if (!trimmed) {
 				setResults([]);
 				setError(null);
@@ -145,10 +179,11 @@ export function SearchShell({
 	);
 
 	useEffect(() => {
-		if (!keyword.trim()) {
+		if (!keyword.trim() && modeRef.current !== "podcast") {
 			searchSeqRef.current += 1;
 			setLoading(false);
 			setResults([]);
+			setPodcastResults([]);
 			setError(null);
 			return;
 		}
@@ -158,13 +193,29 @@ export function SearchShell({
 		return () => clearTimeout(timer);
 	}, [keyword, runSearch]);
 
+	useEffect(() => {
+		if (!requestedMode) return;
+		modeRef.current = requestedMode;
+		setProvider(providerFromMode(requestedMode));
+		if (requestedMode === "podcast") {
+			void runSearch(keyword.trim() ? keyword : "", "podcast");
+		} else if (keyword.trim()) {
+			void runSearch(keyword, requestedMode);
+		} else {
+			setPodcastResults([]);
+			setResults([]);
+			setError(null);
+		}
+	}, [keyword, requestedMode, runSearch, setError, setProvider, setResults]);
+
 	const selectMode = (mode: SearchMode) => {
 		modeRef.current = mode;
 		setProvider(providerFromMode(mode));
 		setResults([]);
+		setPodcastResults([]);
 		setError(null);
 		if (mode === "podcast") {
-			void runSearch(keyword.trim() || "播客", mode);
+			void runSearch(keyword.trim() ? keyword : "", mode);
 		} else if (keyword.trim()) {
 			void runSearch(keyword, mode);
 		}
@@ -198,7 +249,7 @@ export function SearchShell({
 		}
 	};
 
-	const showResults = results.length > 0 || !!error || loading || keyword.trim().length > 0;
+	const showResults = results.length > 0 || podcastResults.length > 0 || !!error || loading || keyword.trim().length > 0 || modeRef.current === "podcast";
 	const effectivePeek = peek || showResults;
 
 	return (
@@ -253,8 +304,28 @@ export function SearchShell({
 					) : null}
 					{loading ? <div className="search-shell-state">搜索中...</div> : null}
 					{error ? <div className="search-shell-error">{error}</div> : null}
-					{!loading && !error && showResults && results.length === 0 ? (
+					{!loading && !error && showResults && results.length === 0 && podcastResults.length === 0 ? (
 						<div className="search-shell-state">没有找到结果</div>
+					) : null}
+					{podcastResults.length > 0 ? (
+						<ul className="search-shell-list search-shell-podcast-list">
+							{podcastResults.map((radio) => (
+								<li key={radio.id || radio.rid}>
+									<button
+										type="button"
+										className="search-result podcast-result"
+										data-podcast-id={radio.id || radio.rid}
+										onClick={() => onPodcastOpen?.(radio)}
+									>
+										{radio.coverUrl ? <img src={radio.coverUrl} alt="" /> : <div className="search-result-cover-placeholder" />}
+										<div className="search-result-info">
+											<div className="search-result-title">{radio.name}<span className="tag-podcast">Podcast</span></div>
+											<div className="search-result-meta">{radio.djName || radio.category || `${radio.programCount || 0} episodes`}</div>
+										</div>
+									</button>
+								</li>
+							))}
+						</ul>
 					) : null}
 					{results.length > 0 ? (
 						<ul className="search-shell-list">

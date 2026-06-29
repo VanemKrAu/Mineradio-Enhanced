@@ -67,7 +67,7 @@ import {
 } from "../tauri/runtime";
 import { checkForUpdate, getUpdaterStatus } from "../tauri/updater";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
-import { SearchShell } from "../components/shell/SearchShell";
+import { SearchShell, type SearchMode } from "../components/shell/SearchShell";
 import {
   createDesktopLyricsPushState,
   shouldPushDesktopLyricsPayload,
@@ -570,6 +570,7 @@ export function App({
   const [trialBanner, setTrialBanner] = useState<TrialBannerState | null>(null);
   const [sidecarBaseUrl, setSidecarBaseUrl] = useState("");
   const [splashActive, setSplashActive] = useState<boolean>(SHOW_SPLASH);
+  const [searchModeRequest, setSearchModeRequest] = useState<SearchMode>("song");
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [neteaseStatus, setNeteaseStatus] =
     useState<ProviderLoginStatus | null>(null);
@@ -761,8 +762,9 @@ export function App({
   }, []);
 
   const searchQuery = useCallback(
-    (query: string) => {
+    (query: string, mode: SearchMode = "song") => {
       setHomeSuppressed(false);
+      setSearchModeRequest(mode);
       setSearchKeyword(query);
       focusSearch();
     },
@@ -1231,7 +1233,7 @@ export function App({
       const songs = discover?.dailySongs ?? [];
       const targetIndex = Math.max(0, Math.min(index, songs.length - 1));
       if (!songs.length || !songs[targetIndex]) {
-        searchQuery(index > 0 ? "私人雷达" : "每日推荐");
+        searchQuery(index > 0 ? "私人雷达" : "每日推荐", "song");
         return;
       }
       usePlaybackStore.getState().setQueue(songs);
@@ -1257,7 +1259,7 @@ export function App({
     async (index: number) => {
       const discover = homeDiscover?.loggedIn ? homeDiscover : await refreshHomeDiscover();
       if (!homeHasLogin() && !discover?.loggedIn) {
-        searchQuery("");
+        searchQuery("", "song");
         return;
       }
       const item = discover?.playlists[index];
@@ -1372,36 +1374,45 @@ export function App({
     showToast,
   ]);
 
-  const openHomeDiscoverPodcast = useCallback(
-    async (index: number) => {
-      const discover = homeDiscover?.loggedIn ? homeDiscover : await refreshHomeDiscover();
-      const item = discover?.podcasts[index];
-      if (!item || !sidecarClient) {
-        searchQuery("播客");
+  const playPodcastRadio = useCallback(
+    async (id: string, title = "播客") => {
+      if (!id || !sidecarClient) {
+        searchQuery(title || "播客", "podcast");
         return;
       }
       try {
-        const detail = await sidecarClient.podcastPrograms(item.id, 30, 0);
+        const detail = await sidecarClient.podcastPrograms(id, 30, 0);
         if (!detail.programs.length) {
-          searchQuery(item.name || "播客");
+          searchQuery(title || "播客", "podcast");
           return;
         }
         usePlaybackStore.getState().setQueue(detail.programs);
         usePlaybackStore.getState().playAt(0);
         enterPlaybackSurface();
-        showToast(item.name || "播客");
+        showToast(title || "播客");
       } catch (e) {
         const message = e instanceof Error ? e.message : "播客载入失败";
         showToast(message);
       }
     },
+    [enterPlaybackSurface, searchQuery, showToast, sidecarClient],
+  );
+
+  const openHomeDiscoverPodcast = useCallback(
+    async (index: number) => {
+      const discover = homeDiscover?.loggedIn ? homeDiscover : await refreshHomeDiscover();
+      const item = discover?.podcasts[index];
+      if (!item) {
+        searchQuery("", "podcast");
+        return;
+      }
+      await playPodcastRadio(item.id, item.name || "播客");
+    },
     [
-      enterPlaybackSurface,
       homeDiscover,
+      playPodcastRadio,
       refreshHomeDiscover,
       searchQuery,
-      showToast,
-      sidecarClient,
     ],
   );
 
@@ -1416,7 +1427,7 @@ export function App({
       if (!songs.length) {
         const seed = radio?.radio.seedQueries[0] || "雨天 R&B";
         showToast("天气队列暂时为空，先打开搜索");
-        searchQuery(seed);
+        searchQuery(seed, "song");
         return;
       }
       const targetIndex = Math.max(0, Math.min(index, songs.length - 1));
@@ -1435,7 +1446,7 @@ export function App({
   );
 
   const openHomePodcastSearch = useCallback(() => {
-    searchQuery("播客");
+    searchQuery("", "podcast");
   }, [searchQuery]);
 
   const openHomeInsight = useCallback(() => {
@@ -2611,6 +2622,8 @@ export function App({
         }}
         hasCustomCover={currentHasCustomCover}
         peek={emptyHomeActive || searchKeyword.trim().length > 0}
+        requestedMode={searchModeRequest}
+        onPodcastOpen={(radio) => void playPodcastRadio(radio.id || radio.rid, radio.name || "播客")}
       />
       <TopRightControls
         onHome={goHome}

@@ -152,3 +152,51 @@ test("SearchShell clears stale results after clearing input so host peek can hid
 	expect(container.querySelector("#search-area")?.classList.contains("peek")).toBe(false);
 	root.unmount();
 });
+
+test("SearchShell podcast mode renders podcast radios and opens the selected radio", async () => {
+	useSearchStore.setState({
+		results: [],
+		loading: false,
+		error: null,
+		provider: "netease",
+		keyword: "",
+	});
+	const calls: string[] = [];
+	const opened: string[] = [];
+	const client = {
+		async podcastHot(limit: number) {
+			calls.push(`hot:${limit}`);
+			return {
+				podcasts: [{
+					id: "radio-1",
+					rid: "radio-1",
+					name: "午夜播客",
+					coverUrl: "",
+					description: "",
+					djName: "DJ Alice",
+					category: "音乐",
+					programCount: 12,
+					subCount: 0,
+				}],
+				more: false,
+			};
+		},
+	} as never;
+
+	const { root, container } = await renderSearchShell(
+		<SearchShell
+			client={client}
+			requestedMode="podcast"
+			onPodcastOpen={(radio) => opened.push(radio.id)}
+		/>,
+	);
+	for (let i = 0; i < 8 && !container.querySelector("[data-podcast-id]"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(calls).toEqual(["hot:18"]);
+	expect(container.querySelector("[data-podcast-id=\"radio-1\"]")?.textContent).toContain("午夜播客");
+	(container.querySelector("[data-podcast-id=\"radio-1\"]") as HTMLButtonElement).click();
+	expect(opened).toEqual(["radio-1"]);
+	root.unmount();
+});
