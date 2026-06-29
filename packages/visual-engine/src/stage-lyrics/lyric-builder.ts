@@ -17,6 +17,7 @@ export interface LyricGroupOptions extends LyricShaderMaterialOptions, LyricText
 	lyricGlowParticles?: boolean;
 	dotTexture?: THREE.Texture;
 	rand?: () => number;
+	maxAnisotropy?: number;
 	maskOptions?: Omit<MakeLyricMaskOptions, "lyricFont" | "lyricLetterSpacing" | "lyricLineHeight">;
 	glowOptions?: LyricGlowTextureOptions;
 	readabilityOptions?: LyricReadabilityTextureOptions;
@@ -120,7 +121,7 @@ export async function buildLyricGroup(
 		lyricLineHeight: opts.lyricLineHeight,
 		lyricWeight: opts.lyricWeight,
 	};
-	const mask = makeLyricMask(cleaned, THREE, { ...(opts.maskOptions ?? {}), ...maskTextOpts });
+	const mask = makeLyricMask(cleaned, THREE, { ...(opts.maskOptions ?? {}), maxAnisotropy: opts.maxAnisotropy, ...maskTextOpts });
 	const worldW = 6.1;
 	const worldH = worldW * (mask.height / mask.width);
 	const geo = new THREE.PlaneGeometry(worldW, worldH, 1, 1) as THREE.PlaneGeometry;
@@ -187,6 +188,7 @@ export async function buildLyricGroup(
 	group.add(glow);
 
 	const readabilityOptions: LyricReadabilityTextureOptions = {
+		maxAnisotropy: opts.maxAnisotropy,
 		lyricFont: opts.lyricFont,
 		lyricLetterSpacing: opts.lyricLetterSpacing,
 		lyricLineHeight: opts.lyricLineHeight,

@@ -28,6 +28,7 @@ export function makeLyricGlowTexture(
 		lyricFont: opts.lyricFont,
 		lyricLetterSpacing: opts.lyricLetterSpacing,
 		lyricLineHeight: opts.lyricLineHeight,
+		lyricWeight: opts.lyricWeight,
 	};
 	const fit = fitScaleX || 1;
 	let measuredWidth = Math.max(1, textWidth || (measureCtx ? lyricMeasureText(measureCtx, cleaned, fontSize, textOpts) * fit : 0));

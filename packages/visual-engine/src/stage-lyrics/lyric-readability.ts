@@ -23,6 +23,7 @@ export function makeLyricReadabilityTexture(
 		lyricFont: opts.lyricFont,
 		lyricLetterSpacing: opts.lyricLetterSpacing,
 		lyricLineHeight: opts.lyricLineHeight,
+		lyricWeight: opts.lyricWeight,
 	};
 	const canvas = document.createElement("canvas");
 	canvas.width = W;

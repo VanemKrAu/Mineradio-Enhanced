@@ -8,30 +8,32 @@ export interface LyricTextOptions {
 const DEFAULT_FONT_STACK = '"PingFang SC","Microsoft YaHei","Segoe UI",system-ui,-apple-system,sans-serif';
 const DEFAULT_FONT_WEIGHT = 700;
 const FONT_STACKS: Record<string, string> = {
-	sans: DEFAULT_FONT_STACK,
-	hei: '"Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Segoe UI",sans-serif',
-	song: '"Songti SC","SimSun","Noto Serif CJK SC",serif',
-	"bold-song": '"Songti SC","SimSun","Noto Serif CJK SC",serif',
-	"stone-song": '"Songti SC","SimSun","Noto Serif CJK SC",serif',
-	"kai-song": '"KaiTi","STKaiti","Songti SC","SimSun",serif',
-	"serif-en": 'Georgia,"Times New Roman","Songti SC",serif',
-	gothic: '"Yu Gothic","Meiryo","Microsoft YaHei","PingFang SC",sans-serif',
-	editorial: '"Didot","Bodoni 72","Songti SC",serif',
-	humanist: '"Optima","Gill Sans","PingFang SC","Microsoft YaHei",sans-serif',
-	mono: '"SFMono-Regular","Cascadia Code","Consolas","Microsoft YaHei",monospace',
-	display: '"Arial Black","Impact","Microsoft YaHei","PingFang SC",sans-serif',
+	sans: 'Inter,"Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif',
+	hei: '"Noto Sans SC","Microsoft YaHei",SimHei,"PingFang SC",sans-serif',
+	song: '"Noto Serif SC","Source Han Serif SC",SimSun,"Songti SC",serif',
+	"bold-song": '"Source Han Serif SC Heavy","Source Han Serif SC","Noto Serif SC Black","Noto Serif SC","STZhongsong","SimSun",serif',
+	"stone-song": '"FZYaSongS-B-GB","FZCuSong-B09S","Source Han Serif SC Heavy","Noto Serif SC Black","STZhongsong","SimSun",serif',
+	"kai-song": '"Kaiti SC","STKaiti","KaiTi","Source Han Serif SC","Noto Serif SC",serif',
+	"serif-en": 'Georgia,"Times New Roman","Noto Serif SC","Source Han Serif SC",serif',
+	gothic: '"UnifrakturCook","UnifrakturMaguntia","Old English Text MT","Blackletter","Cinzel Decorative","Noto Serif SC",serif',
+	editorial: '"Didot","Bodoni 72","Libre Baskerville",Georgia,"Noto Serif SC",serif',
+	humanist: '"Avenir Next","Segoe UI","Inter","Noto Sans SC","PingFang SC",sans-serif',
+	round: '"HarmonyOS Sans SC","Microsoft YaHei UI","PingFang SC","Noto Sans SC",sans-serif',
+	mono: '"JetBrains Mono",Consolas,"Noto Sans SC","Microsoft YaHei",monospace',
+	display: '"Alibaba PuHuiTi","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif',
 };
 const FONT_WEIGHTS: Record<string, number> = {
 	sans: 760,
 	hei: 900,
 	song: 760,
 	"bold-song": 900,
-	"stone-song": 860,
+	"stone-song": 900,
 	"kai-song": 760,
 	"serif-en": 740,
 	gothic: 820,
 	editorial: 760,
 	humanist: 740,
+	round: 760,
 	mono: 760,
 	display: 900,
 };
@@ -48,13 +50,15 @@ export interface LyricFontConfig {
 
 export function normalizeFontKey(key: string | undefined): string {
 	const k = String(key ?? "").trim().toLowerCase();
-	return Object.prototype.hasOwnProperty.call(FONT_STACKS, k) ? k : "hei";
+	return Object.prototype.hasOwnProperty.call(FONT_STACKS, k) ? k : "sans";
 }
 
 export function resolveFontConfig(opts: LyricTextOptions | undefined): LyricFontConfig {
 	const key = normalizeFontKey(opts?.lyricFont);
 	const rawWeight = Number(opts?.lyricWeight);
-	const weight = Number.isFinite(rawWeight)
+	const weight = key === "stone-song"
+		? 900
+		: Number.isFinite(rawWeight)
 		? Math.round(clampRange(rawWeight, 500, 900) / 50) * 50
 		: FONT_WEIGHTS[key] ?? DEFAULT_FONT_WEIGHT;
 	return {
@@ -237,7 +241,33 @@ export function applyStonePrintTexture(
 		const x = Math.random() * W;
 		const y = bandTop + Math.random() * bandH;
 		const w = 0.7 + Math.random() * (size * 0.052);
-		ctx.fillRect(x, y, w, 1 + Math.random() * 2);
+		const h = 0.45 + Math.random() * (size * 0.026);
+		ctx.globalAlpha = 0.16 + Math.random() * 0.36;
+		ctx.save();
+		ctx.translate(x, y);
+		ctx.rotate((Math.random() - 0.5) * 0.38);
+		ctx.fillRect(-w / 2, -h / 2, w, h);
+		ctx.restore();
+	}
+	ctx.lineCap = "round";
+	for (let s = 0; s < 44; s++) {
+		const sx = Math.random() * W;
+		const sy = bandTop + Math.random() * bandH;
+		ctx.globalAlpha = 0.09 + Math.random() * 0.16;
+		ctx.lineWidth = 0.45 + Math.random() * 1.2;
+		ctx.beginPath();
+		ctx.moveTo(sx, sy);
+		ctx.lineTo(sx + 10 + Math.random() * 86, sy + (Math.random() - 0.5) * 4.8);
+		ctx.stroke();
+	}
+	for (let c = 0; c < 26; c++) {
+		const cx = Math.random() * W;
+		const cy = bandTop + Math.random() * bandH;
+		const radius = 1.8 + Math.random() * (size * 0.060);
+		ctx.globalAlpha = 0.08 + Math.random() * 0.18;
+		ctx.beginPath();
+		ctx.ellipse(cx, cy, radius * (0.7 + Math.random() * 1.4), radius * (0.25 + Math.random() * 0.55), Math.random() * Math.PI, 0, Math.PI * 2);
+		ctx.fill();
 	}
 	ctx.restore();
 }

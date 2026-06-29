@@ -434,14 +434,14 @@ test("tickLyricsParticles passes live lyric text options into the built lyric gr
 	await lifecycle.whenIdle();
 	const groupA = lifecycle.group as unknown as { children: Array<{ userData: { lyric?: { mask?: { fontSize: number; lineHeight: number }; textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } } }> };
 	const firstLyric = findLyricChild(groupA)?.userData?.lyric as { mask?: { fontSize: number; lineHeight: number }; textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } | undefined;
-	expect(firstLyric?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.12|1.24|800");
+	expect(firstLyric?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.12|1.24|900");
 	expect(firstLyric?.mask?.lineHeight).toBeGreaterThan((firstLyric?.mask?.fontSize ?? 0) * 1.2);
 
 	textOptions.lyricLetterSpacing = 0.03;
 	lifecycle.update(makeCtx(0.6, 0.1));
 	await lifecycle.whenIdle();
 	const groupB = lifecycle.group as unknown as { children: Array<{ userData: { lyric?: { textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } } }> };
-	expect((findLyricChild(groupB)?.userData?.lyric as { textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } | undefined)?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.03|1.24|800");
+	expect((findLyricChild(groupB)?.userData?.lyric as { textMat?: { uniforms?: { uTextOptionsSignature?: { value: string } } } } | undefined)?.textMat?.uniforms?.uTextOptionsSignature?.value).toBe("stone-song|0.03|1.24|900");
 	lifecycle.dispose();
 });
 
@@ -620,6 +620,52 @@ test("update applies baseline non-skull shelf-detail lyric offset when side deta
 	lifecycle.dispose();
 });
 
+test("update applies baseline skull shelf-detail lyric offset even when skull shelf helper is false", async () => {
+	const scene = makeFakeScene();
+	const lifecycle = createStageLyricsLifecycle({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		lyricLinesSupplier: () => [{ t: 0, text: "Skull shelf detail lyric" }] as never,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		dotTexture: makeFakeDotTexture(),
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0,
+		lyricGlowBeatFlagSupplier: () => false,
+		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		lyricLayoutOptionsSupplier: () => ({
+			lyricCameraLock: false,
+			lyricScale: 1.4,
+			lyricOffsetX: 0.2,
+			lyricOffsetY: -0.1,
+			lyricOffsetZ: 0.3,
+			lyricTiltX: 0,
+			lyricTiltY: 0,
+			preset: 6,
+		}),
+		getShelfMode: () => "side",
+		getShelfHasOpenContent: () => true,
+		getSkullShelfOpen: () => false,
+		rand: () => 0.35,
+	});
+	await lifecycle.mount(scene as never);
+	lifecycle.update(makeCtx(0.5, 0.1));
+	const group = lifecycle.group as unknown as {
+		position: { x: number; y: number; z: number };
+		scale: { x: number; y: number; z: number };
+	};
+	expect(group.scale.x).toBeCloseTo(1.4 * 0.70, 6);
+	expect(group.scale.y).toBeCloseTo(1.4 * 0.70, 6);
+	expect(group.scale.z).toBeCloseTo(1.4 * 0.70, 6);
+	expect(group.position.x).toBeCloseTo(0.2 - 1.58, 6);
+	expect(group.position.y).toBeCloseTo(-0.1 + 0.08, 6);
+	expect(group.position.z).toBeCloseTo(0.3 + 0.84, 6);
+	lifecycle.dispose();
+});
+
 test("update applies baseline camera-locked lyric layout from camera basis with lock easing", async () => {
 	const scene = makeFakeScene();
 	const camera = makeFakeCamera({ x: 1, y: 2, z: 3 });
@@ -665,6 +711,51 @@ test("update applies baseline camera-locked lyric layout from camera basis with 
 	lifecycle.dispose();
 });
 
+test("requestCameraSnap makes camera-locked lyrics copy target for requested frames", async () => {
+	const scene = makeFakeScene();
+	const camera = makeFakeCamera({ x: 1, y: 2, z: 3 });
+	const lifecycle = createStageLyricsLifecycle({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		lyricLinesSupplier: () => [] as never,
+		currentTimeSupplier: () => 0,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		dotTexture: makeFakeDotTexture(),
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0,
+		lyricGlowBeatFlagSupplier: () => false,
+		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		lyricLayoutOptionsSupplier: () => ({
+			lyricCameraLock: true,
+			lyricScale: 1,
+			lyricOffsetX: 0.5,
+			lyricOffsetY: -0.25,
+			lyricOffsetZ: 0.75,
+			lyricTiltX: 0,
+			lyricTiltY: 0,
+		}),
+		cameraSupplier: () => camera as never,
+		rand: () => 0.35,
+	});
+	await lifecycle.mount(scene as never);
+	lifecycle.requestCameraSnap(2);
+	lifecycle.update(makeCtx(0, 0.1));
+	const group = lifecycle.group as unknown as { position: { x: number; y: number; z: number } };
+	expect(group.position.x).toBeCloseTo(1.5, 6);
+	expect(group.position.y).toBeCloseTo(1.75, 6);
+	expect(group.position.z).toBeCloseTo(-2.6, 6);
+	camera.position.x = 2;
+	lifecycle.update(makeCtx(0.1, 0.1));
+	expect(group.position.x).toBeCloseTo(2.5, 6);
+	camera.position.x = 3;
+	lifecycle.update(makeCtx(0.2, 0.1));
+	expect(group.position.x).toBeCloseTo(2.5 + (3.5 - 2.5) * 0.24, 6);
+	lifecycle.dispose();
+});
+
 test("update applies baseline camera-lock fit scale cap and shrink easing", async () => {
 	const scene = makeFakeScene();
 	const camera = makeFakeCamera({ x: 0, y: 0, z: 0 });
@@ -705,6 +796,52 @@ test("update applies baseline camera-lock fit scale cap and shrink easing", asyn
 	const safeH = Math.max(visibleH * 0.18, visibleH * 0.44 - 0.9 * 0.82);
 	const viewportFit = Math.min(1, safeW / (5.4 * 1.65), safeH / (0.78 * 1.65));
 	const lockFit = Math.max(0.42, Math.min(1, viewportFit, 0.80 / 1.65));
+	const firstFrameLockFitScale = 1 + (lockFit - 1) * 0.18;
+	expect(group.scale.x).toBeCloseTo(1.65 * firstFrameLockFitScale, 6);
+	expect(group.scale.y).toBeCloseTo(group.scale.x, 6);
+	expect(group.scale.z).toBeCloseTo(group.scale.x, 6);
+	lifecycle.dispose();
+});
+
+test("skull preset camera-lock fit uses baseline skull safe bounds and cap", async () => {
+	const scene = makeFakeScene();
+	const camera = makeFakeCamera({ x: 0, y: 0, z: 0 });
+	const lifecycle = createStageLyricsLifecycle({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		lyricLinesSupplier: () => [] as never,
+		currentTimeSupplier: () => 0,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		dotTexture: makeFakeDotTexture(),
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0,
+		lyricGlowBeatFlagSupplier: () => false,
+		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		lyricLayoutOptionsSupplier: () => ({
+			lyricCameraLock: true,
+			lyricScale: 1.65,
+			lyricOffsetX: 1.4,
+			lyricOffsetY: 0.9,
+			lyricOffsetZ: 0,
+			lyricTiltX: 0,
+			lyricTiltY: 0,
+			preset: 6,
+		}),
+		cameraSupplier: () => camera as never,
+		rand: () => 0.35,
+	});
+	await lifecycle.mount(scene as never);
+	lifecycle.update(makeCtx(0, 0.1));
+	const group = lifecycle.group as unknown as { scale: { x: number; y: number; z: number } };
+	const visibleH = 2 * Math.tan((45 * Math.PI / 180) * 0.5) * 4.85;
+	const visibleW = visibleH * (16 / 9);
+	const safeW = Math.max(visibleW * 0.36, visibleW * 0.70 - 1.4 * 1.36);
+	const safeH = Math.max(visibleH * 0.16, visibleH * 0.34 - 0.9 * 0.98);
+	const viewportFit = Math.min(1, safeW / (5.4 * 1.65), safeH / (0.78 * 1.65));
+	const lockFit = Math.max(0.36, Math.min(1, viewportFit, 0.94 / 1.65));
 	const firstFrameLockFitScale = 1 + (lockFit - 1) * 0.18;
 	expect(group.scale.x).toBeCloseTo(1.65 * firstFrameLockFitScale, 6);
 	expect(group.scale.y).toBeCloseTo(group.scale.x, 6);
@@ -810,10 +947,10 @@ test("update applies baseline skull edge-guard lockFit without camera lock", asy
 	const distance = 4.85 + 0.3;
 	const visibleH = 2 * Math.tan((45 * Math.PI / 180) * 0.5) * distance;
 	const visibleW = visibleH * (16 / 9);
-	const safeW = Math.max(visibleW * 0.42, visibleW * 0.84 - 1.45 * 1.22);
-	const safeH = Math.max(visibleH * 0.18, visibleH * 0.44 - 0.9 * 0.82);
+	const safeW = Math.max(visibleW * 0.36, visibleW * 0.70 - 1.45 * 1.36);
+	const safeH = Math.max(visibleH * 0.16, visibleH * 0.34 - 0.9 * 0.98);
 	const viewportFit = Math.min(1, safeW / (5.4 * 1.65), safeH / (0.78 * 1.65));
-	const lockFit = Math.max(0.42, Math.min(1, viewportFit, 0.80 / 1.65));
+	const lockFit = Math.max(0.36, Math.min(1, viewportFit, 0.94 / 1.65));
 	const firstFrameLockFitScale = 1 + (lockFit - 1) * 0.18;
 	expect(group.scale.x).toBeCloseTo(1.65 * firstFrameLockFitScale, 6);
 	expect(group.position.x).toBeCloseTo(1.45, 6);
@@ -863,10 +1000,10 @@ test("update applies baseline skull-mouth scale and lockFit distance", async () 
 	const distance = Math.max(2.2, 4.4 + 0.4);
 	const visibleH = 2 * Math.tan((45 * Math.PI / 180) * 0.5) * distance;
 	const visibleW = visibleH * (16 / 9);
-	const safeW = Math.max(visibleW * 0.42, visibleW * 0.84 - 0.2 * 1.22);
-	const safeH = Math.max(visibleH * 0.18, visibleH * 0.44 - 0.1 * 0.82);
+	const safeW = Math.max(visibleW * 0.36, visibleW * 0.70 - 0.2 * 1.36);
+	const safeH = Math.max(visibleH * 0.16, visibleH * 0.34 - 0.1 * 0.98);
 	const viewportFit = Math.min(1, safeW / (5.4 * layoutScale), safeH / (0.78 * layoutScale));
-	const lockFit = Math.min(Math.max(0.42, Math.min(1, viewportFit, 0.80 / layoutScale)), 1.12);
+	const lockFit = Math.min(Math.max(0.36, Math.min(1, viewportFit, 0.94 / layoutScale)), 1.12);
 	const firstFrameLockFitScale = 1 + (lockFit - 1) * (lockFit < 1 ? 0.18 : 0.10);
 	expect(group.scale.x).toBeCloseTo(layoutScale * firstFrameLockFitScale, 6);
 	expect(group.position.x).toBeCloseTo(0.2, 6);
@@ -1505,6 +1642,45 @@ test("current lyric mesh uses baseline local breathing and spark/sun/glow motion
 	lifecycle.dispose();
 });
 
+test("current lyric tick updates glow sun and spark colors from baseline solar palette", async () => {
+	const lifecycle = createStageLyricsLifecycle({
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowParticlesSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0.85,
+		lyricGlowBeatFlagSupplier: () => true,
+		lyricSunEnergyHolder: { get: () => 1.2, set: () => {} },
+		getBeatCamKick: () => ({ thetaKick: 0.1, phiKick: 0.1, rollKick: 0.1, radiusKick: 0.8, punch: 0.9 }),
+		dotTexture: makeFakeDotTexture(),
+		rand: () => 0.35,
+	} as never);
+	const scene = makeFakeScene();
+	await lifecycle.mount(scene as never);
+	lifecycle.setLyricLines([{ t: 0, text: "solar color lyric" }]);
+	lifecycle.update(makeCtx(0.5, 0.1, { beatPulse: 1, bass: 0.5, mid: 0.4 }));
+	await lifecycle.whenIdle();
+	lifecycle.update(makeCtx(1.0, 0.1, { beatPulse: 1, bass: 0.5, mid: 0.4 }));
+	const group = lifecycle.group as unknown as { children: Array<{ userData?: { lyric?: unknown } }> };
+	const current = findLyricChild(group) as unknown as {
+		userData: {
+			lyric: {
+				glowMat: { color: { r: number; g: number; b: number } };
+				sunMat: { color: { r: number; g: number; b: number } };
+				sparkMat: { uniforms: { uColor: { value: { r: number; g: number; b: number } } } };
+			};
+		};
+	};
+	expect(current.userData.lyric.glowMat.color.r).toBeGreaterThan(0.70);
+	expect(current.userData.lyric.sunMat.color.g).toBeGreaterThan(0.90);
+	expect(current.userData.lyric.sparkMat.uniforms.uColor.value.b).toBeLessThan(0.80);
+	lifecycle.dispose();
+});
+
 test("skull preset lyric bloom uses baseline skull flash formula and faster attack", async () => {
 	const lifecycle = createStageLyricsLifecycle({
 		threeFactory: makeFakeThree(),
@@ -1550,6 +1726,119 @@ test("skull preset lyric bloom uses baseline skull flash formula and faster atta
 	lifecycle.dispose();
 });
 
+test("showStageLine relies on baseline tickMesh motion without creating GSAP lyric timelines", async () => {
+	const recorder: RecordedCall[] = [];
+	const { lifecycle, setNow } = await buildLifecycleWithCurrent({
+		lyrics: [{ t: 0, text: "A" }, { t: 2, text: "B" }],
+		currentTime: 0.5,
+		gsapRecorder: recorder,
+	});
+	await lifecycle.whenIdle();
+	expect(recorder.some((call) => call.method === "timeline")).toBe(false);
+	setNow(2.1);
+	lifecycle.update(makeCtx(2.1, 0.1));
+	await lifecycle.whenIdle();
+	expect(lifecycle.getCurrentText()).toBe("B");
+	expect(recorder.some((call) => call.method === "timeline")).toBe(false);
+	lifecycle.dispose();
+});
+
+test("outgoing lyric mesh keeps baseline glow sun and spark follow motion", async () => {
+	let now = 0.5;
+	const lifecycle = createStageLyricsLifecycle({
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		currentTimeSupplier: () => now,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowParticlesSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0.85,
+		lyricGlowBeatFlagSupplier: () => true,
+		lyricSunEnergyHolder: { get: () => 1.2, set: () => {} },
+		getBeatCamKick: () => ({ thetaKick: 0.5, phiKick: 0.25, rollKick: 0.2, radiusKick: 0.8, punch: 0.9 }),
+		dotTexture: makeFakeDotTexture(),
+		rand: () => 0.35,
+	} as never);
+	const scene = makeFakeScene();
+	await lifecycle.mount(scene as never);
+	lifecycle.setLyricLines([{ t: 0, text: "A" }, { t: 2, text: "B" }]);
+	lifecycle.update(makeCtx(0.5, 0.1, { beatPulse: 1, bass: 0.5, mid: 0.4 }));
+	await lifecycle.whenIdle();
+	now = 2.1;
+	lifecycle.update(makeCtx(2.1, 0.1, { beatPulse: 1, bass: 0.5, mid: 0.4 }));
+	await lifecycle.whenIdle();
+	lifecycle.update(makeCtx(2.2, 0.1, { beatPulse: 1, bass: 0.5, mid: 0.4 }));
+	const group = lifecycle.group as unknown as { children: Array<{ userData?: { lyric?: unknown; state?: string } }> };
+	const outgoing = group.children.find((child) => child.userData?.state === "out") as unknown as {
+		userData: {
+			lyric: {
+				glow: { position: { x: number; y: number; z: number }; rotation: { z: number } };
+				sun: { position: { x: number; y: number; z: number }; rotation: { z: number } };
+				sparks: { position: { x: number; y: number; z: number }; rotation: { z: number } };
+			};
+		};
+	} | undefined;
+	expect(outgoing).not.toBeUndefined();
+	expect(Math.abs(outgoing!.userData.lyric.glow.position.x)).toBeGreaterThan(0);
+	expect(Math.abs(outgoing!.userData.lyric.sun.position.x)).toBeGreaterThan(Math.abs(outgoing!.userData.lyric.glow.position.x));
+	expect(Math.abs(outgoing!.userData.lyric.sparks.position.x)).toBeGreaterThan(0);
+	expect(Math.abs(outgoing!.userData.lyric.glow.rotation.z)).toBeGreaterThan(0);
+	lifecycle.dispose();
+});
+
+test("setPalette applies baseline colors in place to current and outgoing lyrics", async () => {
+	let now = 0.5;
+	const lifecycle = createStageLyricsLifecycle({
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		currentTimeSupplier: () => now,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowParticlesSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0,
+		lyricGlowBeatFlagSupplier: () => false,
+		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		dotTexture: makeFakeDotTexture(),
+		rand: () => 0.35,
+	} as never);
+	const scene = makeFakeScene();
+	await lifecycle.mount(scene as never);
+	lifecycle.setLyricLines([{ t: 0, text: "A" }, { t: 2, text: "B" }]);
+	lifecycle.update(makeCtx(0.5, 0.1));
+	await lifecycle.whenIdle();
+	const groupA = lifecycle.group as unknown as { children: Array<{ userData?: { lyric?: unknown; state?: string } }> };
+	const firstCurrent = findLyricChild(groupA);
+	now = 2.1;
+	lifecycle.update(makeCtx(2.1, 0.1));
+	await lifecycle.whenIdle();
+	const groupB = lifecycle.group as unknown as { children: Array<{ userData?: { lyric?: { textMat?: { uniforms?: Record<string, { value: { r: number; g: number; b: number } }> }; glowMat?: { color: { r: number; g: number; b: number } }; sparkMat?: { uniforms?: { uColor?: { value: { r: number; g: number; b: number } } } }; sunMat?: { color: { r: number; g: number; b: number } } }; state?: string } }> };
+	const currentBefore = groupB.children.find((child) => child.userData?.state !== "out" && child.userData?.lyric);
+	const outgoingBefore = groupB.children.find((child) => child.userData?.state === "out");
+	expect(outgoingBefore).toBe(firstCurrent);
+	lifecycle.setPalette({
+		primary: "#224466",
+		secondary: "#336688",
+		highlight: "#ffcc66",
+		glowColor: "#66ccff",
+	});
+	await lifecycle.whenIdle();
+	const currentAfter = groupB.children.find((child) => child.userData?.state !== "out" && child.userData?.lyric);
+	const outgoingAfter = groupB.children.find((child) => child.userData?.state === "out");
+	expect(currentAfter).toBe(currentBefore);
+	expect(outgoingAfter).toBe(outgoingBefore);
+	const currentLyric = currentAfter!.userData!.lyric!;
+	const outgoingLyric = outgoingAfter!.userData!.lyric!;
+	expect(currentLyric.textMat?.uniforms?.uBaseColor?.value.b).toBeGreaterThan(0.35);
+	expect(currentLyric.glowMat?.color.b).toBeGreaterThan(0.80);
+	expect(currentLyric.sparkMat?.uniforms?.uColor?.value.r).toBeGreaterThan(0.90);
+	expect(outgoingLyric.sunMat?.color.r).toBeGreaterThan(0.90);
+	lifecycle.dispose();
+});
+
 test("setLyricLines replaces the active fixture set", async () => {
 	const { lifecycle, setNow } = await buildLifecycleWithCurrent({
 		lyrics: [{ t: 0, text: "A" }, { t: 2, text: "B" }],
@@ -1564,7 +1853,7 @@ test("setLyricLines replaces the active fixture set", async () => {
 	lifecycle.dispose();
 });
 
-test("dispose kills active timelines + removes group from scene", async () => {
+test("dispose removes group from scene without stage-lyric GSAP timelines", async () => {
 	const rec: RecordedCall[] = [];
 	const { lifecycle: helperLifecycle, scene } = await buildLifecycleWithCurrent({
 		lyrics: [{ t: 0, text: "A" }],
@@ -1597,6 +1886,6 @@ test("dispose kills active timelines + removes group from scene", async () => {
 	await lc.whenIdle();
 	lc.dispose();
 	const killsAfterDispose = rec.filter((r) => r.method === "tl.kill").length;
-	expect(killsAfterDispose).toBeGreaterThanOrEqual(1);
+	expect(killsAfterDispose).toBe(0);
 	expect((sceneAny.children as unknown[]).length).toBe(0);
 });

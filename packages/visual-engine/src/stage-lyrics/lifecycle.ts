@@ -4,9 +4,7 @@ import type { FrameContext } from "../runtime/frame-context";
 import type { AudioSnapshot } from "../audio/audio-snapshot";
 import { RenderStepSlot } from "../runtime/render-step-slot";
 import type {
-	GsapLike,
 	GsapProvider,
-	GsapTimelineLike,
 } from "../control/control-console-motion";
 import {
 	type LyricGroup,
@@ -20,15 +18,6 @@ import { lyricThreeColor } from "./color-utils";
 import { makeDotTexture } from "./lyric-dot-texture";
 import { LyricPaletteRuntime } from "./palette-runtime";
 import { createLyricPaletteDriver, type PaletteDriver } from "./palette-driver";
-import {
-	type CustomEaseCreator,
-	type LyricTransitionEasings,
-	createTransitionEasings,
-	defaultTransitionEasings,
-	playStageLineBobTimeline,
-	playStageLineInTimeline,
-	playStageLineOutTimeline,
-} from "./transitions";
 import {
 	getLyricLineProgress,
 	type LyricLine,
@@ -51,6 +40,7 @@ export interface StageLyricsLifecycleOpts {
 	getSkullShelfOpen?: () => boolean;
 	dotTexture?: THREE.Texture;
 	pixelScale?: number;
+	maxAnisotropy?: number;
 	lyricGlowParticlesSupplier?: () => boolean;
 	lyricGlowStrengthSupplier?: () => number;
 	lyricGlowBeatFlagSupplier?: () => boolean;
@@ -76,6 +66,7 @@ export interface StageLyricsLifecycleOpts {
 	rand?: () => number;
 }
 
+export type CustomEaseCreator = (id: string, path: string) => string;
 export type { LyricLine } from "./lyric-line-progress";
 export { type PaletteDriver, createLyricPaletteDriver } from "./palette-driver";
 export { LyricPaletteRuntime } from "./palette-runtime";
@@ -89,6 +80,7 @@ export interface StageLyricsLifecycle {
 	update(ctx: FrameContext): void;
 	setPalette(palette: Partial<LyricPalette>): void;
 	setShelfVisibility(v: number): void;
+	requestCameraSnap(frames?: number): void;
 	getCurrentIdx(): number;
 	getCurrentText(): string;
 	getMotionSnapshot(): StageLyricsMotionSnapshot;
@@ -189,30 +181,6 @@ function multiplyQuaternions(
 	};
 }
 
-const defaultGsapProvider: GsapProvider = async () => {
-	const mod = await import("gsap");
-	const g = (mod as { gsap?: GsapLike; default?: GsapLike }).gsap ?? (mod as { default?: GsapLike }).default;
-	if (!g) throw new Error("stage-lyrics lifecycle: gsap factory could not resolve a gsap instance");
-	return g;
-};
-
-const defaultCustomEaseProvider: () => Promise<CustomEaseCreator | null> = async () => {
-	try {
-		const mod = (await import("gsap/CustomEase")) as unknown as { default?: CustomEaseCreator; CustomEase?: CustomEaseCreator };
-		const CustomEase = mod.default ?? mod.CustomEase ?? null;
-		if (!CustomEase) return null;
-		const create: CustomEaseCreator = (id, path) => {
-			const created = (
-				(CustomEase as unknown) as { create?: (id: string, path: string) => string | void }
-			).create?.(id, path);
-			return typeof created === "string" ? created : id;
-		};
-		return create;
-	} catch {
-		return null;
-	}
-};
-
 const DEFAULT_THREE_FACTORY: ThreeFactory = async () => await import("three");
 
 type SizeOfMaterial = {
@@ -226,7 +194,6 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		current: null as LyricGroup | null,
 		outgoing: [] as Array<{
 			lyric: LyricGroup;
-			timeline: GsapTimelineLike | null;
 			age: number;
 		}>,
 		currentIdx: -1,
@@ -245,16 +212,11 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		three: null as ThreeModule | null,
 		shelfVisibility: 0,
 		lines: [] as LyricLine[],
-		gsap: null as GsapLike | null,
-		easings: null as LyricTransitionEasings | null,
-		gsapReady: false,
-		preparingGsap: false,
-		activeInTimeline: null as GsapTimelineLike | null,
-		activeBobTimeline: null as GsapTimelineLike | null,
 		buildToken: 0,
 		activeBuilds: 0,
 		textOptionsSignature: "",
 		lockFitScale: 1,
+		snapCameraLockFrames: 0,
 		lastFrame: null as { dt: number; t: number; snapshot: AudioSnapshot } | null,
 		pendingBuildPromise: null as Promise<void> | null,
 		paletteRuntime: new LyricPaletteRuntime(opts.palette),
@@ -264,38 +226,6 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 
 	const threeFactory: ThreeFactory = opts.threeFactory ?? DEFAULT_THREE_FACTORY;
 	const goLerp = (cur: number, target: number, ease: number) => cur + (target - cur) * ease;
-
-	async function ensureGsap(): Promise<GsapLike> {
-		if (state.gsap && state.gsapReady) return state.gsap;
-		if (state.preparingGsap) {
-			await state.pendingBuildPromise;
-			if (state.gsap) return state.gsap;
-		}
-		state.preparingGsap = true;
-		const provider = opts.gsapProvider ?? defaultGsapProvider;
-		const g = await provider();
-		state.gsap = g;
-		let customEase: CustomEaseCreator | null = null;
-		try {
-			const easeProvider = opts.customEaseProvider ?? defaultCustomEaseProvider;
-			customEase = await easeProvider();
-			const register = (g as unknown as { registerPlugin?: (p: unknown) => void }).registerPlugin;
-			if (register && customEase) {
-				try {
-					const easeMod = (await import("gsap/CustomEase")) as unknown as { default?: unknown; CustomEase?: unknown };
-					register(easeMod.default ?? easeMod.CustomEase);
-				} catch {
-					void 0;
-				}
-			}
-		} catch {
-			customEase = null;
-		}
-		state.easings = customEase ? createTransitionEasings(customEase) : defaultTransitionEasings();
-		state.gsapReady = true;
-		state.preparingGsap = false;
-		return g;
-	}
 
 	function getShelfVisibility(): number {
 		if (typeof opts.getShelfVisibility === "function") return opts.getShelfVisibility();
@@ -316,11 +246,12 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 
 	function getLyricTextOptions(): LyricTextOptions {
 		const raw = opts.lyricTextOptionsSupplier?.() ?? {};
+		const lyricFont = normalizeFontKey(raw.lyricFont);
 		return {
-			lyricFont: normalizeFontKey(raw.lyricFont),
+			lyricFont,
 			lyricLetterSpacing: clamp(Number(raw.lyricLetterSpacing) || 0, -0.04, 0.18),
 			lyricLineHeight: clamp(Number(raw.lyricLineHeight) || 1, 0.86, 1.35),
-			lyricWeight: Math.round(clamp(Number(raw.lyricWeight) || 900, 500, 900) / 50) * 50,
+			lyricWeight: lyricFont === "stone-song" ? 900 : Math.round(clamp(Number(raw.lyricWeight) || 900, 500, 900) / 50) * 50,
 		};
 	}
 
@@ -391,15 +322,11 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			layout.lyricOffsetX = clamp(layout.lyricOffsetX - 1.36, -2, 2);
 			layout.lyricOffsetY = clamp(layout.lyricOffsetY + 0.06, -1.2, 1.35);
 			layout.lyricOffsetZ = clamp(layout.lyricOffsetZ + 0.72, -1.6, 1.6);
-		} else if (
-			!layout.lyricCameraLock &&
-			getShelfMode() === "side" &&
-			getShelfHasOpenContent() &&
-			!getSkullShelfOpen()
-		) {
-			layout.lyricScale *= 0.56;
-			layout.lyricOffsetX = clamp(layout.lyricOffsetX - 1.78, -2, 2);
-			layout.lyricOffsetY = clamp(layout.lyricOffsetY + 0.18, -1.2, 1.35);
+		} else if (!layout.lyricCameraLock && getShelfMode() === "side" && getShelfHasOpenContent()) {
+			const normalShelfDetailOpen = layout.preset !== 6;
+			layout.lyricScale *= normalShelfDetailOpen ? 0.56 : 0.70;
+			layout.lyricOffsetX = clamp(layout.lyricOffsetX - (normalShelfDetailOpen ? 1.78 : 1.58), -2, 2);
+			layout.lyricOffsetY = clamp(layout.lyricOffsetY + (normalShelfDetailOpen ? 0.18 : 0.08), -1.2, 1.35);
 			layout.lyricOffsetZ = clamp(layout.lyricOffsetZ + 0.84, -1.6, 1.6);
 		}
 		return layout;
@@ -434,6 +361,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		layoutX: number,
 		layoutY: number,
 		distance: number,
+		skullSafe = false,
 	): number {
 		const scale = Math.max(0.1, layoutScale || 1);
 		const fov = ((camera.fov || 45) * Math.PI) / 180;
@@ -441,13 +369,19 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		const visibleH = 2 * Math.tan(fov * 0.5) * dist;
 		const visibleW = visibleH * (camera.aspect || 1.78);
 		const bounds = getStageLyricLockBounds();
-		const safeW = Math.max(visibleW * 0.42, visibleW * 0.84 - Math.abs(layoutX || 0) * 1.22);
-		const safeH = Math.max(visibleH * 0.18, visibleH * 0.44 - Math.abs(layoutY || 0) * 0.82);
+		const safeW = Math.max(
+			visibleW * (skullSafe ? 0.36 : 0.42),
+			visibleW * (skullSafe ? 0.70 : 0.84) - Math.abs(layoutX || 0) * (skullSafe ? 1.36 : 1.22),
+		);
+		const safeH = Math.max(
+			visibleH * (skullSafe ? 0.16 : 0.18),
+			visibleH * (skullSafe ? 0.34 : 0.44) - Math.abs(layoutY || 0) * (skullSafe ? 0.98 : 0.82),
+		);
 		const scaledW = Math.max(0.01, bounds.w * scale);
 		const scaledH = Math.max(0.01, bounds.h * scale);
 		const viewportFit = Math.min(1, safeW / scaledW, safeH / scaledH);
-		const lockScaleCap = Math.min(1, 0.80 / scale);
-		return clamp(Math.min(viewportFit, lockScaleCap), 0.42, 1);
+		const lockScaleCap = Math.min(1, (skullSafe ? 0.94 : 0.80) / scale);
+		return clamp(Math.min(viewportFit, lockScaleCap), skullSafe ? 0.36 : 0.42, 1);
 	}
 
 	function setGroupPosition(
@@ -522,7 +456,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		if (camera) {
 			if (group.userData) group.userData.skullMouthLocked = false;
 			const lockDistance = layout.lockBaseDistance + layout.lyricOffsetZ;
-			const lockFit = lyricCameraLockFit(camera, layout.lyricScale, layout.lyricOffsetX, layout.lyricOffsetY, lockDistance);
+			const lockFit = lyricCameraLockFit(camera, layout.lyricScale, layout.lyricOffsetX, layout.lyricOffsetY, lockDistance, layout.preset === 6);
 			state.lockFitScale += (lockFit - state.lockFitScale) * (lockFit < state.lockFitScale ? 0.18 : 0.10);
 			state.lockFitScale = finiteOr(state.lockFitScale, 1);
 			setGroupScale(group, layout.lyricScale * state.lockFitScale);
@@ -539,15 +473,26 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			const z = camera.position.z + forward.z * layout.lockBaseDistance + right.z * layout.lyricOffsetX + up.z * layout.lyricOffsetY + forward.z * layout.lyricOffsetZ;
 			const positionEase = layout.wallpaperLyricLock ? (layout.wallpaperShelfLyrics ? 0.42 : 0.34) : 0.24;
 			const quaternionEase = layout.wallpaperLyricLock ? (layout.wallpaperShelfLyrics ? 0.44 : 0.36) : 0.22;
-			if (group.position?.lerp) group.position.lerp({ x, y, z }, positionEase);
-			else setGroupPosition(group, x, y, z);
 			const targetQuat = multiplyQuaternions(q, tiltQuaternionYXZ(layout.lyricTiltX, layout.lyricTiltY));
-			if (group.quaternion?.slerp) group.quaternion.slerp(targetQuat, quaternionEase);
-			else if (group.quaternion) {
-				group.quaternion.x = targetQuat.x;
-				group.quaternion.y = targetQuat.y;
-				group.quaternion.z = targetQuat.z;
-				group.quaternion.w = targetQuat.w;
+			if (state.snapCameraLockFrames > 0) {
+				setGroupPosition(group, x, y, z);
+				if (group.quaternion) {
+					group.quaternion.x = targetQuat.x;
+					group.quaternion.y = targetQuat.y;
+					group.quaternion.z = targetQuat.z;
+					group.quaternion.w = targetQuat.w;
+				}
+				state.snapCameraLockFrames -= 1;
+			} else {
+				if (group.position?.lerp) group.position.lerp({ x, y, z }, positionEase);
+				else setGroupPosition(group, x, y, z);
+				if (group.quaternion?.slerp) group.quaternion.slerp(targetQuat, quaternionEase);
+				else if (group.quaternion) {
+					group.quaternion.x = targetQuat.x;
+					group.quaternion.y = targetQuat.y;
+					group.quaternion.z = targetQuat.z;
+					group.quaternion.w = targetQuat.w;
+				}
 			}
 			return;
 		}
@@ -557,7 +502,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 				: layout.lockBaseDistance + layout.lyricOffsetZ;
 			const edgeGuardCamera = opts.cameraSupplier?.() ?? null;
 			let lockFit = edgeGuardCamera
-				? lyricCameraLockFit(edgeGuardCamera, layout.lyricScale, layout.lyricOffsetX, layout.lyricOffsetY, lockDistance)
+				? lyricCameraLockFit(edgeGuardCamera, layout.lyricScale, layout.lyricOffsetX, layout.lyricOffsetY, lockDistance, layout.preset === 6 || layout.skullMouthLyrics)
 				: 1;
 			if (layout.skullMouthLyrics) lockFit = Math.min(lockFit, 1.12);
 			state.lockFitScale += (lockFit - state.lockFitScale) * (lockFit < state.lockFitScale ? 0.18 : 0.10);
@@ -568,6 +513,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		}
 		const mouth = layout.skullMouthLyrics ? opts.skullMouthTransformSupplier?.() ?? null : null;
 		if (mouth && mouth.visible !== false) {
+			state.snapCameraLockFrames = 0;
 			group.userData = group.userData ?? {};
 			const q = mouth.quaternion;
 			const right = normalizeVec(applyQuaternionToVec({ x: 1, y: 0, z: 0 }, q));
@@ -600,6 +546,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			return;
 		}
 		if (group.userData) group.userData.skullMouthLocked = false;
+		state.snapCameraLockFrames = 0;
 		const cover = opts.coverWorldTransformSupplier?.() ?? null;
 		const basePos = { x: 0, y: 0, z: 0 };
 		const baseQuat = { x: 0, y: 0, z: 0, w: 1 };
@@ -633,7 +580,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 	function getShelfProfile(preset?: number) {
 		const sv = getShelfVisibility();
 		const shelfDetailOpen = getShelfHasOpenContent();
-		const skullShelfDetailOpen = shelfDetailOpen && ((preset ?? getLyricLayoutOptions().preset) === 6 || getSkullShelfOpen());
+		const skullShelfDetailOpen = shelfDetailOpen && (preset ?? getLyricLayoutOptions().preset) === 6;
 		const profile = shelfDetailOpen
 			? {
 					opacity: skullShelfDetailOpen ? 0.30 : 0.38,
@@ -674,6 +621,57 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		if (typeof v.r === "number") t.r = v.r;
 		if (typeof v.g === "number") t.g = v.g;
 		if (typeof v.b === "number") t.b = v.b;
+	}
+
+	function lerpColorValue(from: unknown, to: unknown, amount: number): { r: number; g: number; b: number } | null {
+		const a = from as { r?: number; g?: number; b?: number } | null | undefined;
+		const b = to as { r?: number; g?: number; b?: number } | null | undefined;
+		if (!a || !b || typeof a.r !== "number" || typeof a.g !== "number" || typeof a.b !== "number" || typeof b.r !== "number" || typeof b.g !== "number" || typeof b.b !== "number") return null;
+		return {
+			r: a.r + (b.r - a.r) * amount,
+			g: a.g + (b.g - a.g) * amount,
+			b: a.b + (b.b - a.b) * amount,
+		};
+	}
+
+	function setMaterialColor(target: unknown, value: unknown): void {
+		const color = (target as { color?: unknown } | null | undefined)?.color;
+		copyColor(color, value);
+	}
+
+	function setUniformColor(mat: unknown, key: string, value: unknown): void {
+		const u = (mat as { uniforms?: Record<string, { value?: unknown }> } | null | undefined)?.uniforms?.[key];
+		if (u) copyColor(u.value, value);
+	}
+
+	function lyricSunColorValues(): { sun: unknown; hot: unknown } {
+		const pal = state.paletteRuntime.get();
+		if (!state.three) return {
+			sun: lyricThreeColor(pal.glowColor || pal.secondary || pal.primary, "#ffe6a4", 0.44),
+			hot: lyricThreeColor(pal.highlight || pal.primary, "#fff4cc", 0.54),
+		};
+		return {
+			sun: colorValue(state.three, pal.glowColor || pal.secondary || pal.primary, "#ffe6a4", 0.44),
+			hot: colorValue(state.three, pal.highlight || pal.primary, "#fff4cc", 0.54),
+		};
+	}
+
+	function applyPaletteToLyric(lyric: LyricGroup | null | undefined): void {
+		if (!lyric || !state.three) return;
+		const pal = state.paletteRuntime.get();
+		const uniforms0 = (lyric.textMat as unknown as { uniforms?: Record<string, { value?: unknown }>; needsUpdate?: boolean }).uniforms;
+		if (uniforms0) {
+			if (uniforms0.uBaseColor) copyColor(uniforms0.uBaseColor.value, colorValue(state.three, pal.primary, "#d6f8ff", 0.38));
+			if (uniforms0.uHiColor) copyColor(uniforms0.uHiColor.value, colorValue(state.three, pal.highlight || pal.primary, "#fff0b8", 0.48));
+			if (uniforms0.uGlowColor) copyColor(uniforms0.uGlowColor.value, colorValue(state.three, pal.glowColor || pal.secondary || pal.primary, "#9cffdf", 0.36));
+			if (uniforms0.uSolarColor) copyColor(uniforms0.uSolarColor.value, colorValue(state.three, pal.highlight || pal.secondary || pal.primary, "#fff0b8", 0.50));
+			if (uniforms0.uSolar && !Number.isFinite(Number(uniforms0.uSolar.value))) uniforms0.uSolar.value = 0;
+			if (uniforms0.uOpacity && !Number.isFinite(Number(uniforms0.uOpacity.value))) uniforms0.uOpacity.value = 0;
+			(lyric.textMat as unknown as { needsUpdate?: boolean }).needsUpdate = true;
+		}
+		setMaterialColor(lyric.glowMat, colorValue(state.three, pal.glowColor || pal.secondary || pal.primary, "#9cffdf", 0.36));
+		setUniformColor(lyric.sparkMat, "uColor", colorValue(state.three, pal.highlight || pal.secondary || pal.primary, "#fff0b8", 0.46));
+		setMaterialColor(lyric.sunMat, colorValue(state.three, pal.highlight || pal.secondary || pal.primary, "#fff0b8", 0.50));
 	}
 
 	function ensureLyricStarRiver(): THREE.Object3D | null {
@@ -817,22 +815,6 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 	}
 
 	function disposeCurrent(): void {
-		if (state.activeInTimeline) {
-			try {
-				state.activeInTimeline.kill();
-			} catch {
-				void 0;
-			}
-			state.activeInTimeline = null;
-		}
-		if (state.activeBobTimeline) {
-			try {
-				state.activeBobTimeline.kill();
-			} catch {
-				void 0;
-			}
-			state.activeBobTimeline = null;
-		}
 		if (state.current) {
 			if (state.group) {
 				try {
@@ -885,13 +867,6 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		state.currentText = "";
 		while (state.outgoing.length) {
 			const entry = state.outgoing.pop()!;
-			if (entry.timeline) {
-				try {
-					entry.timeline.kill();
-				} catch {
-					void 0;
-				}
-			}
 			if (state.group) {
 				try {
 					(state.group as unknown as { remove: (c: unknown) => void }).remove(entry.lyric.group);
@@ -954,24 +929,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			const outgoingLyric = state.current;
 			(outgoingLyric.group as unknown as { userData: Record<string, unknown> }).userData.state = "out";
 			(outgoingLyric.group as unknown as { userData: Record<string, unknown> }).userData.age = 0;
-			const outTl =
-				state.gsap && state.easings
-					? playStageLineOutTimeline(state.gsap, outgoingLyric.group, {
-							easings: state.easings,
-							reduceMotion: state.reduceMotionFlag,
-							onComplete: () => {
-								if (state.group) {
-									try {
-										(state.group as unknown as { remove: (c: unknown) => void }).remove(outgoingLyric.group);
-									} catch {
-										void 0;
-									}
-								}
-								disposeLyricGroupSafe(outgoingLyric);
-							},
-						})
-					: null;
-			state.outgoing.push({ lyric: outgoingLyric, timeline: outTl, age: 0 });
+			state.outgoing.push({ lyric: outgoingLyric, age: 0 });
 			state.current = null;
 		}
 		state.currentText = text;
@@ -990,6 +948,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 					threeFactory,
 					dotTexture: opts.dotTexture,
 					pixelScale: opts.pixelScale,
+					maxAnisotropy: opts.maxAnisotropy,
 					lyricGlowParticles: opts.lyricGlowParticlesSupplier ? opts.lyricGlowParticlesSupplier() : false,
 					lyricsHasNativeKaraoke,
 					...textOptions,
@@ -1008,29 +967,10 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 				if (state.lastFrame) {
 					updateStageLyrics3D(state.lastFrame.dt, state.lastFrame.t, state.lastFrame.snapshot);
 				}
-				try {
-					await ensureGsap();
-				} catch {
-					void 0;
-				}
 				if (state.disposed || token !== state.buildToken || state.current !== lyric) {
 					disposeLyricGroupSafe(lyric);
 					return;
 				}
-				const g = state.gsap;
-				const eases = state.easings ?? defaultTransitionEasings();
-				state.activeInTimeline = g
-					? playStageLineInTimeline(g, lyric.group, {
-							easings: eases,
-							reduceMotion: state.reduceMotionFlag,
-						})
-					: null;
-				state.activeBobTimeline = g && !state.reduceMotionFlag
-					? playStageLineBobTimeline(g, lyric.group, {
-							easings: eases,
-							reduceMotion: state.reduceMotionFlag,
-						})
-					: null;
 			} finally {
 				state.activeBuilds = Math.max(0, state.activeBuilds - 1);
 			}
@@ -1054,7 +994,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 				const outgoingLyric = state.current;
 				(outgoingLyric.group as unknown as { userData: Record<string, unknown> }).userData.state = "out";
 				(outgoingLyric.group as unknown as { userData: Record<string, unknown> }).userData.age = 0;
-				state.outgoing.push({ lyric: outgoingLyric, timeline: null, age: 0 });
+				state.outgoing.push({ lyric: outgoingLyric, age: 0 });
 				state.current = null;
 				state.currentIdx = -1;
 				state.currentText = "";
@@ -1143,8 +1083,8 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		const uOpacity = uniforms(mesh, "uOpacity");
 		const uSolar = uniforms(mesh, "uSolar");
 		const readabilityMat = mesh.readabilityMat as { opacity: number };
-		const glowMat = mesh.glowMat as { opacity: number };
-		const sunMat = mesh.sunMat as { opacity: number };
+		const glowMat = mesh.glowMat as { opacity: number; color?: unknown };
+		const sunMat = mesh.sunMat as { opacity: number; color?: unknown };
 		const data = userData.lyric as {
 			glow?: { position?: unknown; rotation?: { z: number } };
 			sun?: { position?: unknown; rotation?: { z: number }; scale?: unknown };
@@ -1195,6 +1135,11 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			const solar = state.highBloom * shelf.profile.bloom;
 			const glowTarget = lyricGlowStrength > 0 ? Math.min(shelf.profile.glowCap, (0.075 + solar * 0.34 + state.beatGlow * 0.16 * shelf.profile.bloom) * Math.min(3.0, glowDrive)) : 0;
 			glowMat.opacity += (glowTarget - glowMat.opacity) * (glowTarget > glowMat.opacity ? 0.095 : (shelf.shelfDetailOpen ? 0.20 : 0.055));
+			if (state.three) {
+				const { hot } = lyricSunColorValues();
+				const base = colorValue(state.three, state.paletteRuntime.get().glowColor || state.paletteRuntime.get().secondary, "#9cffdf", 0.36);
+				setMaterialColor(glowMat, lerpColorValue(base, hot, Math.max(0, Math.min(1, solar * 1.10))) ?? base);
+			}
 		}
 		const solar = state.highBloom * shelf.profile.bloom;
 		if (data?.sparkMat) {
@@ -1204,10 +1149,15 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			const sparkSizeTarget = lyricGlowParticles && !shelf.shelfDetailOpen ? (0.050 + solar * 0.016 + state.beatGlow * 0.026 + state.bass * 0.008) : 0.035;
 			const sparkSize = getUniformValue(data.sparkMat, "uSize", 0.052);
 			setUniformValue(data.sparkMat, "uSize", sparkSize + (sparkSizeTarget - sparkSize) * 0.12);
+			const { sun, hot } = lyricSunColorValues();
+			const sparkColor = lerpColorValue(hot, sun, 0.22 + solar * 0.18);
+			if (sparkColor) setUniformColor(data.sparkMat, "uColor", sparkColor);
 		}
 		if (sunMat) {
 			const sunTarget = lyricGlowStrength > 0 && !shelf.shelfDetailOpen ? Math.min(0.88, (Math.pow(Math.min(1.35, state.highBloom), 1.08) * 0.28 + state.beatGlow * 0.20) * Math.min(2.4, glowDrive)) : 0;
 			sunMat.opacity += (sunTarget - sunMat.opacity) * (shelf.shelfDetailOpen ? 0.18 : 0.055);
+			const { sun, hot } = lyricSunColorValues();
+			setMaterialColor(sunMat, lerpColorValue(sun, hot, solar * 0.55) ?? sun);
 		}
 		const seed = Number(userData.floatSeed || 0);
 		if (data?.sun) {
@@ -1286,9 +1236,30 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			const readabilityMat = lyric.readabilityMat as { opacity: number };
 			const glowMat = lyric.glowMat as { opacity: number };
 			const sunMat = lyric.sunMat as { opacity: number };
-			const data = userData.lyric as { sparkMat?: unknown } | undefined;
+			const data = userData.lyric as {
+				glow?: { position?: unknown; rotation?: { z: number } };
+				sun?: { position?: unknown; rotation?: { z: number } };
+				sparks?: { position?: unknown; rotation?: { z: number } };
+				sparkMat?: unknown;
+			} | undefined;
 			const lyricGlowStrength = opts.lyricGlowStrengthSupplier ? Math.min(0.85, Math.max(0, opts.lyricGlowStrengthSupplier())) : 0;
 			const lyricGlowParticles = opts.lyricGlowParticlesSupplier ? !!opts.lyricGlowParticlesSupplier() : false;
+			const followMix = 0.64;
+			const glowX = state.glowFollowX * followMix;
+			const glowY = state.glowFollowY * followMix;
+			const glowRoll = state.glowFollowRoll * followMix;
+			if (data?.glow) {
+				setVector3(data.glow.position, glowX * 0.14, glowY * 0.12, -0.006);
+				if (data.glow.rotation) data.glow.rotation.z = glowRoll * 0.30;
+			}
+			if (data?.sun) {
+				setVector3(data.sun.position, glowX * 0.42, 0.02 + glowY * 0.34, -0.035);
+				if (data.sun.rotation) data.sun.rotation.z = glowRoll * 0.36;
+			}
+			if (data?.sparks) {
+				setVector3(data.sparks.position, glowX * 0.24, glowY * 0.22, 0.010);
+				if (data.sparks.rotation) data.sparks.rotation.z = glowRoll * 0.22;
+			}
 			const opacity = (1 - aSmooth) * 0.72 * shelf.profile.outgoing;
 			if (uOpacity) (uOpacity as SizeOfMaterial).value = opacity;
 			if (readabilityMat) readabilityMat.opacity = opacity * (shelf.shelfDetailOpen ? shelf.profile.readability : 0.58);
@@ -1310,13 +1281,6 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			sc.y = scalar;
 			sc.z = scalar;
 			if (aSmooth >= 1) {
-				if (entry.timeline) {
-					try {
-						entry.timeline.kill();
-					} catch {
-						void 0;
-					}
-				}
 				if (state.group) {
 					try {
 						(state.group as unknown as { remove: (c: unknown) => void }).remove(lyric.group);
@@ -1444,20 +1408,14 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		},
 		setPalette(palette: Partial<LyricPalette>) {
 			state.paletteRuntime.set(palette);
-			if (state.current && state.currentText) {
-				const progress = (state.current.group as unknown as { userData: { lastLyricProgress?: number } }).userData.lastLyricProgress ?? 0;
-				showStageLine(state.currentText, true);
-				if (state.current) {
-					updateLyricGroupProgress(
-						{ group: state.current.group, textMat: state.current.textMat },
-						progress,
-					);
-					(state.current.group as unknown as { userData: Record<string, unknown> }).userData.age = 0.48;
-				}
-			}
+			applyPaletteToLyric(state.current);
+			for (const entry of state.outgoing) applyPaletteToLyric(entry.lyric);
 		},
 		setShelfVisibility(v: number) {
 			state.shelfVisibility = Number.isFinite(v) ? v : 0;
+		},
+		requestCameraSnap(frames = 10) {
+			state.snapCameraLockFrames = Math.max(0, Math.floor(Number(frames) || 0));
 		},
 		getCurrentIdx() {
 			return state.currentIdx;

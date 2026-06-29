@@ -275,6 +275,15 @@ test("buildLyricGroup sparks uniform uMap points to provided dotTexture; uSize=0
 	expect(u.uPixel.value).toBeCloseTo(1.35, 6);
 });
 
+test("buildLyricGroup passes baseline max anisotropy to mask texture", async () => {
+	const lyric = await buildLyricGroup("test", DEFAULT_LYRIC_PALETTE, {
+		threeFactory: makeFakeThree(),
+		dotTexture: makeFakeDotTexture(),
+		maxAnisotropy: 7,
+	});
+	expect((lyric.mask.texture as unknown as { anisotropy: number }).anisotropy).toBe(7);
+});
+
 test("updateLyricGroupProgress writes uProgress and lastLyricProgress (clamped 0..1)", async () => {
 	const lyric = await buildLyricGroup("test", DEFAULT_LYRIC_PALETTE, {
 		threeFactory: makeFakeThree(),

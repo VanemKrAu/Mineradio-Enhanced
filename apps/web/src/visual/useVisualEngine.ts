@@ -461,7 +461,14 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				renderer.dispose();
 				return;
 			}
-			const offResize = attachRendererResizeSync(host, renderer);
+			const resizeAwareRenderer = {
+				...renderer,
+				resize: (opts?: Parameters<typeof renderer.resize>[0]) => {
+					renderer.resize(opts);
+					refs.lifecycleRef.current?.requestCameraSnap(10);
+				},
+			};
+			const offResize = attachRendererResizeSync(host, resizeAwareRenderer);
 			renderer.resize();
 			const cinema = createCinemaCamera({
 				camera: renderer.camera,
@@ -570,6 +577,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				},
 				cameraSupplier: () => renderer.camera,
 				pixelScale: 1,
+				maxAnisotropy: Math.min(8, renderer.renderer.capabilities.getMaxAnisotropy?.() ?? 1),
 				reduceMotion: prefersReducedMotion,
 			});
 			let syncedShelfItemsVersion = refs.shelfItemsVersionRef.current;
@@ -588,6 +596,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			);
 			void lifecycle.mount(renderer.scene);
 			refs.lifecycleRef.current = lifecycle;
+			lifecycle.requestCameraSnap(10);
 			try {
 				lifecycle.setLyricLines(refs.lyricLinesRef.current);
 			} catch {
