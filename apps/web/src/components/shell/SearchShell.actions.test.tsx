@@ -287,6 +287,9 @@ test("SearchShell podcast mode drills into programs with back next and play acti
 		await new Promise((resolve) => setTimeout(resolve, 0));
 	}
 	(container.querySelector("[data-podcast-program-id=\"program-1\"]") as HTMLButtonElement).click();
+	await new Promise((resolve) => setTimeout(resolve, 0));
 	expect(usePlaybackStore.getState().currentTrack?.id).toBe("program-song-1");
+	expect(container.querySelector("[data-podcast-program-id=\"program-1\"]")).toBeNull();
+	expect(container.querySelector("#search-results")?.classList.contains("show")).toBe(false);
 	root.unmount();
 });

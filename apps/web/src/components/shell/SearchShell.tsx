@@ -29,6 +29,11 @@ const HISTORY_CHIPS: Array<{ label: string; mode?: SearchMode; keyword: string }
 	{ label: "播客", mode: "podcast", keyword: "播客" },
 ];
 
+function isPodcastTrack(track: Track): boolean {
+	const candidate = track as Track & { type?: string; programId?: string; radioId?: string };
+	return candidate.type === "podcast" || !!candidate.programId || !!candidate.radioId;
+}
+
 function modeProvider(mode: SearchMode): ProviderId | undefined {
 	if (mode === "netease") return "netease";
 	if (mode === "qq") return "qq";
@@ -239,6 +244,13 @@ export function SearchShell({
 
 	const playResult = (track: Track) => {
 		playSearchResult(track);
+		if (isPodcastTrack(track)) {
+			modeRef.current = "song";
+			setProvider(providerFromMode("song"));
+			setPodcastResults([]);
+			setPodcastPrograms([]);
+			setPodcastCurrentRadio(null);
+		}
 		clearSearchAfterPlayback({
 			nextSearchSeq: () => {
 				searchSeqRef.current += 1;
