@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isRuntimeShelfPreviewActive, resolveHomeVisualPreset, setRuntimeShelfMode } from "./useVisualEngine";
+import { isRuntimeShelfPreviewActive, resolveHomeVisualPreset, resolveStageLyricLayoutOptions, setRuntimeShelfMode } from "./useVisualEngine";
 
 test("isRuntimeShelfPreviewActive follows side-auto shelf visibility readiness", () => {
 	expect(isRuntimeShelfPreviewActive("auto", 0.17)).toBe(true);
@@ -53,4 +53,25 @@ test("resolveHomeVisualPreset keeps cached pre-home preset ahead of playback pre
 		playbackPreset: 2,
 	});
 	expect(restored).toEqual({ preset: 4, previousPreset: null, changed: true });
+});
+
+test("resolveStageLyricLayoutOptions carries baseline camera lock and layout controls", () => {
+	const layout = resolveStageLyricLayoutOptions({
+		lyricCameraLock: true,
+		lyricScale: 1.2,
+		lyricOffsetX: -0.3,
+		lyricOffsetY: 0.4,
+		lyricOffsetZ: 0.8,
+		lyricTiltX: 9,
+		lyricTiltY: -11,
+	});
+	expect(layout).toEqual({
+		lyricCameraLock: true,
+		lyricScale: 1.2,
+		lyricOffsetX: -0.3,
+		lyricOffsetY: 0.4,
+		lyricOffsetZ: 0.8,
+		lyricTiltX: 9,
+		lyricTiltY: -11,
+	});
 });

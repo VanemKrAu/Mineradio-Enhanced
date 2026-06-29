@@ -52,6 +52,7 @@ export interface StageLyricsLifecycleOpts {
 	lyricGlowBeatFlagSupplier?: () => boolean;
 	lyricTextOptionsSupplier?: () => LyricTextOptions;
 	lyricLayoutOptionsSupplier?: () => LyricLayoutOptions;
+	cameraSupplier?: () => THREE.PerspectiveCamera | null;
 	lyricSunEnergyHolder?: { get(): number; set(v: number): void };
 	getBeatCamKick?: () => {
 		thetaKick: number;
@@ -88,6 +89,7 @@ export interface StageLyricsLifecycle {
 
 type Vec3Like = { x: number; y: number; z: number };
 export interface LyricLayoutOptions {
+	lyricCameraLock?: boolean;
 	lyricScale?: number;
 	lyricOffsetX?: number;
 	lyricOffsetY?: number;
@@ -104,6 +106,55 @@ function finiteOr(v: number, d: number): number {
 }
 function fallbackNumber(v: number | undefined, d: number): number {
 	return typeof v === "number" && isFinite(v) ? v : d;
+}
+function normalizeVec(v: Vec3Like): Vec3Like {
+	const len = Math.hypot(v.x, v.y, v.z) || 1;
+	v.x /= len;
+	v.y /= len;
+	v.z /= len;
+	return v;
+}
+function applyQuaternionToVec(v: Vec3Like, q: { x: number; y: number; z: number; w: number }): Vec3Like {
+	const x = v.x;
+	const y = v.y;
+	const z = v.z;
+	const qx = q.x;
+	const qy = q.y;
+	const qz = q.z;
+	const qw = q.w;
+	const ix = qw * x + qy * z - qz * y;
+	const iy = qw * y + qz * x - qx * z;
+	const iz = qw * z + qx * y - qy * x;
+	const iw = -qx * x - qy * y - qz * z;
+	v.x = ix * qw + iw * -qx + iy * -qz - iz * -qy;
+	v.y = iy * qw + iw * -qy + iz * -qx - ix * -qz;
+	v.z = iz * qw + iw * -qz + ix * -qy - iy * -qx;
+	return v;
+}
+function tiltQuaternionYXZ(tiltX: number, tiltY: number): { x: number; y: number; z: number; w: number } {
+	const x = tiltX * Math.PI / 180;
+	const y = tiltY * Math.PI / 180;
+	const c1 = Math.cos(x / 2);
+	const c2 = Math.cos(y / 2);
+	const s1 = Math.sin(x / 2);
+	const s2 = Math.sin(y / 2);
+	return {
+		x: s1 * c2,
+		y: c1 * s2,
+		z: -s1 * s2,
+		w: c1 * c2,
+	};
+}
+function multiplyQuaternions(
+	a: { x: number; y: number; z: number; w: number },
+	b: { x: number; y: number; z: number; w: number },
+): { x: number; y: number; z: number; w: number } {
+	return {
+		x: a.x * b.w + a.w * b.x + a.y * b.z - a.z * b.y,
+		y: a.y * b.w + a.w * b.y + a.z * b.x - a.x * b.z,
+		z: a.z * b.w + a.w * b.z + a.x * b.y - a.y * b.x,
+		w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+	};
 }
 
 const defaultGsapProvider: GsapProvider = async () => {
@@ -232,6 +283,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 	function getLyricLayoutOptions(): Required<LyricLayoutOptions> {
 		const raw = opts.lyricLayoutOptionsSupplier?.() ?? {};
 		return {
+			lyricCameraLock: !!raw.lyricCameraLock,
 			lyricScale: clamp(Number(raw.lyricScale) || 1, 0.35, 1.65),
 			lyricOffsetX: clamp(Number(raw.lyricOffsetX) || 0, -2, 2),
 			lyricOffsetY: clamp(Number(raw.lyricOffsetY) || 0, -1.2, 1.35),
@@ -241,30 +293,76 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		};
 	}
 
-	function applyFreeLyricLayout(): void {
-		if (!state.group) return;
-		const layout = getLyricLayoutOptions();
-		const group = state.group as unknown as {
+	function setGroupPosition(
+		group: {
 			position?: { set?: (x: number, y: number, z: number) => void; x: number; y: number; z: number };
-			rotation?: { x: number; y: number; z: number };
-			scale?: { setScalar?: (s: number) => void; set?: (x: number, y: number, z: number) => void; x: number; y: number; z: number };
-		};
-		const x = layout.lyricOffsetX;
-		const y = 0.2 + layout.lyricOffsetY;
-		const z = 1.46 + layout.lyricOffsetZ;
+		},
+		x: number,
+		y: number,
+		z: number,
+	): void {
 		if (group.position?.set) group.position.set(x, y, z);
 		else if (group.position) {
 			group.position.x = x;
 			group.position.y = y;
 			group.position.z = z;
 		}
-		if (group.scale?.setScalar) group.scale.setScalar(layout.lyricScale);
-		else if (group.scale?.set) group.scale.set(layout.lyricScale, layout.lyricScale, layout.lyricScale);
+	}
+
+	function setGroupScale(
+		group: {
+			scale?: { setScalar?: (s: number) => void; set?: (x: number, y: number, z: number) => void; x: number; y: number; z: number };
+		},
+		scale: number,
+	): void {
+		if (group.scale?.setScalar) group.scale.setScalar(scale);
+		else if (group.scale?.set) group.scale.set(scale, scale, scale);
 		else if (group.scale) {
-			group.scale.x = layout.lyricScale;
-			group.scale.y = layout.lyricScale;
-			group.scale.z = layout.lyricScale;
+			group.scale.x = scale;
+			group.scale.y = scale;
+			group.scale.z = scale;
 		}
+	}
+
+	function applyStageLyricLayout(): void {
+		if (!state.group) return;
+		const layout = getLyricLayoutOptions();
+		const group = state.group as unknown as {
+			position?: { set?: (x: number, y: number, z: number) => void; lerp?: (v: Vec3Like, a: number) => void; x: number; y: number; z: number };
+			quaternion?: { x: number; y: number; z: number; w: number; slerp?: (q: { x: number; y: number; z: number; w: number }, a: number) => void };
+			rotation?: { x: number; y: number; z: number };
+			scale?: { setScalar?: (s: number) => void; set?: (x: number, y: number, z: number) => void; x: number; y: number; z: number };
+		};
+		setGroupScale(group, layout.lyricScale);
+		const camera = layout.lyricCameraLock ? opts.cameraSupplier?.() ?? null : null;
+		if (camera) {
+			const q = camera.quaternion as { x: number; y: number; z: number; w: number };
+			const dir = { x: 0, y: 0, z: -1 };
+			const right = normalizeVec(applyQuaternionToVec({ x: 1, y: 0, z: 0 }, q));
+			const up = normalizeVec(applyQuaternionToVec({ x: 0, y: 1, z: 0 }, q));
+			const worldDir = typeof camera.getWorldDirection === "function"
+				? camera.getWorldDirection({ x: 0, y: 0, z: 0, normalize() { return normalizeVec(this); } } as never) as unknown as Vec3Like
+				: applyQuaternionToVec(dir, q);
+			const forward = normalizeVec({ x: worldDir.x, y: worldDir.y, z: worldDir.z });
+			const x = camera.position.x + forward.x * 4.85 + right.x * layout.lyricOffsetX + up.x * layout.lyricOffsetY + forward.x * layout.lyricOffsetZ;
+			const y = camera.position.y + forward.y * 4.85 + right.y * layout.lyricOffsetX + up.y * layout.lyricOffsetY + forward.y * layout.lyricOffsetZ;
+			const z = camera.position.z + forward.z * 4.85 + right.z * layout.lyricOffsetX + up.z * layout.lyricOffsetY + forward.z * layout.lyricOffsetZ;
+			if (group.position?.lerp) group.position.lerp({ x, y, z }, 0.24);
+			else setGroupPosition(group, x, y, z);
+			const targetQuat = multiplyQuaternions(q, tiltQuaternionYXZ(layout.lyricTiltX, layout.lyricTiltY));
+			if (group.quaternion?.slerp) group.quaternion.slerp(targetQuat, 0.22);
+			else if (group.quaternion) {
+				group.quaternion.x = targetQuat.x;
+				group.quaternion.y = targetQuat.y;
+				group.quaternion.z = targetQuat.z;
+				group.quaternion.w = targetQuat.w;
+			}
+			return;
+		}
+		const x = layout.lyricOffsetX;
+		const y = 0.2 + layout.lyricOffsetY;
+		const z = 1.46 + layout.lyricOffsetZ;
+		setGroupPosition(group, x, y, z);
 		if (group.rotation) {
 			group.rotation.x = layout.lyricTiltX * Math.PI / 180;
 			group.rotation.y = layout.lyricTiltY * Math.PI / 180;
@@ -679,7 +777,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		state.glowFollowX *= 0.92;
 		state.glowFollowY *= 0.92;
 		state.glowFollowRoll *= 0.90;
-		applyFreeLyricLayout();
+		applyStageLyricLayout();
 		tickCurrentMesh(dt, shelf, snapshot, t);
 		tickOutgoingMeshes(dt, shelf, snapshot, t);
 	}

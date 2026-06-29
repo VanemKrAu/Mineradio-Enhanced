@@ -275,6 +275,18 @@ export function resolveHomeVisualPreset(
 	};
 }
 
+export function resolveStageLyricLayoutOptions(fx: Partial<FxState>) {
+	return {
+		lyricCameraLock: !!fx.lyricCameraLock,
+		lyricScale: fx.lyricScale,
+		lyricOffsetX: fx.lyricOffsetX,
+		lyricOffsetY: fx.lyricOffsetY,
+		lyricOffsetZ: fx.lyricOffsetZ,
+		lyricTiltX: fx.lyricTiltX,
+		lyricTiltY: fx.lyricTiltY,
+	};
+}
+
 function disposeHandles(handles: MountedHandles | null): void {
 	if (!handles) return;
 	try {
@@ -464,15 +476,9 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				},
 				lyricLayoutOptionsSupplier: () => {
 					const fx = mergeFxState(mergeFxState(cloneFxState(), refs.fxDefaults), refs.fxRef?.current);
-					return {
-						lyricScale: fx.lyricScale,
-						lyricOffsetX: fx.lyricOffsetX,
-						lyricOffsetY: fx.lyricOffsetY,
-						lyricOffsetZ: fx.lyricOffsetZ,
-						lyricTiltX: fx.lyricTiltX,
-						lyricTiltY: fx.lyricTiltY,
-					};
+					return resolveStageLyricLayoutOptions(fx);
 				},
+				cameraSupplier: () => renderer.camera,
 				pixelScale: 1,
 				reduceMotion: prefersReducedMotion,
 			});

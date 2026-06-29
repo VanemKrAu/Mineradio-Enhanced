@@ -10,6 +10,76 @@ import { RenderStepSlot } from "../runtime/render-step-slot";
 type RecordedCall = { method: string; args: unknown[] };
 
 function makeFakeThree(): ThreeFactory {
+	function makeVector3(x = 0, y = 0, z = 0) {
+		return {
+			x, y, z,
+			set(this: { x: number; y: number; z: number }, nx: number, ny: number, nz: number) {
+				this.x = nx; this.y = ny; this.z = nz; return this;
+			},
+			copy(this: { x: number; y: number; z: number }, other: { x: number; y: number; z: number }) {
+				this.x = other.x; this.y = other.y; this.z = other.z; return this;
+			},
+			addScaledVector(this: { x: number; y: number; z: number }, other: { x: number; y: number; z: number }, scale: number) {
+				this.x += other.x * scale; this.y += other.y * scale; this.z += other.z * scale; return this;
+			},
+			normalize(this: { x: number; y: number; z: number }) {
+				const len = Math.hypot(this.x, this.y, this.z) || 1;
+				this.x /= len; this.y /= len; this.z /= len; return this;
+			},
+			applyQuaternion(this: { x: number; y: number; z: number }, q: { x: number; y: number; z: number; w: number }) {
+				const x0 = this.x, y0 = this.y, z0 = this.z;
+				const qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+				const ix = qw * x0 + qy * z0 - qz * y0;
+				const iy = qw * y0 + qz * x0 - qx * z0;
+				const iz = qw * z0 + qx * y0 - qy * x0;
+				const iw = -qx * x0 - qy * y0 - qz * z0;
+				this.x = ix * qw + iw * -qx + iy * -qz - iz * -qy;
+				this.y = iy * qw + iw * -qy + iz * -qx - ix * -qz;
+				this.z = iz * qw + iw * -qz + ix * -qy - iy * -qx;
+				return this;
+			},
+			lerp(this: { x: number; y: number; z: number }, other: { x: number; y: number; z: number }, a: number) {
+				this.x += (other.x - this.x) * a; this.y += (other.y - this.y) * a; this.z += (other.z - this.z) * a; return this;
+			},
+		};
+	}
+	function makeQuaternion(x = 0, y = 0, z = 0, w = 1) {
+		return {
+			x, y, z, w,
+			copy(this: { x: number; y: number; z: number; w: number }, other: { x: number; y: number; z: number; w: number }) {
+				this.x = other.x; this.y = other.y; this.z = other.z; this.w = other.w; return this;
+			},
+			multiply(this: { x: number; y: number; z: number; w: number }, other: { x: number; y: number; z: number; w: number }) {
+				const ax = this.x, ay = this.y, az = this.z, aw = this.w;
+				const bx = other.x, by = other.y, bz = other.z, bw = other.w;
+				this.x = ax * bw + aw * bx + ay * bz - az * by;
+				this.y = ay * bw + aw * by + az * bx - ax * bz;
+				this.z = az * bw + aw * bz + ax * by - ay * bx;
+				this.w = aw * bw - ax * bx - ay * by - az * bz;
+				return this;
+			},
+			setFromEuler(this: { x: number; y: number; z: number; w: number }, e: { x: number; y: number; z: number }) {
+				const c1 = Math.cos(e.x / 2), c2 = Math.cos(e.y / 2), c3 = Math.cos(e.z / 2);
+				const s1 = Math.sin(e.x / 2), s2 = Math.sin(e.y / 2), s3 = Math.sin(e.z / 2);
+				this.x = s1 * c2 * c3 + c1 * s2 * s3;
+				this.y = c1 * s2 * c3 - s1 * c2 * s3;
+				this.z = c1 * c2 * s3 - s1 * s2 * c3;
+				this.w = c1 * c2 * c3 + s1 * s2 * s3;
+				return this;
+			},
+			slerp(this: { x: number; y: number; z: number; w: number }, other: { x: number; y: number; z: number; w: number }, a: number) {
+				this.x += (other.x - this.x) * a; this.y += (other.y - this.y) * a; this.z += (other.z - this.z) * a; this.w += (other.w - this.w) * a; return this;
+			},
+		};
+	}
+	function Euler(x = 0, y = 0, z = 0, order = "YXZ") {
+		return {
+			x, y, z, order,
+			set(this: { x: number; y: number; z: number; order: string }, nx: number, ny: number, nz: number, nextOrder?: string) {
+				this.x = nx; this.y = ny; this.z = nz; this.order = nextOrder ?? this.order; return this;
+			},
+		};
+	}
 	function Group() {
 		return {
 			isGroup: true,
@@ -17,18 +87,7 @@ function makeFakeThree(): ThreeFactory {
 			children: [] as unknown[],
 			userData: {} as Record<string, unknown>,
 			parent: null as unknown,
-			position: {
-				x: 0, y: 0, z: 0,
-				set(this: { x: number; y: number; z: number }, x: number, y: number, z: number) {
-					this.x = x; this.y = y; this.z = z;
-				},
-				copy(this: { x: number; y: number; z: number }, other: { x: number; y: number; z: number }) {
-					this.x = other.x; this.y = other.y; this.z = other.z;
-				},
-				lerp(this: { x: number; y: number; z: number }, other: { x: number; y: number; z: number }, a: number) {
-					this.x += (other.x - this.x) * a; this.y += (other.y - this.y) * a; this.z += (other.z - this.z) * a;
-				},
-			},
+			position: makeVector3(),
 			rotation: { x: 0, y: 0, z: 0 },
 			scale: {
 				x: 1, y: 1, z: 1,
@@ -39,7 +98,7 @@ function makeFakeThree(): ThreeFactory {
 					this.x = x; this.y = y; this.z = z;
 				},
 			},
-			quaternion: { x: 0, y: 0, z: 0, w: 1 },
+			quaternion: makeQuaternion(),
 			add(child: unknown) {
 				(this as { children: unknown[] }).children.push(child);
 				(child as { parent: unknown }).parent = this;
@@ -147,13 +206,28 @@ function makeFakeThree(): ThreeFactory {
 		return { isTexture: true, minFilter: 0, magFilter: 0, disposed: false, dispose() { (this as { disposed: boolean }).disposed = true; } };
 	}
 	const module = {
-		Group, PlaneGeometry, BufferGeometry, BufferAttribute,
+		Group, PlaneGeometry, BufferGeometry, BufferAttribute, Vector3: makeVector3, Quaternion: makeQuaternion, Euler,
 		MeshBasicMaterial, ShaderMaterial, Mesh, Points, Color,
 		CanvasTexture, Texture,
 		LinearFilter: 1006, NearestFilter: 1003,
 		DoubleSide: 2, AdditiveBlending: 2, NormalBlending: 1,
 	};
 	return (() => module) as unknown as ThreeFactory;
+}
+
+function makeFakeCamera(position = { x: 0, y: 0, z: 0 }, quaternion = { x: 0, y: 0, z: 0, w: 1 }) {
+	return {
+		isPerspectiveCamera: true,
+		fov: 45,
+		aspect: 16 / 9,
+		position: { ...position },
+		quaternion: { ...quaternion },
+		getWorldDirection(target: { x: number; y: number; z: number; normalize?: () => unknown }) {
+			target.x = 0; target.y = 0; target.z = -1;
+			target.normalize?.();
+			return target;
+		},
+	};
 }
 
 function makeFakeGsap(recorder: RecordedCall[]): GsapLike {
@@ -388,6 +462,51 @@ test("update applies baseline free lyric layout scale, offsets, and tilt to the 
 	expect(group.scale.z).toBeCloseTo(1.35, 6);
 	expect(group.rotation.x).toBeCloseTo(12 * Math.PI / 180, 6);
 	expect(group.rotation.y).toBeCloseTo(-18 * Math.PI / 180, 6);
+	lifecycle.dispose();
+});
+
+test("update applies baseline camera-locked lyric layout from camera basis with lock easing", async () => {
+	const scene = makeFakeScene();
+	const camera = makeFakeCamera({ x: 1, y: 2, z: 3 });
+	const lifecycle = createStageLyricsLifecycle({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		lyricLinesSupplier: () => [{ t: 0, text: "Camera lock lyric" }] as never,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		dotTexture: makeFakeDotTexture(),
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0,
+		lyricGlowBeatFlagSupplier: () => false,
+		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		lyricLayoutOptionsSupplier: () => ({
+			lyricCameraLock: true,
+			lyricScale: 1,
+			lyricOffsetX: 0.5,
+			lyricOffsetY: -0.25,
+			lyricOffsetZ: 0.75,
+			lyricTiltX: 10,
+			lyricTiltY: -5,
+		}),
+		cameraSupplier: () => camera as never,
+		rand: () => 0.35,
+	});
+	await lifecycle.mount(scene as never);
+	lifecycle.update(makeCtx(0.5, 0.1));
+	const group = lifecycle.group as unknown as {
+		position: { x: number; y: number; z: number };
+		quaternion: { x: number; y: number; z: number; w: number };
+	};
+	expect(group.position.x).toBeCloseTo(1.5 * 0.24, 6);
+	expect(group.position.y).toBeCloseTo(1.75 * 0.24, 6);
+	expect(group.position.z).toBeCloseTo((-2.6) * 0.24, 6);
+	expect(group.quaternion.x).toBeCloseTo(0.0870727897926938 * 0.22, 6);
+	expect(group.quaternion.y).toBeCloseTo(-0.0434534024273578 * 0.22, 6);
+	expect(group.quaternion.z).toBeCloseTo(0.0038016801040236755 * 0.22, 6);
+	expect(group.quaternion.w).toBeLessThan(1);
 	lifecycle.dispose();
 });
 
