@@ -133,7 +133,9 @@ impl SidecarLaunchPlan {
     }
 }
 
-pub fn resolve_sidecar_launch_plan_with_resource_dir(resource_dir: Option<&Path>) -> SidecarLaunchPlan {
+pub fn resolve_sidecar_launch_plan_with_resource_dir(
+    resource_dir: Option<&Path>,
+) -> SidecarLaunchPlan {
     let env_binary = std::env::var_os(SIDECAR_BINARY_ENV).and_then(|value| {
         if value.is_empty() {
             None
@@ -204,15 +206,19 @@ pub fn sidecar_runtime_mark_spawned(
     state.child.replace(child)
 }
 
-pub fn sidecar_runtime_mark_ready(
-    state: &mut SidecarRuntimeState,
-    health: HealthInfo,
-    at_ms: u64,
-) {
+pub fn sidecar_runtime_mark_ready(state: &mut SidecarRuntimeState, health: HealthInfo, at_ms: u64) {
     state.phase = SidecarPhase::Ready;
     state.last_error = None;
     state.last_health_ok_ms = Some(at_ms);
     state.providers = health.providers;
+}
+
+pub fn sidecar_runtime_should_probe_health(state: &SidecarRuntimeState) -> bool {
+    state.child.is_some()
+        && matches!(
+            state.phase,
+            SidecarPhase::Starting | SidecarPhase::Recovering
+        )
 }
 
 pub fn sidecar_runtime_mark_start_failed(state: &mut SidecarRuntimeState, error: &SidecarError) {
@@ -434,6 +440,41 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4).position(|w| w == b"\r\n\r\n")
 }
 
+fn content_length_from_headers(header_str: &str) -> Option<usize> {
+    header_str.lines().skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if name.trim().eq_ignore_ascii_case("content-length") {
+            value.trim().parse::<usize>().ok()
+        } else {
+            None
+        }
+    })
+}
+
+fn complete_content_length_body_range(buf: &[u8]) -> Result<Option<(usize, usize)>, SidecarError> {
+    let Some(header_end) = find_header_end(buf) else {
+        return Ok(None);
+    };
+    let header_bytes = &buf[..header_end];
+    let header_str =
+        std::str::from_utf8(header_bytes).map_err(|e| SidecarError::Parse(e.to_string()))?;
+    let status_line = header_str.lines().next().unwrap_or("");
+    if !status_line.contains(" 200 ") {
+        return Err(SidecarError::BadStatus);
+    }
+    let Some(content_length) = content_length_from_headers(header_str) else {
+        return Ok(None);
+    };
+    let body_start = header_end + 4;
+    let body_end = body_start
+        .checked_add(content_length)
+        .ok_or_else(|| SidecarError::Parse("content-length overflow".into()))?;
+    if buf.len() >= body_end {
+        return Ok(Some((body_start, body_end)));
+    }
+    Ok(None)
+}
+
 fn try_health_once(host: &str, port: u16) -> Result<HealthInfo, SidecarError> {
     use std::io::{Read, Write};
     let mut stream =
@@ -451,15 +492,30 @@ fn try_health_once(host: &str, port: u16) -> Result<HealthInfo, SidecarError> {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 1024];
     loop {
-        let n = stream
-            .read(&mut chunk)
-            .map_err(|e| SidecarError::Io(e.to_string()))?;
+        let n = match stream.read(&mut chunk) {
+            Ok(n) => n,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                if let Some((body_start, body_end)) = complete_content_length_body_range(&buf)? {
+                    return parse_health_response(&buf[body_start..body_end]);
+                }
+                return Err(SidecarError::Io(e.to_string()));
+            }
+            Err(e) => return Err(SidecarError::Io(e.to_string())),
+        };
         if n == 0 {
             break;
         }
         buf.extend_from_slice(&chunk[..n]);
         if buf.len() > (1 << 20) {
             return Err(SidecarError::Parse("response too large".into()));
+        }
+        if let Some((body_start, body_end)) = complete_content_length_body_range(&buf)? {
+            return parse_health_response(&buf[body_start..body_end]);
         }
     }
     let header_end =
@@ -475,10 +531,7 @@ fn try_health_once(host: &str, port: u16) -> Result<HealthInfo, SidecarError> {
     parse_health_response(body)
 }
 
-pub fn wait_for_health(
-    base_url: &str,
-    deadline: Duration,
-) -> Result<HealthInfo, SidecarError> {
+pub fn wait_for_health(base_url: &str, deadline: Duration) -> Result<HealthInfo, SidecarError> {
     let (host, port) = parse_base_url(base_url)?;
     let start = std::time::Instant::now();
     loop {
@@ -555,7 +608,8 @@ mod tests {
 
     #[test]
     fn build_sidecar_command_uses_bundled_binary_without_workspace_path() {
-        let plan = SidecarLaunchPlan::bundled(PathBuf::from("/opt/mineradio/mineradio-sidecar-api"));
+        let plan =
+            SidecarLaunchPlan::bundled(PathBuf::from("/opt/mineradio/mineradio-sidecar-api"));
         let cmd = build_sidecar_command_from_plan(
             &plan,
             54321,
@@ -575,10 +629,14 @@ mod tests {
     #[test]
     fn resolve_sidecar_launch_plan_prefers_env_then_packaged_binary_then_dev() {
         let env_path = PathBuf::from("/opt/mineradio/custom-sidecar");
-        let packaged_path = PathBuf::from("/opt/mineradio/mineradio-sidecar-api-x86_64-pc-windows-msvc.exe");
+        let packaged_path =
+            PathBuf::from("/opt/mineradio/mineradio-sidecar-api-x86_64-pc-windows-msvc.exe");
 
         assert_eq!(
-            resolve_sidecar_launch_plan_from_sources(Some(env_path.clone()), Some(packaged_path.clone())),
+            resolve_sidecar_launch_plan_from_sources(
+                Some(env_path.clone()),
+                Some(packaged_path.clone())
+            ),
             SidecarLaunchPlan::bundled(env_path)
         );
         assert_eq!(
@@ -653,7 +711,10 @@ mod tests {
         assert_eq!(snapshot.restarts, 0);
         assert_eq!(snapshot.last_error, None);
         assert_eq!(snapshot.last_health_ok_ms, Some(123_456));
-        assert_eq!(snapshot.providers, vec!["netease".to_string(), "qq".to_string()]);
+        assert_eq!(
+            snapshot.providers,
+            vec!["netease".to_string(), "qq".to_string()]
+        );
         assert_eq!(snapshot.log_path, "/tmp/logs/sidecar-runtime.log");
     }
 
@@ -666,15 +727,59 @@ mod tests {
 
         sidecar_runtime_mark_start_failed(&mut runtime, &SidecarError::Io("spawn failed".into()));
         assert_eq!(runtime.phase, SidecarPhase::Error);
-        assert_eq!(runtime.last_error.as_deref(), Some("io error: spawn failed"));
+        assert_eq!(
+            runtime.last_error.as_deref(),
+            Some("io error: spawn failed")
+        );
 
         sidecar_runtime_mark_health_failed(&mut runtime, &SidecarError::Timeout);
         assert_eq!(runtime.phase, SidecarPhase::Recovering);
-        assert_eq!(runtime.last_error.as_deref(), Some("sidecar health check timed out"));
+        assert_eq!(
+            runtime.last_error.as_deref(),
+            Some("sidecar health check timed out")
+        );
 
         sidecar_runtime_mark_restarting(&mut runtime);
         assert_eq!(runtime.phase, SidecarPhase::Recovering);
         assert_eq!(runtime.restarts, 1);
+    }
+
+    #[test]
+    fn sidecar_runtime_probes_recovering_live_child_and_marks_ready() {
+        let mut runtime = SidecarRuntimeState::new(
+            "http://127.0.0.1:38123".to_string(),
+            PathBuf::from("/tmp/logs/sidecar-runtime.log"),
+        );
+        assert!(!sidecar_runtime_should_probe_health(&runtime));
+
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--sidecar-runtime-probe-test-child")
+            .spawn()
+            .expect("spawn test child");
+        let orphan = sidecar_runtime_mark_spawned(&mut runtime, child);
+        terminate_sidecar_child(orphan);
+        sidecar_runtime_mark_health_failed(&mut runtime, &SidecarError::Timeout);
+        assert!(sidecar_runtime_should_probe_health(&runtime));
+
+        sidecar_runtime_mark_ready(
+            &mut runtime,
+            HealthInfo {
+                ok: true,
+                app_version: "0.1.0".into(),
+                api_version: "0.1.0".into(),
+                schema_version: "0.1.0".into(),
+                providers: vec!["netease".into(), "qq".into()],
+            },
+            456,
+        );
+        assert_eq!(runtime.phase, SidecarPhase::Ready);
+        assert!(!sidecar_runtime_should_probe_health(&runtime));
+        assert_eq!(runtime.last_health_ok_ms, Some(456));
+        assert_eq!(
+            runtime.providers,
+            vec!["netease".to_string(), "qq".to_string()]
+        );
+        terminate_sidecar_child(sidecar_runtime_mark_stopped(&mut runtime));
     }
 
     #[test]
@@ -697,7 +802,10 @@ mod tests {
         assert_eq!(info.app_version, "x");
         assert_eq!(info.api_version, "0.1.0");
         assert_eq!(info.schema_version, "0.1.0");
-        assert_eq!(info.providers, vec!["netease".to_string(), "qq".to_string()]);
+        assert_eq!(
+            info.providers,
+            vec!["netease".to_string(), "qq".to_string()]
+        );
     }
 
     #[test]
@@ -727,7 +835,10 @@ mod tests {
             }
         }"#;
         let info = parse_health_response(body.as_bytes()).expect("should parse");
-        assert_eq!(info.providers, vec!["netease".to_string(), "qq".to_string()]);
+        assert_eq!(
+            info.providers,
+            vec!["netease".to_string(), "qq".to_string()]
+        );
     }
 
     #[test]
@@ -785,6 +896,34 @@ mod tests {
         assert_eq!(info.app_version, "x");
         assert_eq!(info.api_version, "0.1.0");
         assert_eq!(info.schema_version, "0.1.0");
+    }
+
+    #[test]
+    fn wait_for_health_uses_content_length_before_socket_close() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let body = br#"{"ok":true,"appVersion":"x","apiVersion":"0.1.0","schemaVersion":"0.1.0","providers":["netease"]}"#.to_vec();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut req = [0u8; 4096];
+            let _ = std::io::Read::read(&mut stream, &mut req);
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(resp.as_bytes());
+            let _ = stream.write_all(&body);
+            let _ = stream.flush();
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        });
+        let base_url = format!("http://127.0.0.1:{}", port);
+        let started_at = std::time::Instant::now();
+        let info = wait_for_health(&base_url, std::time::Duration::from_secs(3))
+            .expect("should parse complete body before socket close");
+        assert!(started_at.elapsed() < std::time::Duration::from_millis(800));
+        assert_eq!(info.providers, vec!["netease"]);
     }
 
     #[test]

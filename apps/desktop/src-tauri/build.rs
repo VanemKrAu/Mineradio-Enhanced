@@ -16,8 +16,16 @@ fn ensure_sidecar_binary_for_tauri() {
     let sidecar = manifest_dir
         .join("binaries")
         .join(format!("mineradio-sidecar-api-{target_triple}{exe}"));
-    println!("cargo:rerun-if-changed={}", manifest_dir.join("../../sidecars/api/src").display());
-    println!("cargo:rerun-if-changed={}", manifest_dir.join("../scripts/build-sidecar-binary.mjs").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        manifest_dir.join("../../sidecars/api/src").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        manifest_dir
+            .join("../scripts/build-sidecar-binary.mjs")
+            .display()
+    );
     if sidecar.exists() {
         return;
     }

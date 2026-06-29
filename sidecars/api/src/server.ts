@@ -21,7 +21,7 @@ import {
   type Track
 } from "@mineradio/shared";
 import { appVersion, apiVersion, schemaVersion, port } from "./env";
-import { ok, fail, json } from "./http/envelope";
+import { ok, fail, json, corsPreflight } from "./http/envelope";
 import { providers, buildCapabilityMatrix, PROVIDER_IDS } from "./providers/registry";
 import {
   ProviderNotImplementedError,
@@ -85,6 +85,12 @@ export function createRouteHandler(deps: RouteHandlerDeps = {}) {
     let response: Response;
 
     try {
+    if (method === "OPTIONS") {
+      response = corsPreflight();
+      await logRequest(logger, { method, path, status: response.status, startedAt });
+      return response;
+    }
+
     if (path === "/health" && method === "GET") {
       const providerStatus = buildCapabilityMatrix();
       const body = HealthResponseSchema.parse({

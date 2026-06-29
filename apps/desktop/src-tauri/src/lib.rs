@@ -162,6 +162,26 @@ fn start_sidecar_supervisor(
             Err(_) => false,
         };
         if !should_restart {
+            let should_probe_health = match state.sidecar.lock() {
+                Ok(runtime) => sidecar::sidecar_runtime_should_probe_health(&runtime),
+                Err(_) => false,
+            };
+            if should_probe_health {
+                if let Ok(health) = sidecar::wait_for_health(
+                    &state.config.sidecar_base_url,
+                    Duration::from_millis(500),
+                ) {
+                    if let Ok(mut runtime) = state.sidecar.lock() {
+                        if sidecar::sidecar_runtime_should_probe_health(&runtime) {
+                            sidecar::sidecar_runtime_mark_ready(
+                                &mut runtime,
+                                health,
+                                sidecar::now_ms(),
+                            );
+                        }
+                    }
+                }
+            }
             continue;
         }
         if let Ok(mut runtime) = state.sidecar.lock() {
@@ -320,7 +340,9 @@ pub fn run() {
             };
             if let Some(mode) = emit_mode {
                 match mode {
-                    commands::WindowStateEmitMode::Now => commands::emit_window_state_for_window(window),
+                    commands::WindowStateEmitMode::Now => {
+                        commands::emit_window_state_for_window(window)
+                    }
                     commands::WindowStateEmitMode::Debounced => {
                         commands::emit_window_state_debounced(window.clone());
                     }
@@ -330,7 +352,9 @@ pub fn run() {
                 return;
             }
             let state = window.state::<AppState>();
-            state.sidecar_supervisor_running.store(false, Ordering::Relaxed);
+            state
+                .sidecar_supervisor_running
+                .store(false, Ordering::Relaxed);
             let sidecar_child = state
                 .sidecar
                 .lock()
@@ -339,7 +363,8 @@ pub fn run() {
             sidecar::terminate_sidecar_child(sidecar_child);
 
             let lyrics_child = state.desktop_lyrics.lock().ok().and_then(|mut lyrics| {
-                let (_, child) = commands::desktop_lyrics_stop_middle_click_poller_state(&mut lyrics);
+                let (_, child) =
+                    commands::desktop_lyrics_stop_middle_click_poller_state(&mut lyrics);
                 child
             });
             commands::desktop_lyrics_terminate_poller_child(lyrics_child);
@@ -380,7 +405,10 @@ mod tests {
         assert_eq!(sidecar.phase, sidecar::SidecarPhase::Starting);
         assert_eq!(sidecar.base_url, "http://127.0.0.1:1");
         assert!(sidecar.child.is_none());
-        assert_eq!(sidecar.log_path, std::path::PathBuf::from("/logs/sidecar-runtime.log"));
+        assert_eq!(
+            sidecar.log_path,
+            std::path::PathBuf::from("/logs/sidecar-runtime.log")
+        );
     }
 
     #[test]

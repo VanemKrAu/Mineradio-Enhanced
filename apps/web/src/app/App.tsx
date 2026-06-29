@@ -865,10 +865,14 @@ export type AppProps = {
   initialRuntimeConfig?: RuntimeConfig | null;
 };
 
+function createDefaultSidecarClient(cfg: RuntimeConfig): SidecarClient {
+  return new SidecarClient(cfg.sidecarBaseUrl);
+}
+
 export function App({
   SplashComponent = SplashHost,
   VisualComponent = VisualEngineHost,
-  createSidecarClient = (cfg) => new SidecarClient(cfg.sidecarBaseUrl),
+  createSidecarClient = createDefaultSidecarClient,
   initialRuntimeConfig = null,
 }: AppProps = {}): ReactElement {
   const [sidecarClient, setSidecarClient] = useState<SidecarClient | null>(

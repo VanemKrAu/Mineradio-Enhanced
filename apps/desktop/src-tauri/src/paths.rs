@@ -74,7 +74,10 @@ mod tests {
         let base = PathBuf::from("/user-data");
         let app_data = default_app_data_dir_from_base(base.clone());
         let logs = default_log_dir_from_base(base);
-        assert_eq!(app_data, PathBuf::from("/user-data").join("Mineradio Tauri Rewrite"));
+        assert_eq!(
+            app_data,
+            PathBuf::from("/user-data").join("Mineradio Tauri Rewrite")
+        );
         assert_eq!(
             logs,
             PathBuf::from("/user-data")

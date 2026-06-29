@@ -4,9 +4,7 @@
 //! the frontend sends data or receives parsed JSON, while paths come only from
 //! the native open/save dialog result.
 
-use crate::{
-    sidecar, updater, AppState, DesktopLyricsPollerChild, DesktopLyricsRuntimeState,
-};
+use crate::{sidecar, updater, AppState, DesktopLyricsPollerChild, DesktopLyricsRuntimeState};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -50,8 +48,11 @@ const QQ_LOGIN_COOKIE_PRIORITY: &[&str] = &[
 ];
 const NETEASE_LOGIN_COOKIE_PROBE_URLS: &[&str] =
     &["https://music.163.com", "https://interface.music.163.com"];
-const QQ_LOGIN_COOKIE_PROBE_URLS: &[&str] =
-    &["https://y.qq.com", "https://c.y.qq.com", "https://i.y.qq.com"];
+const QQ_LOGIN_COOKIE_PROBE_URLS: &[&str] = &[
+    "https://y.qq.com",
+    "https://c.y.qq.com",
+    "https://i.y.qq.com",
+];
 
 pub mod labels {
     pub const MAIN: &str = "main";
@@ -162,17 +163,20 @@ pub fn configure_global_hotkeys(
     build_global_hotkey_registration_results(&bindings, |binding| {
         let action = binding.action.clone();
         manager
-            .on_shortcut(binding.accelerator.as_str(), move |app, _shortcut, event| {
-                if event.state != ShortcutState::Released {
-                    return;
-                }
-                let _ = app.emit(
-                    "mineradio-global-hotkey",
-                    GlobalHotkeyEventPayload {
-                        action: action.clone(),
-                    },
-                );
-            })
+            .on_shortcut(
+                binding.accelerator.as_str(),
+                move |app, _shortcut, event| {
+                    if event.state != ShortcutState::Released {
+                        return;
+                    }
+                    let _ = app.emit(
+                        "mineradio-global-hotkey",
+                        GlobalHotkeyEventPayload {
+                            action: action.clone(),
+                        },
+                    );
+                },
+            )
             .is_ok()
     })
 }
@@ -251,7 +255,10 @@ pub async fn install_update(
                     )),
                 }
             }
-            Ok(None) => Ok(updater::unavailable_status(&current_version, has_public_key)),
+            Ok(None) => Ok(updater::unavailable_status(
+                &current_version,
+                has_public_key,
+            )),
             Err(e) => Ok(updater::check_error_status(
                 &current_version,
                 "UPDATER_CHECK_FAILED",
@@ -755,9 +762,13 @@ async fn complete_provider_login_from_window(
                 let _ = win.navigate(url);
             }
         }
-        (poll_login_cookie_header(win.clone(), provider).await?, false)
+        (
+            poll_login_cookie_header(win.clone(), provider).await?,
+            false,
+        )
     };
-    let mut result = inject_login_cookie_into_sidecar(&state.config.sidecar_base_url, provider, &cookie)?;
+    let mut result =
+        inject_login_cookie_into_sidecar(&state.config.sidecar_base_url, provider, &cookie)?;
     result.reused = reused;
     let _ = win.close();
     Ok(result)
@@ -1157,16 +1168,8 @@ pub fn build_window_state_snapshot(
 #[cfg(test)]
 pub fn window_state_emit_mode(event_name: &str) -> Option<WindowStateEmitMode> {
     match event_name {
-        "maximize"
-        | "unmaximize"
-        | "minimize"
-        | "restore"
-        | "show"
-        | "hide"
-        | "focus"
-        | "blur"
-        | "enter-full-screen"
-        | "leave-full-screen" => Some(WindowStateEmitMode::Now),
+        "maximize" | "unmaximize" | "minimize" | "restore" | "show" | "hide" | "focus" | "blur"
+        | "enter-full-screen" | "leave-full-screen" => Some(WindowStateEmitMode::Now),
         "move" | "resize" => Some(WindowStateEmitMode::Debounced),
         _ => None,
     }
@@ -1823,14 +1826,7 @@ mod tests {
 
     #[test]
     fn window_state_snapshot_matches_electron_baseline_fields() {
-        let snapshot = build_window_state_snapshot(
-            true,
-            false,
-            false,
-            true,
-            false,
-            true,
-        );
+        let snapshot = build_window_state_snapshot(true, false, false, true, false, true);
         assert!(snapshot.is_maximized);
         assert!(!snapshot.is_native_full_screen);
         assert!(snapshot.is_window_full_screen);
@@ -1846,18 +1842,54 @@ mod tests {
 
     #[test]
     fn window_state_emit_mode_matches_electron_event_timing() {
-        assert_eq!(window_state_emit_mode("maximize"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("unmaximize"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("minimize"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("restore"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("show"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("hide"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("focus"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("blur"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("enter-full-screen"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("leave-full-screen"), Some(WindowStateEmitMode::Now));
-        assert_eq!(window_state_emit_mode("move"), Some(WindowStateEmitMode::Debounced));
-        assert_eq!(window_state_emit_mode("resize"), Some(WindowStateEmitMode::Debounced));
+        assert_eq!(
+            window_state_emit_mode("maximize"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("unmaximize"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("minimize"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("restore"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("show"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("hide"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("focus"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("blur"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("enter-full-screen"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("leave-full-screen"),
+            Some(WindowStateEmitMode::Now)
+        );
+        assert_eq!(
+            window_state_emit_mode("move"),
+            Some(WindowStateEmitMode::Debounced)
+        );
+        assert_eq!(
+            window_state_emit_mode("resize"),
+            Some(WindowStateEmitMode::Debounced)
+        );
         assert_eq!(window_state_emit_mode("close-requested"), None);
     }
 
@@ -2096,8 +2128,12 @@ mod tests {
     #[test]
     fn login_session_cookie_request_rejects_empty_or_logged_out_cookie() {
         assert_eq!(
-            build_login_session_cookie_request("http://127.0.0.1:42531", LoginProvider::Netease, "")
-                .expect_err("empty"),
+            build_login_session_cookie_request(
+                "http://127.0.0.1:42531",
+                LoginProvider::Netease,
+                ""
+            )
+            .expect_err("empty"),
             "LOGIN_COOKIE_EMPTY"
         );
         assert_eq!(

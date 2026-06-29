@@ -40,6 +40,27 @@ test("health parses a valid HealthResponse", async () => {
 	}
 });
 
+test("default fetch keeps the Window/global binding required by WebView2", async () => {
+	const original = globalThis.fetch;
+	globalThis.fetch = (async function (this: typeof globalThis) {
+		expect(this).toBe(globalThis);
+		return jsonResponse({
+			ok: true,
+			appVersion: "0.9.0",
+			apiVersion: "0.1.0",
+			schemaVersion: "0.1.0",
+			providers: [],
+		});
+	}) as typeof fetch;
+	try {
+		const client = new SidecarClient(BASE);
+		const h = await client.health();
+		expect(h.ok).toBe(true);
+	} finally {
+		globalThis.fetch = original;
+	}
+});
+
 test("health 500 throws SidecarClientError", async () => {
 	const original = globalThis.fetch;
 	globalThis.fetch = (async () => new Response("", { status: 500 })) as typeof fetch;
@@ -57,6 +78,26 @@ test("health 500 throws SidecarClientError", async () => {
 	} finally {
 		globalThis.fetch = original;
 	}
+});
+
+test("network fetch failure is normalized instead of leaking browser TypeError text", async () => {
+	const fake = (async () => {
+		throw new TypeError("Failed to fetch");
+	}) as typeof fetch;
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		let caught: unknown = null;
+		try {
+			await client.search("netease", "x", 5);
+		} catch (e) {
+			caught = e;
+		}
+		expect(caught instanceof SidecarClientError).toBe(true);
+		expect((caught as SidecarClientError).code).toBe("NETWORK");
+		expect((caught as SidecarClientError).message).toBe("sidecar 连接失败，请稍后重试");
+		expect((caught as SidecarClientError).retryable).toBe(true);
+		expect((caught as SidecarClientError).rawMessage).toBe("Failed to fetch");
+	});
 });
 
 test("capabilities parses a valid success envelope", async () => {

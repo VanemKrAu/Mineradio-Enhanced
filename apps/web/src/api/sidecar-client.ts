@@ -96,6 +96,20 @@ const CapabilitySuccessEnvelopeSchema = ApiSuccessSchema(CapabilityMatrixSchema)
 
 type FetchImpl = typeof fetch;
 
+function defaultFetchImpl(): FetchImpl {
+	return globalThis.fetch.bind(globalThis) as FetchImpl;
+}
+
+function normalizeFetchError(err: unknown): never {
+	const rawMessage = err instanceof Error ? err.message : String(err);
+	throw new SidecarClientError({
+		code: "NETWORK",
+		message: "sidecar 连接失败，请稍后重试",
+		retryable: true,
+		rawMessage,
+	});
+}
+
 async function readJsonSafely(res: Response): Promise<unknown | null> {
 	try {
 		return await res.json() as unknown;
@@ -126,13 +140,13 @@ export class SidecarClient {
 	private readonly baseUrl: string;
 	private readonly fetchImpl: FetchImpl;
 
-	constructor(baseUrl: string, fetchImpl: FetchImpl = fetch) {
+	constructor(baseUrl: string, fetchImpl: FetchImpl = defaultFetchImpl()) {
 		this.baseUrl = baseUrl.replace(/\/$/, "");
 		this.fetchImpl = fetchImpl;
 	}
 
 	async health(): Promise<HealthResponse> {
-		const res = await this.fetchImpl(`${this.baseUrl}/health`);
+		const res = await this.fetchImpl(`${this.baseUrl}/health`).catch(normalizeFetchError);
 		const json = await readJsonSafely(res);
 		throwFailureEnvelope(json);
 		if (!res.ok) {
@@ -154,7 +168,7 @@ export class SidecarClient {
 	}
 
 	async capabilities(): Promise<CapabilityMatrix> {
-		const res = await this.fetchImpl(`${this.baseUrl}/providers/capabilities`);
+		const res = await this.fetchImpl(`${this.baseUrl}/providers/capabilities`).catch(normalizeFetchError);
 		const json = await readJsonSafely(res);
 		throwFailureEnvelope(json);
 		if (!res.ok) {
@@ -188,7 +202,7 @@ export class SidecarClient {
 					body: JSON.stringify(body ?? {}),
 				}
 			: { method };
-		const res = await this.fetchImpl(`${this.baseUrl}${path}`, init);
+		const res = await this.fetchImpl(`${this.baseUrl}${path}`, init).catch(normalizeFetchError);
 		const json = await readJsonSafely(res);
 		throwFailureEnvelope(json);
 		if (!res.ok) {

@@ -114,6 +114,83 @@ test("App keeps hidden wallpaper capability placeholder copy out of the product 
 	expect(html).not.toContain('id="t-wallpaperMode"');
 });
 
+test("App default sidecar client factory stays stable and does not storm health requests", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const previousFetch = globalThis.fetch;
+	const seen: string[] = [];
+	globalThis.fetch = (async (input: RequestInfo | URL) => {
+		const url = typeof input === "string" ? input : input.toString();
+		seen.push(url);
+		if (url.endsWith("/health")) {
+			return new Response(JSON.stringify({
+				ok: true,
+				appVersion: "0.0.0-test",
+				apiVersion: "0.1.0",
+				schemaVersion: "0.1.0",
+				providers: ["netease", "qq"],
+			}), { headers: { "content-type": "application/json" } });
+		}
+		if (url.endsWith("/providers/capabilities")) {
+			return new Response(JSON.stringify({
+				ok: true,
+				data: { version: "0.1.0", providers: [] },
+			}), { headers: { "content-type": "application/json" } });
+		}
+		if (url.includes("/providers/") && url.endsWith("/playlists")) {
+			return new Response(JSON.stringify({ ok: true, data: [] }), { headers: { "content-type": "application/json" } });
+		}
+		if (url.endsWith("/podcast/my")) {
+			return new Response(JSON.stringify({
+				ok: true,
+				data: { loggedIn: false, collections: [] },
+			}), { headers: { "content-type": "application/json" } });
+		}
+		if (url.endsWith("/discover/home")) {
+			return new Response(JSON.stringify({
+				ok: true,
+				data: {
+					loggedIn: false,
+					user: null,
+					dailySongs: [],
+					playlists: [],
+					podcasts: [],
+					mode: "starter",
+					updatedAt: 1,
+				},
+			}), { headers: { "content-type": "application/json" } });
+		}
+		return new Response(JSON.stringify({
+			ok: false,
+			error: { code: "TEST_UNUSED", message: "unused", retryable: false },
+		}), { status: 500, headers: { "content-type": "application/json" } });
+	}) as typeof fetch;
+
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	try {
+		flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} initialRuntimeConfig={rootConfig} />));
+		for (let i = 0; i < 8; i += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+		const healthCalls = seen.filter((url) => url.endsWith("/health")).length;
+		expect(healthCalls).toBeLessThanOrEqual(1);
+		expect(seen.length).toBeLessThanOrEqual(8);
+	} finally {
+		root.unmount();
+		host.remove();
+		globalThis.fetch = previousFetch;
+		useSearchStore.getState().reset();
+	}
+});
+
 test("desktop shell CSS keeps the rounded shell transparent while the visual host backs the app in black", async () => {
 	const css = await fetch(new URL("../styles.css", import.meta.url)).then((response) => response.text());
 	expect(/body\.desktop-shell #desktop-window-shell\s*{[\s\S]*border-radius: 18px;[\s\S]*clip-path: inset\(0 round 18px\);[\s\S]*background: transparent;/.test(css)).toBe(true);

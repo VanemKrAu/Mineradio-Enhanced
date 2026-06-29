@@ -30,11 +30,27 @@ const routeTrack: Track = {
 test("GET /health returns 200 with both providers", async () => {
   const r = await call("/health");
   expect(r.status).toBe(200);
+  expect(r.headers.get("access-control-allow-origin")).toBe("*");
   const b = await body(r);
   expect(b.ok).toBe(true);
   expect(b.providers).toEqual(["netease", "qq"]);
   expect(b.providerStatus.providers.map((p: { providerId: string }) => p.providerId)).toEqual(["netease", "qq"]);
   expect(b.providerStatus.providers[0].capabilities).toContain("search");
+});
+
+test("OPTIONS preflight returns sidecar CORS headers", async () => {
+  const r = await call("/providers/netease/search", {
+    method: "OPTIONS",
+    headers: {
+      origin: "http://127.0.0.1:5173",
+      "access-control-request-method": "GET",
+      "access-control-request-headers": "content-type"
+    }
+  });
+  expect(r.status).toBe(204);
+  expect(r.headers.get("access-control-allow-origin")).toBe("*");
+  expect(r.headers.get("access-control-allow-methods")).toContain("GET");
+  expect(r.headers.get("access-control-allow-headers")).toContain("content-type");
 });
 
 test("route handler writes sanitized request logs through injected sidecar logger", async () => {
@@ -377,7 +393,7 @@ test("POST /providers/qq/logout clears runtime cookie before best-effort provide
         return { provider: "qq", loggedIn: !!getProviderCookie("qq") };
       },
       async logout() {
-        expect(getProviderCookie("qq")).toBeUndefined();
+        expect(getProviderCookie("qq")).toBe(undefined);
         throw new ProviderNotImplementedError("qq", "no-session");
       }
     };
