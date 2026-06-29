@@ -1557,6 +1557,73 @@ test("App routes the logged-out Home library card to the baseline visual guide i
 	}
 });
 
+test("App routes the logged-in Home library card to the baseline left playlist panel", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useShelfStore.setState({ open: false, selectedPlaylistId: null });
+
+	const fakeClient = {
+		async discoverHome() {
+			return {
+				loggedIn: true,
+				user: { provider: "netease", userId: "u1", nickname: "Alice", avatarUrl: "" },
+				dailySongs: [],
+				playlists: [{ provider: "netease", id: "pl-1", name: "我的歌单", coverUrl: "", trackCount: 2, trackIds: [], subscribed: false }],
+				podcasts: [],
+				mode: "member",
+				updatedAt: 1,
+			};
+		},
+		async playlistList(provider: string) {
+			if (provider === "qq") return [];
+			return [{ provider: "netease", id: "pl-1", name: "我的歌单", coverUrl: "", trackCount: 2, trackIds: [], subscribed: false }];
+		},
+		async weatherRadio() {
+			return {
+				ok: true,
+				weather: null,
+				radio: { title: "天气电台", subtitle: "", seedQueries: [], updatedAt: 1, songs: [] },
+			};
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+
+	try {
+		flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+		for (let i = 0; i < 16 && !host.querySelector("#home-weather-card-sub")?.textContent?.includes("2 首"); i += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+		expect(host.querySelector("#home-weather-card-sub")?.textContent).toContain("2 首");
+		(host.querySelector('[data-home-card="library"]') as HTMLButtonElement).click();
+		for (let i = 0; i < 8 && !host.querySelector("#playlist-panel.show"); i += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+
+		expect(host.querySelector("#playlist-panel.show")).not.toBeNull();
+		expect(host.querySelector("#tab-pl")?.className).toContain("active");
+		expect(host.querySelector("#pl-list")?.textContent).toContain("我的歌单");
+		expect(useShelfStore.getState().open).toBe(false);
+		expect(document.body.classList.contains("empty-home-active")).toBe(false);
+	} finally {
+		root.unmount();
+		host.remove();
+		usePlaybackStore.getState().clearQueue();
+		useShelfStore.setState({ open: false, selectedPlaylistId: null });
+		localStorage.clear();
+	}
+});
+
 test("App opens the baseline collect picker for shelf detail collect and adds only after a playlist is chosen", async () => {
 	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
 	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;

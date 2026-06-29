@@ -68,6 +68,7 @@ import {
 } from "../tauri/runtime";
 import { checkForUpdate, getUpdaterStatus } from "../tauri/updater";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
+import { PlaylistPanelHost, type PlaylistPanelTab } from "../components/shell/PlaylistPanelHost";
 import { SearchShell, type SearchMode } from "../components/shell/SearchShell";
 import {
   createDesktopLyricsPushState,
@@ -112,6 +113,7 @@ import {
   ProviderIdSchema,
   type DiscoverHomeResponse,
   type PlaybackQuality,
+  type PlaylistDetail,
   type PlaylistSummary,
   type PodcastCollection,
   type ProviderId,
@@ -128,6 +130,7 @@ const SIDECAR_RECOVERED_NOTICE_MS = 2600;
 const PLAYBACK_QUALITY_STORE_KEY = "mineradio-playback-quality-v1";
 const HOME_LISTEN_STATS_STORE_KEY = "mineradio-listen-stats-v1";
 const USER_CAPSULE_AUTO_HIDE_STORE_KEY = "mineradio-user-capsule-auto-hide-v1";
+const PLAYLIST_PANEL_PIN_STORE_KEY = "mineradio-playlist-panel-pinned-v1";
 const DEFAULT_GLOBAL_HOTKEYS: GlobalHotkeyBinding[] = [
   { action: "togglePlay", accelerator: "Control+Alt+Space" },
   { action: "prevTrack", accelerator: "Control+Alt+ArrowLeft" },
@@ -754,6 +757,11 @@ export function App({
   >([]);
   const [homeForcedOpen, setHomeForcedOpen] = useState(false);
   const [homeSuppressed, setHomeSuppressed] = useState(false);
+  const [playlistPanelOpen, setPlaylistPanelOpen] = useState(false);
+  const [playlistPanelTab, setPlaylistPanelTab] = useState<PlaylistPanelTab>("queue");
+  const [playlistPanelPinned, setPlaylistPanelPinnedState] = useState(() =>
+    readBooleanPreference(PLAYLIST_PANEL_PIN_STORE_KEY, false),
+  );
   const [sidecarRecoveryState, setSidecarRecoveryState] =
     useState<SidecarRecoveryNoticeState | null>(null);
   const [playbackQuality, setPlaybackQualityState] = useState<PlaybackQuality>(
@@ -857,6 +865,8 @@ export function App({
   const playQueueAt = usePlaybackStore((s) => s.playAt);
   const removeQueueAt = usePlaybackStore((s) => s.removeAt);
   const insertQueueNext = usePlaybackStore((s) => s.insertNext);
+  const setQueue = usePlaybackStore((s) => s.setQueue);
+  const clearQueue = usePlaybackStore((s) => s.clearQueue);
   const searchKeyword = useSearchStore((s) => s.keyword);
   const setSearchKeyword = useSearchStore((s) => s.setKeyword);
   const setSearchError = useSearchStore((s) => s.setError);
@@ -1190,6 +1200,7 @@ export function App({
       setHomeSuppressed(true);
       setConsole(false);
       setMiniQueue(false);
+      if (!playlistPanelPinned) setPlaylistPanelOpen(false);
       closeShelf();
       selectShelfPlaylist(null);
       showToast("已关闭 Home");
@@ -1199,6 +1210,7 @@ export function App({
     setHomeForcedOpen(true);
     setConsole(false);
     setMiniQueue(false);
+    if (!playlistPanelPinned) setPlaylistPanelOpen(false);
     closeShelf();
     selectShelfPlaylist(null);
     focusSearch();
@@ -1208,6 +1220,7 @@ export function App({
     emptyHomeActive,
     focusSearch,
     homeForcedOpen,
+    playlistPanelPinned,
     selectShelfPlaylist,
     setConsole,
     setMiniQueue,
@@ -1470,11 +1483,38 @@ export function App({
     setVisualGuideOpen(true);
   }, []);
 
+  const openPlaylistPanelTab = useCallback(
+    (tab: PlaylistPanelTab) => {
+      setPlaylistPanelTab(tab);
+      setPlaylistPanelOpen(true);
+      if ((tab === "playlists" || tab === "podcasts") && sidecarClient) {
+        void refreshShelfPlaylists(sidecarClient);
+      }
+    },
+    [refreshShelfPlaylists, sidecarClient],
+  );
+
+  const setPlaylistPanelPinned = useCallback((pinned: boolean) => {
+    setPlaylistPanelPinnedState(pinned);
+    saveBooleanPreference(PLAYLIST_PANEL_PIN_STORE_KEY, pinned);
+    if (pinned) setPlaylistPanelOpen(true);
+  }, []);
+
+  const togglePlaylistPanelPinned = useCallback(() => {
+    setPlaylistPanelPinned(!playlistPanelPinned);
+    showToast(playlistPanelPinned ? "左侧歌单已恢复自动隐藏" : "左侧歌单已常开");
+  }, [playlistPanelPinned, setPlaylistPanelPinned, showToast]);
+
   const openHomeLibrary = useCallback(() => {
     if (homeDiscover?.loggedIn || neteaseStatus?.loggedIn || qqStatus?.loggedIn) {
       if (sidecarClient) void refreshShelfPlaylists(sidecarClient);
-      setShelfMode("side");
-      useShelfStore.getState().openShelf();
+      setHomeForcedOpen(false);
+      setHomeSuppressed(true);
+      setConsole(false);
+      setMiniQueue(false);
+      closeShelf();
+      selectShelfPlaylist(null);
+      openPlaylistPanelTab("playlists");
       showToast("已打开歌单库");
       return;
     }
@@ -1483,9 +1523,13 @@ export function App({
     homeDiscover?.loggedIn,
     neteaseStatus?.loggedIn,
     openHomeProductGuide,
+    closeShelf,
+    openPlaylistPanelTab,
     qqStatus?.loggedIn,
     refreshShelfPlaylists,
-    setShelfMode,
+    selectShelfPlaylist,
+    setConsole,
+    setMiniQueue,
     showToast,
     sidecarClient,
   ]);
@@ -2001,6 +2045,107 @@ export function App({
       showToast(`已设为下一首: ${track.title}`);
     },
     [insertQueueNext, showToast],
+  );
+
+  const cyclePlaylistPanelMode = useCallback(() => {
+    const order: Array<typeof playbackMode> = ["queue", "loop", "single", "shuffle"];
+    const next = order[(order.indexOf(playbackMode) + 1) % order.length] ?? "queue";
+    setPlaybackMode(next);
+  }, [playbackMode, setPlaybackMode]);
+
+  const shufflePlaylistPanelQueue = useCallback(() => {
+    const tracks = usePlaybackStore.getState().queue;
+    if (tracks.length < 2) {
+      showToast("队列歌曲不足");
+      return;
+    }
+    const shuffled = [...tracks];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+    }
+    setQueue(shuffled);
+    showToast("队列已随机排序");
+  }, [setQueue, showToast]);
+
+  const clearPlaylistPanelQueue = useCallback(() => {
+    clearQueue();
+    showToast("队列已清空");
+  }, [clearQueue, showToast]);
+
+  const loadPlaylistPanelDetail = useCallback(
+    async (playlist: PlaylistSummary): Promise<PlaylistDetail> => {
+      if (!sidecarClient) return { ...playlist, tracks: [] };
+      return sidecarClient.playlistDetail(playlist.provider, playlist.id);
+    },
+    [sidecarClient],
+  );
+
+  const playPlaylistPanelTracks = useCallback(
+    (tracks: Track[], index: number, title?: string) => {
+      if (!tracks.length) {
+        showToast("歌单暂时没有可播放歌曲");
+        return;
+      }
+      const safeIndex = Math.max(0, Math.min(index, tracks.length - 1));
+      setQueue(tracks);
+      usePlaybackStore.getState().playAt(safeIndex);
+      setPlaylistPanelTab("queue");
+      enterPlaybackSurface();
+      if (title) showToast(title);
+    },
+    [enterPlaybackSurface, setQueue, showToast],
+  );
+
+  const toggleLikeQueueIndex = useCallback(
+    (index: number) => {
+      void toggleLikeTrack(usePlaybackStore.getState().queue[index]);
+    },
+    [toggleLikeTrack],
+  );
+
+  const collectQueueIndex = useCallback(
+    (index: number) => {
+      const track = usePlaybackStore.getState().queue[index];
+      if (track) openCollectPicker(track);
+    },
+    [openCollectPicker],
+  );
+
+  const openPlaylistPanelPodcastCollection = useCallback(
+    async (collection: PodcastCollection) => {
+      if (!sidecarClient) {
+        searchQuery(collection.title || "播客", "podcast");
+        return;
+      }
+      try {
+        const detail = await sidecarClient.podcastMyItems(collection.key, 36, 0);
+        if (!detail.loggedIn) {
+          openLoginModal();
+          return;
+        }
+        const playable = detail.items.flatMap((item) => {
+          if (!("provider" in item) || !("title" in item)) return [];
+          const track = item as Track;
+          return isPlayable(track.playableState) ? [track] : [];
+        });
+        if (playable.length) {
+          playPlaylistPanelTracks(playable, 0, detail.title || collection.title);
+          return;
+        }
+        searchQuery(detail.title || collection.title || "播客", "podcast");
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "播客加载失败";
+        showToast(message);
+      }
+    },
+    [
+      openLoginModal,
+      playPlaylistPanelTracks,
+      searchQuery,
+      showToast,
+      sidecarClient,
+    ],
   );
 
   const insertSearchResultNext = useCallback(
@@ -3015,6 +3160,31 @@ export function App({
         open={visualGuideOpen}
         onClose={closeVisualGuide}
         onPrepareStep={prepareVisualGuideStep}
+      />
+      <PlaylistPanelHost
+        open={playlistPanelOpen || playlistPanelPinned}
+        pinned={playlistPanelPinned}
+        tab={playlistPanelTab}
+        queue={queue}
+        currentTrack={currentTrack}
+        mode={playbackMode}
+        playlists={shelfPlaylists}
+        podcastCollections={shelfPodcastCollections}
+        onTabChange={openPlaylistPanelTab}
+        onPinToggle={togglePlaylistPanelPinned}
+        onShuffle={shufflePlaylistPanelQueue}
+        onCycleMode={cyclePlaylistPanelMode}
+        onClearQueue={clearPlaylistPanelQueue}
+        onRefresh={() => sidecarClient && void refreshShelfPlaylists(sidecarClient)}
+        onPlayQueueIndex={playQueueAt}
+        onQueueArtist={(artist) => searchQuery(artist, "song")}
+        onLikeQueueIndex={toggleLikeQueueIndex}
+        onCollectQueueIndex={collectQueueIndex}
+        onInsertQueueNext={insertMiniQueueNext}
+        onRemoveQueueIndex={removeQueueAt}
+        onLoadPlaylistDetail={loadPlaylistPanelDetail}
+        onPlayTracks={playPlaylistPanelTracks}
+        onPodcastCollectionOpen={(collection) => void openPlaylistPanelPodcastCollection(collection)}
       />
       <BottomControlsHost
         visible={consoleVisible}
