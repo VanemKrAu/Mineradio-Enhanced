@@ -19,7 +19,8 @@ const upstreamResponseHeaders = [
   "last-modified"
 ];
 
-const COVER_PROXY_USER_AGENT = "Mineradio/0.1.0";
+const COVER_PROXY_USER_AGENT =
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 export function createImageProxy(deps: ImageProxyDeps = {}): ImageProxy {
   const fetcher = deps.fetch ?? fetch;

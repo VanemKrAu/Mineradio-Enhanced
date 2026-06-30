@@ -245,20 +245,20 @@ export function createHomeCoverTextureController(
 			.then(async (image) => {
 				if (runToken !== token) return;
 				const preparedImage = prepareSquareCoverCanvas(image, { coverResolution, createCanvas: opts.createCanvas });
-				if (uniforms.uHasCover.value > 0.5 && uniforms.uCoverTex.value.image) {
+			if (uniforms.uHasCover.value > 0.5 && uniforms.uCoverTex.value.image) {
 					markTextureImage(uniforms.uPrevCoverTex.value, uniforms.uCoverTex.value.image as HomeCoverImage);
-				}
-				markTextureImage(uniforms.uCoverTex.value, preparedImage);
-				uniforms.uHasCover.value = 1;
-				uniforms.uColorMixT.value = 0;
-				if (uniforms.uLoading) uniforms.uLoading.value = 0;
-				try {
-					opts.onCoverPrepared?.(preparedImage);
-				} catch {
-					// 封面已经进入主纹理；取色/歌词调色失败只能降级，不能阻断粒子封面显示。
-				}
+			}
+			markTextureImage(uniforms.uCoverTex.value, preparedImage);
+			uniforms.uHasCover.value = 1;
+			uniforms.uColorMixT.value = 0;
+			if (uniforms.uLoading) uniforms.uLoading.value = 0;
+			try {
+				opts.onCoverPrepared?.(preparedImage);
+			} catch {
+				// 封面已经进入主纹理；取色/歌词调色失败只能降级，不能阻断粒子封面显示。
+			}
 
-				let heuristicEdgeImage: HomeCoverImage | null = null;
+			let heuristicEdgeImage: HomeCoverImage | null = null;
 				try {
 					heuristicEdgeImage = uniforms.uEdgeTex ? buildDepthImage(preparedImage, opts) : null;
 				} catch {
@@ -282,13 +282,13 @@ export function createHomeCoverTextureController(
 				markTextureImage(uniforms.uEdgeTex.value, edgeImage);
 				depthTween?.setTarget(1, aiBoostTarget, durationMs);
 			})
-			.catch(() => {
-				if (runToken !== token) return;
-				uniforms.uHasCover.value = 0;
-				if (uniforms.uLoading) uniforms.uLoading.value = 0;
-				depthTween?.setTarget(0, 0, 1);
-				resetDepthUniforms(uniforms);
-			});
+		.catch(() => {
+			if (runToken !== token) return;
+			uniforms.uHasCover.value = 0;
+			if (uniforms.uLoading) uniforms.uLoading.value = 0;
+			depthTween?.setTarget(0, 0, 1);
+			resetDepthUniforms(uniforms);
+		});
 	}
 
 	function advanceColorMix(dtSeconds: number): void {

@@ -55,7 +55,7 @@ test("image proxy streams upstream image and forwards no cookie or auth request 
   expect(upstreamRequest?.url).toBe("https://img.example.test/cover.jpg");
   expect(upstreamRequest?.headers.get("cookie")).toBe(null);
   expect(upstreamRequest?.headers.get("authorization")).toBe(null);
-  expect(upstreamRequest?.headers.get("user-agent")).toBe("Mineradio/0.1.0");
+  expect(upstreamRequest?.headers.get("user-agent")).toBe("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
   expect(upstreamRequest?.headers.get("referer")).toBe("https://music.163.com/");
   expect(response.headers.get("content-type")).toBe("image/jpeg");
   expect(response.headers.get("content-length")).toBe("11");

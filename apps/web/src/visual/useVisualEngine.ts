@@ -208,7 +208,7 @@ export function createStageLyricsShelfSuppliers(input: StageLyricsShelfSupplierI
 	};
 }
 
-async function initAudioSource(el: HTMLAudioElement | null): Promise<AudioFrameSource> {
+async function initAudioSource(getEl: () => HTMLAudioElement | null): Promise<AudioFrameSource> {
 	if (typeof window === "undefined") return makeFallbackFrameSource();
 	const AudioCtor =
 		(window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext ??
@@ -229,18 +229,31 @@ async function initAudioSource(el: HTMLAudioElement | null): Promise<AudioFrameS
 	beatAnalyser.fftSize = 2048;
 	beatAnalyser.smoothingTimeConstant = 0.10;
 
+	// The audio element may not exist yet when useVisualEngine mounts (the
+	// App audio `useEffect` runs after child component effects). We connect
+	// the MediaElementAudioSource lazily on the first frame the audio element
+	// becomes available, since `createMediaElementSource` can only be called
+	// once per element per AudioContext.
 	let source: MediaElementAudioSourceNode | null = null;
-	if (el) {
+	let sourceEl: HTMLAudioElement | null = null;
+	let sourceAttachFailed = false;
+	const ensureSource = (): void => {
+		if (source || sourceAttachFailed) return;
+		const el = getEl();
+		if (!el) return;
 		try {
 			source = ctx.createMediaElementSource(el);
 			source.connect(mainAnalyser);
 			source.connect(beatAnalyser);
 			mainAnalyser.connect(ctx.destination);
 			beatAnalyser.connect(ctx.destination);
+			sourceEl = el;
 		} catch {
-			source = null;
+			// Element may already be claimed by another context, or context
+			// is in a bad state. Don't retry — analyser stays silent.
+			sourceAttachFailed = true;
 		}
-	}
+	};
 
 	const mainFreq = new Uint8Array(mainAnalyser.frequencyBinCount);
 	const mainTime = new Uint8Array(mainAnalyser.fftSize);
@@ -248,6 +261,16 @@ async function initAudioSource(el: HTMLAudioElement | null): Promise<AudioFrameS
 	const beatTime = new Uint8Array(beatAnalyser.fftSize);
 
 	return function frameSource(): AudioFrameBytes {
+		ensureSource();
+		const el = sourceEl ?? getEl();
+		const playing = !!(el && !el.paused && !el.ended);
+		// MediaElementSource routes audio through this AudioContext. If the
+		// context is suspended (browser autoplay policy), the routed audio is
+		// silent until the context resumes. A user gesture (play click) has
+		// already happened by the time `playing` is true, so resume is allowed.
+		if (playing && ctx.state === "suspended") {
+			void ctx.resume().catch(() => {});
+		}
 		try {
 			mainAnalyser.getByteFrequencyData(mainFreq);
 			mainAnalyser.getByteTimeDomainData(mainTime);
@@ -267,7 +290,6 @@ async function initAudioSource(el: HTMLAudioElement | null): Promise<AudioFrameS
 				currentTimeSeconds: 0,
 			};
 		}
-		const playing = !!(el && !el.paused && !el.ended);
 		const currentTimeSeconds = el ? el.currentTime : 0;
 		return {
 			mainFreqData: mainFreq,
@@ -811,7 +833,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 		let cancelled = false;
 
 		void (async () => {
-			const frameSource = await initAudioSource(refs.audioElementRef.current);
+			const frameSource = await initAudioSource(() => refs.audioElementRef.current);
 			if (cancelled || disposedRef.current) {
 				return;
 			}

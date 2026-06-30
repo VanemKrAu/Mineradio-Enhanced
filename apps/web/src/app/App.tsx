@@ -1023,7 +1023,13 @@ export function App({
   const setSearchError = useSearchStore((s) => s.setError);
 
   const cancelledRef = useRef(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Create the audio element synchronously on first render so child effects
+  // (e.g. useVisualEngine's initAudioSource) can attach a MediaElementSource
+  // before the App-level PlayerController effect runs. The element is only
+  // created when the DOM supports it; otherwise we keep the ref null.
+  const audioRef = useRef<HTMLAudioElement | null>(
+    typeof Audio !== "undefined" && audioElementSupported() ? new Audio() : null,
+  );
   const controllerRef = useRef<PlayerController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const localAudioUrlsRef = useRef(new Map<string, string>());
@@ -2957,9 +2963,14 @@ export function App({
   useEffect(() => {
     if (!audioElementSupported()) return;
     if (controllerRef.current) return;
-    const audio = new Audio();
+    // Reuse the synchronously-created audio element from the ref; only create
+    // a fresh one if SSR/storage disabled the early creation (audioRef null).
+    let audio = audioRef.current;
+    if (!audio) {
+      audio = new Audio();
+      audioRef.current = audio;
+    }
     audio.preload = "metadata";
-    audioRef.current = audio;
     const controller = new PlayerController(audio);
     const playback = usePlaybackStore.getState();
     controller.setVolume(playback.muted ? 0 : playback.volume);
