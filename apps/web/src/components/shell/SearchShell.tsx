@@ -317,9 +317,13 @@ export function SearchShell({
 
 	const showResults = results.length > 0 || podcastResults.length > 0 || podcastPrograms.length > 0 || !!error || loading || keyword.trim().length > 0 || modeRef.current === "podcast";
 	const effectivePeek = peek || showResults;
+	const searchAreaClassName = [
+		effectivePeek ? "peek" : "",
+		showResults ? "has-results" : "",
+	].filter(Boolean).join(" ");
 
 	return (
-		<div id="search-area" className={effectivePeek ? "peek" : ""} data-shell="home-search">
+		<div id="search-area" className={searchAreaClassName} data-shell="home-search">
 			<div id="search-stack">
 				<div id="search-box">
 					<svg id="search-icon" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">

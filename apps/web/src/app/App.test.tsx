@@ -25,6 +25,13 @@ import type { VisualEngineHostProps } from "../visual/VisualEngineHost";
 import { cloneFxState } from "@mineradio/visual-engine";
 import type { Track } from "@mineradio/shared";
 
+test("web index preloads the baseline simple or DIY mode class before React mounts", async () => {
+	const html = await fetch(new URL("../../index.html", import.meta.url)).then((response) => response.text());
+	expect(html).toContain("mineradio-diy-player-mode-v1");
+	expect(html).toContain("diy-mode-preload");
+	expect(html).toContain("simple-mode-preload");
+});
+
 class AppStubAudioElement extends EventTarget {
 	currentTime = 0;
 	duration = Number.NaN;
@@ -193,9 +200,9 @@ test("App default sidecar client factory stays stable and does not storm health 
 
 test("desktop shell CSS keeps the rounded shell transparent while the visual host backs the app in black", async () => {
 	const css = await fetch(new URL("../styles.css", import.meta.url)).then((response) => response.text());
-	expect(/body\.desktop-shell #desktop-window-shell\s*{[\s\S]*border-radius: 18px;[\s\S]*clip-path: inset\(0 round 18px\);[\s\S]*background: transparent;/.test(css)).toBe(true);
+	expect(/body\.desktop-shell #desktop-window-shell\s*{[\s\S]*border-radius: 34px;[\s\S]*clip-path: inset\(0 round 34px\);[\s\S]*background: transparent;/.test(css)).toBe(true);
 	expect(/#visual-host\s*{[\s\S]*background: #000;/.test(css)).toBe(true);
-	expect(css).not.toContain("clip-path: inset(0 round 34px);");
+	expect(css).not.toContain("clip-path: inset(0 round 18px);");
 });
 
 test("Home shell CSS includes the baseline stable panel glass final overrides", async () => {
@@ -211,6 +218,9 @@ test("Home shell CSS includes the baseline stable panel glass final overrides", 
 test("player console CSS hides migration-only controls from the baseline main bar", async () => {
 	const css = await fetch(new URL("../styles.css", import.meta.url)).then((response) => response.text());
 	expect(css).toContain("body.simple-mode #bottom-bar");
+	expect(css).toContain("body.simple-mode #search-mode-tabs");
+	expect(css).toContain("body.simple-mode #upload-actions");
+	expect(css).toContain("body.simple-mode #fx-fab");
 	expect(css).toContain(".console-lyric-source-row,\n.console-shelf-controls,\n.console-host-chrome");
 	expect(css).toContain("display: none !important;");
 	expect(css).toContain("#quality-btn.quality-pill");

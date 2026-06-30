@@ -53,8 +53,8 @@ body.desktop-shell #desktop-window-shell {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  border-radius: 18px;
-  clip-path: inset(0 round 18px);
+  border-radius: 34px;
+  clip-path: inset(0 round 34px);
   background: transparent;
   box-shadow: 0 24px 80px rgba(0, 0, 0, .46);
   transform: translateZ(0);
@@ -399,6 +399,69 @@ body.splash-active:not(.splash-revealing) #search-area {
   color: #eafffb;
   background: rgba(0, 245, 212, .11);
   box-shadow: inset 0 0 0 1px rgba(0, 245, 212, .22), 0 8px 24px rgba(0, 245, 212, .055);
+}
+
+body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs {
+  display: none;
+}
+
+html.simple-mode-preload #search-mode-tabs,
+html.simple-mode-preload #upload-actions,
+html.simple-mode-preload #fx-fab,
+html.simple-mode-preload #fx-fab-hide-btn,
+html.simple-mode-preload #fx-panel,
+body.simple-mode #search-mode-tabs,
+body.simple-mode #upload-actions,
+body.simple-mode #fx-fab,
+body.simple-mode #fx-fab-hide-btn,
+body.simple-mode #fx-panel {
+  display: none !important;
+}
+
+html.simple-mode-preload #search-area,
+body.simple-mode #search-area {
+  --search-offset: 0;
+  left: 50%;
+  width: min(620px, calc(100vw - 56px));
+  transform: translateX(-50%);
+  align-items: stretch;
+}
+
+html.simple-mode-preload #search-stack,
+body.simple-mode #search-stack {
+  width: 100%;
+}
+
+body.simple-mode #search-box {
+  height: 58px;
+  border-radius: 22px;
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+body.simple-mode #search-box:focus-within {
+  border-color: rgba(0, 245, 212, .50);
+  background: var(--glass-bg-focus);
+  box-shadow: var(--glass-shadow-focus);
+}
+
+body.simple-mode #search-results {
+  max-height: min(420px, calc(100vh - 210px));
+}
+
+@media (max-width: 720px) {
+  body.simple-mode #search-area {
+    width: calc(100vw - 28px);
+  }
+
+  body.desktop-shell.simple-mode #search-area.peek {
+    top: 58px;
+  }
+
+  body.simple-mode #search-area.peek {
+    top: 24px;
+  }
 }
 
 #search-results {

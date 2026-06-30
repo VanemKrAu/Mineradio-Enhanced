@@ -132,6 +132,7 @@ const PLAYBACK_QUALITY_STORE_KEY = "mineradio-playback-quality-v1";
 const HOME_LISTEN_STATS_STORE_KEY = "mineradio-listen-stats-v1";
 const USER_CAPSULE_AUTO_HIDE_STORE_KEY = "mineradio-user-capsule-auto-hide-v1";
 const PLAYLIST_PANEL_PIN_STORE_KEY = "mineradio-playlist-panel-pinned-v1";
+const DIY_MODE_STORE_KEY = "mineradio-diy-player-mode-v1";
 const DEFAULT_GLOBAL_HOTKEYS: GlobalHotkeyBinding[] = [
   { action: "togglePlay", accelerator: "Control+Alt+Space" },
   { action: "prevTrack", accelerator: "Control+Alt+ArrowLeft" },
@@ -767,6 +768,7 @@ function DesktopTitlebar({
   updateSlot,
   onGuide,
   onDiy,
+  diyActive,
   onMinimize,
   onToggleMaximize,
   onClose,
@@ -775,6 +777,7 @@ function DesktopTitlebar({
   updateSlot: ReactElement | null;
   onGuide: () => void;
   onDiy: () => void;
+  diyActive: boolean;
   onMinimize: () => void;
   onToggleMaximize: () => void;
   onClose: () => void;
@@ -799,12 +802,12 @@ function DesktopTitlebar({
         {updateSlot}
         <button
           id="diy-mode-btn"
-          className="desktop-mode-btn"
+          className={`desktop-mode-btn${diyActive ? " on" : ""}`}
           type="button"
           onClick={onDiy}
-          title="开启 DIY 玩家模式"
-          aria-label="开启 DIY 玩家模式"
-          aria-pressed="false"
+          title={diyActive ? "关闭 DIY 玩家模式" : "开启 DIY 玩家模式"}
+          aria-label={diyActive ? "关闭 DIY 玩家模式" : "开启 DIY 玩家模式"}
+          aria-pressed={diyActive}
         >
           DIY
         </button>
@@ -895,6 +898,9 @@ export function App({
   >([]);
   const [homeForcedOpen, setHomeForcedOpen] = useState(false);
   const [homeSuppressed, setHomeSuppressed] = useState(false);
+  const [diyMode, setDiyMode] = useState(() =>
+    readBooleanPreference(DIY_MODE_STORE_KEY, false),
+  );
   const [playlistPanelOpen, setPlaylistPanelOpen] = useState(false);
   const [playlistPanelTab, setPlaylistPanelTab] = useState<PlaylistPanelTab>("queue");
   const [playlistPanelPinned, setPlaylistPanelPinnedState] = useState(() =>
@@ -1114,13 +1120,16 @@ export function App({
   }, [setConsole, setMiniQueue, showToast]);
 
   const toggleDiyMode = useCallback(() => {
-    if (typeof document === "undefined") return;
-    const button = document.getElementById("fx-fab");
-    if (button instanceof HTMLButtonElement) {
-      button.click();
-      return;
-    }
-    showToast("视觉控制台暂不可用");
+    setDiyMode((on) => {
+      const next = !on;
+      saveBooleanPreference(DIY_MODE_STORE_KEY, next);
+      if (!next) {
+        setPlaylistPanelOpen(false);
+        setMiniQueue(false);
+      }
+      showToast(next ? "DIY 玩家模式已开启" : "已切回简约模式");
+      return next;
+    });
   }, [showToast]);
 
   const focusSearch = useCallback(() => {
@@ -2678,6 +2687,18 @@ export function App({
 
   useEffect(() => {
     if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("diy-mode-preload", diyMode);
+    document.documentElement.classList.toggle("simple-mode-preload", !diyMode);
+    document.body.classList.toggle("diy-mode", diyMode);
+    document.body.classList.toggle("simple-mode", !diyMode);
+    return () => {
+      document.documentElement.classList.remove("diy-mode-preload", "simple-mode-preload");
+      document.body.classList.remove("diy-mode", "simple-mode");
+    };
+  }, [diyMode]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
     document.body.classList.toggle("splash-active", splashActive);
     document.body.classList.toggle("empty-home-active", emptyHomeActive);
     document.body.classList.toggle("controls-visible", consoleVisible);
@@ -3213,6 +3234,7 @@ export function App({
         maximized={desktopWindowState?.isMaximized}
         onGuide={openHomeProductGuide}
         onDiy={toggleDiyMode}
+        diyActive={diyMode}
         onMinimize={() => void minimizeWindow()}
         onToggleMaximize={() => void toggleWindowMaximize()}
         onClose={() => void closeWindow()}
