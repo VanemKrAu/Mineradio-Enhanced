@@ -19,6 +19,8 @@ const upstreamResponseHeaders = [
   "last-modified"
 ];
 
+const COVER_PROXY_USER_AGENT = "Mineradio/0.1.0";
+
 export function createImageProxy(deps: ImageProxyDeps = {}): ImageProxy {
   const fetcher = deps.fetch ?? fetch;
 
@@ -30,7 +32,10 @@ export function createImageProxy(deps: ImageProxyDeps = {}): ImageProxy {
 
     let upstream: Response;
     try {
-      upstream = await fetcher(new Request(parsed.url, { method: "GET" }));
+      upstream = await fetcher(new Request(parsed.url, {
+        method: "GET",
+        headers: coverRequestHeadersFor(parsed.url)
+      }));
     } catch {
       return upstreamFailure("upstream image request failed");
     }
@@ -74,7 +79,8 @@ function isImageResponse(upstream: Response): boolean {
 
 function responseHeadersFrom(upstream: Response): Headers {
   const headers = new Headers({
-    "access-control-allow-origin": "*"
+    "access-control-allow-origin": "*",
+    "cross-origin-resource-policy": "cross-origin"
   });
   for (const header of upstreamResponseHeaders) {
     const value = upstream.headers.get(header);
@@ -83,6 +89,25 @@ function responseHeadersFrom(upstream: Response): Headers {
     }
   }
   return headers;
+}
+
+function coverRequestHeadersFor(target: string): Headers {
+  const headers = new Headers({
+    "user-agent": COVER_PROXY_USER_AGENT,
+    "referer": refererForCoverUrl(target)
+  });
+  return headers;
+}
+
+function refererForCoverUrl(target: string): string {
+  try {
+    const host = new URL(target).hostname.toLowerCase();
+    if (host.includes("qq.com") || host.includes("qpic.cn") || host.includes("gtimg.cn")) {
+      return "https://y.qq.com/";
+    }
+  } catch {
+  }
+  return "https://music.163.com/";
 }
 
 function badRequest(message: string): Response {

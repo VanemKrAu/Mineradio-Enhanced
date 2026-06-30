@@ -55,15 +55,41 @@ test("image proxy streams upstream image and forwards no cookie or auth request 
   expect(upstreamRequest?.url).toBe("https://img.example.test/cover.jpg");
   expect(upstreamRequest?.headers.get("cookie")).toBe(null);
   expect(upstreamRequest?.headers.get("authorization")).toBe(null);
-  expect(upstreamRequest?.headers.get("user-agent")).toBe(null);
+  expect(upstreamRequest?.headers.get("user-agent")).toBe("Mineradio/0.1.0");
+  expect(upstreamRequest?.headers.get("referer")).toBe("https://music.163.com/");
   expect(response.headers.get("content-type")).toBe("image/jpeg");
   expect(response.headers.get("content-length")).toBe("11");
   expect(response.headers.get("cache-control")).toBe("public, max-age=60");
   expect(response.headers.get("etag")).toBe('"cover"');
   expect(response.headers.get("last-modified")).toBe("Sat, 27 Jun 2026 00:00:00 GMT");
   expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  expect(response.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
   expect(response.headers.get("set-cookie")).toBe(null);
   expect(response.headers.get("x-private")).toBe(null);
+});
+
+test("image proxy uses the baseline QQ referer for gtimg and qpic cover hosts", async () => {
+  const referers: string[] = [];
+  const service = createImageProxy({
+    fetch: async (request) => {
+      referers.push(request.headers.get("referer") ?? "");
+      return new Response("image-bytes", {
+        status: 200,
+        headers: { "content-type": "image/jpeg" }
+      });
+    }
+  });
+
+  await service({
+    target: "https://y.gtimg.cn/music/photo_new/T002.jpg",
+    request: new Request("http://127.0.0.1/image-proxy")
+  });
+  await service({
+    target: "https://qpic.cn/cover.jpg",
+    request: new Request("http://127.0.0.1/image-proxy")
+  });
+
+  expect(referers).toEqual(["https://y.qq.com/", "https://y.qq.com/"]);
 });
 
 test("image proxy rejects non-image upstream content", async () => {
