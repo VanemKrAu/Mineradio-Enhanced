@@ -116,6 +116,7 @@ interface MountedHandles {
 	offLyrics: () => void;
 	offAudio: () => void;
 	offHomeAudio: () => void;
+	offAudioSource: () => void;
 	offResize: () => void;
 	offShelfFocus: () => void;
 	offShelfPointerInteractions: () => void;
@@ -124,6 +125,18 @@ interface MountedHandles {
 }
 
 const VISUAL_COVER_RETRY_INTERVAL_MS = 2200;
+const BASELINE_AUDIO_SOURCE_KEY = "_mineradioMediaSource";
+const BASELINE_AUDIO_CONTEXT_KEY = "_mineradioAudioCtx";
+
+type BaselineAudioElement = HTMLAudioElement & {
+	[BASELINE_AUDIO_SOURCE_KEY]?: MediaElementAudioSourceNode;
+	[BASELINE_AUDIO_CONTEXT_KEY]?: AudioContext;
+};
+
+export type ManagedAudioFrameSource = AudioFrameSource & {
+	audioContext: AudioContext | null;
+	dispose(): void;
+};
 
 function prefersReducedMotion(): boolean {
 	if (typeof window === "undefined") return false;
@@ -208,7 +221,7 @@ export function createStageLyricsShelfSuppliers(input: StageLyricsShelfSupplierI
 	};
 }
 
-async function initAudioSource(getEl: () => HTMLAudioElement | null): Promise<AudioFrameSource> {
+export async function initAudioSource(getEl: () => HTMLAudioElement | null): Promise<ManagedAudioFrameSource> {
 	if (typeof window === "undefined") return makeFallbackFrameSource();
 	const AudioCtor =
 		(window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext ??
@@ -216,8 +229,12 @@ async function initAudioSource(getEl: () => HTMLAudioElement | null): Promise<Au
 	if (typeof AudioCtor !== "function") return makeFallbackFrameSource();
 
 	let ctx: AudioContext;
+	let initialEl: BaselineAudioElement | null = null;
 	try {
-		ctx = new AudioCtor();
+		initialEl = getEl() as BaselineAudioElement | null;
+		const cachedCtx = initialEl?.[BASELINE_AUDIO_CONTEXT_KEY];
+		ctx = cachedCtx && cachedCtx.state !== "closed" ? cachedCtx : new AudioCtor();
+		if (initialEl) initialEl[BASELINE_AUDIO_CONTEXT_KEY] = ctx;
 	} catch {
 		return makeFallbackFrameSource();
 	}
@@ -228,30 +245,56 @@ async function initAudioSource(getEl: () => HTMLAudioElement | null): Promise<Au
 	const beatAnalyser = ctx.createAnalyser();
 	beatAnalyser.fftSize = 2048;
 	beatAnalyser.smoothingTimeConstant = 0.10;
+	// 原版 initAudio（public/index.html:17730-17742）的连接是
+	// source -> analyser -> gainNode -> destination，并额外连接
+	// source -> beatAnalyser。beatAnalyser 只做分析，不接 destination。
+	// gainNode 是音量控制；缺少它时 MediaElementSource 路径没有可控输出，
+	// 部分 WebView 会把这条路径静音。
+	const gainNode = ctx.createGain();
+	gainNode.gain.value = 1;
+	mainAnalyser.connect(gainNode);
+	gainNode.connect(ctx.destination);
 
-	// The audio element may not exist yet when useVisualEngine mounts (the
-	// App audio `useEffect` runs after child component effects). We connect
-	// the MediaElementAudioSource lazily on the first frame the audio element
-	// becomes available, since `createMediaElementSource` can only be called
-	// once per element per AudioContext.
+	// useVisualEngine 挂载时 audio 元素可能还不存在，也可能被替换
+	//（例如 React StrictMode 重新挂载时创建新的 Audio）。同一个元素在同一个
+	// AudioContext 里只能 createMediaElementSource 一次，所以这里懒连接，
+	// 并在元素变化时重新连接。
 	let source: MediaElementAudioSourceNode | null = null;
-	let sourceEl: HTMLAudioElement | null = null;
+	let sourceEl: BaselineAudioElement | null = null;
 	let sourceAttachFailed = false;
 	const ensureSource = (): void => {
-		if (source || sourceAttachFailed) return;
-		const el = getEl();
+		const el = getEl() as BaselineAudioElement | null;
 		if (!el) return;
+		if (source && sourceEl === el) return; // 已经连接到这个元素
+		if (sourceAttachFailed && sourceEl === el) return; // 这个元素已经连接失败
+		// 元素变化（或首次连接）时，断开旧 source 后再连接新的。
+		if (source && sourceEl !== el) {
+			try { source.disconnect(); } catch { void 0; }
+			source = null;
+			sourceEl = null;
+		}
 		try {
-			source = ctx.createMediaElementSource(el);
+			const cachedCtx = el[BASELINE_AUDIO_CONTEXT_KEY];
+			const cachedSource = el[BASELINE_AUDIO_SOURCE_KEY];
+			if (cachedSource && cachedCtx === ctx && ctx.state !== "closed") {
+				source = cachedSource;
+				try { source.disconnect(); } catch { void 0; }
+			} else {
+				source = ctx.createMediaElementSource(el);
+				el[BASELINE_AUDIO_SOURCE_KEY] = source;
+				el[BASELINE_AUDIO_CONTEXT_KEY] = ctx;
+			}
 			source.connect(mainAnalyser);
 			source.connect(beatAnalyser);
-			mainAnalyser.connect(ctx.destination);
-			beatAnalyser.connect(ctx.destination);
+			// mainAnalyser -> gainNode -> destination 已在上方连接；
+			// beatAnalyser 只做分析（原版不接 destination），这里不连接输出。
 			sourceEl = el;
+			sourceAttachFailed = false;
 		} catch {
-			// Element may already be claimed by another context, or context
-			// is in a bad state. Don't retry — analyser stays silent.
+			// 元素可能已被另一个 context 占用，或 context 状态异常。
+			// 对当前元素标记失败，避免每帧重复尝试。
 			sourceAttachFailed = true;
+			sourceEl = el;
 		}
 	};
 
@@ -260,7 +303,7 @@ async function initAudioSource(getEl: () => HTMLAudioElement | null): Promise<Au
 	const beatFreq = new Uint8Array(beatAnalyser.frequencyBinCount);
 	const beatTime = new Uint8Array(beatAnalyser.fftSize);
 
-	return function frameSource(): AudioFrameBytes {
+	const frameSource = function frameSource(): AudioFrameBytes {
 		ensureSource();
 		const el = sourceEl ?? getEl();
 		const playing = !!(el && !el.paused && !el.ended);
@@ -303,12 +346,22 @@ async function initAudioSource(getEl: () => HTMLAudioElement | null): Promise<Au
 			playing,
 			currentTimeSeconds,
 		};
+	} as ManagedAudioFrameSource;
+	frameSource.audioContext = ctx;
+	frameSource.dispose = () => {
+		try { source?.disconnect(); } catch { void 0; }
+		try { mainAnalyser.disconnect(); } catch { void 0; }
+		try { beatAnalyser.disconnect(); } catch { void 0; }
+		try { gainNode.disconnect(); } catch { void 0; }
+		source = null;
+		sourceEl = null;
 	};
+	return frameSource;
 }
 
-function makeFallbackFrameSource(): AudioFrameSource {
+function makeFallbackFrameSource(): ManagedAudioFrameSource {
 	const empty = new Uint8Array(0);
-	return function fallbackFrame(): AudioFrameBytes {
+	const fallbackFrame = function fallbackFrame(): AudioFrameBytes {
 		return {
 			mainFreqData: empty,
 			mainTimeData: empty,
@@ -322,6 +375,17 @@ function makeFallbackFrameSource(): AudioFrameSource {
 			currentTimeSeconds: 0,
 		};
 	};
+	fallbackFrame.audioContext = null;
+	fallbackFrame.dispose = () => {};
+	return fallbackFrame;
+}
+
+export function shouldResetLyricStageCameraView(input: {
+	wasHomeActive: boolean;
+	homeActive: boolean;
+	playbackActive: boolean;
+}): boolean {
+	return input.wasHomeActive && !input.homeActive && input.playbackActive;
 }
 
 export function readVisualCurrentTimeSeconds(audio: HTMLAudioElement | null | undefined, fallbackPositionMs: number): number {
@@ -806,17 +870,15 @@ function disposeHandles(handles: MountedHandles | null): void {
 	} catch {
 	}
 	try {
+		handles.offAudioSource();
+	} catch {
+	}
+	try {
 		handles.renderLoop.dispose();
 	} catch {
 	}
 	try {
 		handles.renderer.dispose();
-	} catch {
-	}
-	try {
-		if (handles.audioContext && handles.audioContext.state !== "closed") {
-			void handles.audioContext.close();
-		}
 	} catch {
 	}
 }
@@ -835,6 +897,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 		void (async () => {
 			const frameSource = await initAudioSource(() => refs.audioElementRef.current);
 			if (cancelled || disposedRef.current) {
+				frameSource.dispose();
 				return;
 			}
 			const audioEngine = createAudioReactivity({
@@ -844,6 +907,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			const renderer = await createRenderer(host, {});
 			if (cancelled || disposedRef.current) {
 				audioEngine.dispose();
+				frameSource.dispose();
 				renderer.dispose();
 				return;
 			}
@@ -911,6 +975,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			if (cancelled || disposedRef.current) {
 				homeVisual.dispose();
 				audioEngine.dispose();
+				frameSource.dispose();
 				cinema.dispose();
 				offResize();
 				renderer.dispose();
@@ -943,6 +1008,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				shelfManager.dispose();
 				homeVisual.dispose();
 				audioEngine.dispose();
+				frameSource.dispose();
 				cinema.dispose();
 				offResize();
 				renderer.dispose();
@@ -961,6 +1027,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				shelfManager.dispose();
 				homeVisual.dispose();
 				audioEngine.dispose();
+				frameSource.dispose();
 				cinema.dispose();
 				offResize();
 				renderer.dispose();
@@ -1096,7 +1163,13 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				}
 				applyStageLyricPalette();
 				const homeActive = refs.homeActiveRef?.current === true;
+				const wasHomePreviewActive = homeVisualPreviewActive;
 				const enteringHomePreview = homeActive && !homeVisualPreviewActive;
+				const resettingToLyricStage = shouldResetLyricStageCameraView({
+					wasHomeActive: wasHomePreviewActive,
+					homeActive,
+					playbackActive: refs.isPlayingRef.current || !!currentCoverUrl,
+				});
 				const preset = resolveHomeVisualPreset(
 					homeActive,
 					homeVisual.getPreset(),
@@ -1117,6 +1190,10 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 					cinema.setPresetCameraBaseline(preset.preset);
 				} else if (enteringHomePreview) {
 					cinema.setPresetCameraBaseline(preset.preset);
+				}
+				if (resettingToLyricStage) {
+					cinema.resetLyricStageCoverWallView();
+					lifecycle.requestCameraSnap(14);
 				}
 				homeVisualPreviousPreset = preset.previousPreset;
 				homeVisualPreviewActive = homeActive;
@@ -1251,6 +1328,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				shelfManager.dispose();
 				homeVisual.dispose();
 				audioEngine.dispose();
+				frameSource.dispose();
 				cinema.dispose();
 				renderer.dispose();
 				return;
@@ -1352,6 +1430,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				offLyrics,
 				offAudio,
 				offHomeAudio,
+				offAudioSource: () => frameSource.dispose(),
 				offResize,
 				offShelfFocus,
 				offShelfPointerInteractions,

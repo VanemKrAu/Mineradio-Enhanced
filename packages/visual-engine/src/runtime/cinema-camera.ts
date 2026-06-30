@@ -127,6 +127,7 @@ export interface CinemaCamera {
 	update(ctx: FrameContext): void;
 	applyBeat(burst: number, isScheduled: boolean): void;
 	applySkullCameraPose(ctx: FrameContext, opts: SkullCameraPoseOptions): void;
+	resetLyricStageCoverWallView(): void;
 	setFocusZone(type: FocusZoneType | null, opts?: SetFocusZoneOptions): void;
 	setPresetCameraBaseline(preset: number): void;
 	setProfile(profile: CinemaProfile): void;
@@ -488,6 +489,51 @@ export function createCinemaCamera(opts: CinemaCameraOptions): CinemaCamera {
 		camera.updateProjectionMatrix();
 	}
 
+	function resetLyricStageCoverWallView(): void {
+		if (disposed) return;
+		clearFocusPendingTimer();
+		clearFocusExitTimer();
+		focusWantType = null;
+		focusWantKey = "";
+		orbit.focus.active = false;
+		orbit.focus.type = null;
+		orbit.focus.theta = 0;
+		orbit.focus.phi = 0.08;
+		orbit.focus.radius = 6.6;
+		orbit.focus.lookAt = { x: 0, y: 0, z: 0 };
+		orbit.lookAt = { x: 0, y: 0, z: 0 };
+		orbit.cineTheta = 0;
+		orbit.cinePhi = 0;
+		orbit.cineRadius = 0;
+		orbit.userTheta = 0;
+		orbit.userPhi = 0.08;
+		orbit.userRadius = 6.6;
+		orbit.baselineTheta = 0;
+		orbit.baselinePhi = 0.08;
+		orbit.baselineRadius = 6.6;
+		orbit.theta = 0;
+		orbit.phi = 0.08;
+		orbit.radius = 6.6;
+		orbit.centerLocked = true;
+		orbit.rotating = false;
+		camPunch = 0;
+		beatCam.punch = 0;
+		beatCam.thetaKick = 0;
+		beatCam.phiKick = 0;
+		beatCam.radiusKick = 0;
+		beatCam.rollKick = 0;
+		const cy = Math.cos(orbit.phi);
+		const sy = Math.sin(orbit.phi);
+		camera.position.set(
+			orbit.radius * cy * Math.sin(orbit.theta),
+			orbit.radius * sy,
+			orbit.radius * cy * Math.cos(orbit.theta),
+		);
+		camera.lookAt(0, 0, 0);
+		camera.fov = BASE_FOV;
+		camera.updateProjectionMatrix();
+	}
+
 	function clearFocusPendingTimer(): void {
 		if (focusPendingTimer == null) return;
 		focusTimers.clearTimeout(focusPendingTimer);
@@ -721,6 +767,7 @@ export function createCinemaCamera(opts: CinemaCameraOptions): CinemaCamera {
 			scheduleBeatCamera(now, burst, isScheduled, snapshot);
 		},
 		applySkullCameraPose,
+		resetLyricStageCoverWallView,
 		setFocusZone,
 		setPresetCameraBaseline,
 		setProfile(next) {

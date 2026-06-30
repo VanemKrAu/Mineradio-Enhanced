@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import "../runtime/happy-dom-preload";
 import type { ThreeFactory } from "../runtime/renderer-setup";
 import { createHomeParticleField, coverParticleGridForResolution, normalizeCoverResolution } from "./home-particle-field";
+import { coverTextureSizeForResolution } from "./cover-texture";
 import { cloneFxState } from "./fx-defaults";
 
 function makeFakeThree(): ThreeFactory {
@@ -159,6 +160,21 @@ test("ripple uniform is the baseline 1x12 RGBA Float DataTexture with nearest fi
 	expect(ripple.image.height).toBe(12);
 	expect(ripple.magFilter).toBe(1003);
 	expect(ripple.minFilter).toBe(1003);
+});
+
+test("cover placeholders follow the prepared cover size while edge/depth stays at baseline 256", async () => {
+	const scene = makeFakeScene();
+	const coverResolution = 1.55;
+	const field = await createHomeParticleField(scene as never, { threeFactory: makeFakeThree(), coverResolution });
+	const expectedSize = coverTextureSizeForResolution(coverResolution);
+	for (const name of ["uCoverTex", "uPrevCoverTex"] as const) {
+		const image = field.materialUniforms[name].value.image as { width: number; height: number };
+		expect(image.width).toBe(expectedSize);
+		expect(image.height).toBe(expectedSize);
+	}
+	const edgeImage = field.materialUniforms.uEdgeTex.value.image as { width: number; height: number };
+	expect(edgeImage.width).toBe(256);
+	expect(edgeImage.height).toBe(256);
 });
 
 test("bloomMaterial vertexShader is the main vs with uBloomSize uniform decl + gl_PointSize multiplied by uBloomSize", async () => {

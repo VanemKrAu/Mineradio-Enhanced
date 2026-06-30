@@ -205,6 +205,46 @@ test("setPresetCameraBaseline applies baseline wallpaper pulse camera numbers", 
 	cinema.dispose();
 });
 
+test("resetLyricStageCoverWallView restores the baseline front-on lyric stage camera", () => {
+	const lookAtCalls: unknown[][] = [];
+	const camera = {
+		...makeFakeCamera(),
+		lookAt: (...args: unknown[]) => lookAtCalls.push(args),
+	};
+	const cinema = createCinemaCamera({
+		camera: camera as never,
+		defaultProfile: { cinema: true, cinemaShake: 1.0, isDj: false, trackScaleAuto: true },
+	});
+	const orbit = cinema.getState().orbit;
+	orbit.focus.active = true;
+	orbit.focus.type = "shelf-side";
+	orbit.theta = -0.52;
+	orbit.phi = 0.34;
+	orbit.radius = 9.4;
+	orbit.lookAt = { x: 2, y: -1, z: 0.5 };
+
+	cinema.resetLyricStageCoverWallView();
+
+	expect(orbit.focus.active).toBe(false);
+	expect(orbit.focus.type).toBe(null);
+	expect(orbit.centerLocked).toBe(true);
+	expect(orbit.theta).toBe(0);
+	expect(orbit.phi).toBe(0.08);
+	expect(orbit.radius).toBe(6.6);
+	expect(orbit.userTheta).toBe(0);
+	expect(orbit.userPhi).toBe(0.08);
+	expect(orbit.userRadius).toBe(6.6);
+	expect(orbit.baselineTheta).toBe(0);
+	expect(orbit.baselinePhi).toBe(0.08);
+	expect(orbit.baselineRadius).toBe(6.6);
+	expect(orbit.lookAt).toEqual({ x: 0, y: 0, z: 0 });
+	expect(camera.position.x).toBeCloseTo(0, 6);
+	expect(camera.position.y).toBeCloseTo(6.6 * Math.sin(0.08), 6);
+	expect(camera.position.z).toBeCloseTo(6.6 * Math.cos(0.08), 6);
+	expect(lookAtCalls.at(-1)).toEqual([0, 0, 0]);
+	cinema.dispose();
+});
+
 test("applySkullCameraPose moves camera toward baseline skull target vectors", () => {
 	const camera = makeFakeCamera();
 	const cinema = createCinemaCamera({

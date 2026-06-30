@@ -1,5 +1,5 @@
 import type * as THREE from "three";
-import { normalizeCoverResolution } from "./home-particle-field";
+import { coverTextureSizeForResolution } from "./home-particle-field";
 import {
 	buildEdgeAndDepthCanvas,
 	createCoverDepthTween,
@@ -56,17 +56,13 @@ export interface HomeCoverTextureController {
 const HTTP_URL_RE = /^https?:\/\//i;
 const INLINE_IMAGE_URL_RE = /^data:image\//i;
 const BLOB_URL_RE = /^blob:/i;
+const SAME_ORIGIN_IMAGE_PROXY_RE = /^\/image-proxy(?:[/?#]|$)/i;
 
 function isAllowedCoverUrl(url: string): boolean {
-	return HTTP_URL_RE.test(url) || INLINE_IMAGE_URL_RE.test(url) || BLOB_URL_RE.test(url);
+	return HTTP_URL_RE.test(url) || INLINE_IMAGE_URL_RE.test(url) || BLOB_URL_RE.test(url) || SAME_ORIGIN_IMAGE_PROXY_RE.test(url);
 }
 
-export function coverTextureSizeForResolution(v: number): number {
-	const normalized = normalizeCoverResolution(v);
-	if (normalized >= 1.32) return 512;
-	if (normalized >= 1.10) return 384;
-	return 256;
-}
+export { coverTextureSizeForResolution } from "./home-particle-field";
 
 function defaultCreateCanvas(width: number, height: number): ReturnType<HomeCoverCanvasFactory> | null {
 	if (typeof document === "undefined") return null;

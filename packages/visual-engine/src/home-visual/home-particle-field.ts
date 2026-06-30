@@ -30,6 +30,7 @@ export interface HomeParticleField {
 
 const DEFAULT_THREE_FACTORY: ThreeFactory = async () => await import("three");
 const PLANE_SIZE = 4.8;
+const EDGE_TEXTURE_SIZE = 256;
 
 export function normalizeCoverResolution(v: number): number {
 	return Math.max(0.75, Math.min(1.55, Number(v) || 1));
@@ -40,6 +41,13 @@ export function coverParticleGridForResolution(v: number): number {
 	const grid0 = Math.round(118 * normalized);
 	const grid1 = Math.max(88, Math.min(183, grid0));
 	return grid1 % 2 ? grid1 : grid1 + 1;
+}
+
+export function coverTextureSizeForResolution(v: number): number {
+	const normalized = normalizeCoverResolution(v);
+	if (normalized >= 1.32) return 512;
+	if (normalized >= 1.10) return 384;
+	return 256;
 }
 
 function normalizeHexColor(value: unknown, fallback: string): string {
@@ -111,17 +119,17 @@ function makeDotTexture(THREE: ThreeModule): THREE.Texture {
 	return tex;
 }
 
-function makePlaceholderTexture(THREE: ThreeModule, fillStyle: string): THREE.Texture {
+function makePlaceholderTexture(THREE: ThreeModule, fillStyle: string, size: number): THREE.Texture {
 	const tex = new THREE.Texture();
 	try {
 		if (typeof document !== "undefined") {
 			const c = document.createElement("canvas");
-			c.width = 4;
-			c.height = 4;
+			c.width = size;
+			c.height = size;
 			const x = c.getContext("2d");
 			if (x) {
 				x.fillStyle = fillStyle as unknown as string;
-				x.fillRect(0, 0, 4, 4);
+				x.fillRect(0, 0, size, size);
 			}
 			(tex as unknown as { image: HTMLCanvasElement }).image = c;
 			(tex as unknown as { needsUpdate: boolean }).needsUpdate = true;
@@ -136,9 +144,10 @@ function makePlaceholderTexture(THREE: ThreeModule, fillStyle: string): THREE.Te
 
 function makeUniformsRecord(THREE: ThreeModule, coverRes: number): Record<string, THREE.IUniform> {
 	const dotTex = makeDotTexture(THREE);
-	const coverTex = makePlaceholderTexture(THREE, "#1c1c28");
-	const prevCoverTex = makePlaceholderTexture(THREE, "#1c1c28");
-	const edgeTex = makePlaceholderTexture(THREE, "rgba(128,0,0,255)");
+	const coverTextureSize = coverTextureSizeForResolution(coverRes);
+	const coverTex = makePlaceholderTexture(THREE, "#1c1c28", coverTextureSize);
+	const prevCoverTex = makePlaceholderTexture(THREE, "#1c1c28", coverTextureSize);
+	const edgeTex = makePlaceholderTexture(THREE, "rgba(128,0,0,255)", EDGE_TEXTURE_SIZE);
 	const rippleTex = makeRippleTexture(THREE);
 	return {
 		uTime: { value: 0 },

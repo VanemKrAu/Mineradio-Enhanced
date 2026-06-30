@@ -65,6 +65,25 @@ test("setCoverUrl(url) loads the current cover image, marks texture dirty, and s
 	expect(uniforms.uLoading.value).toBe(0);
 });
 
+test("setCoverUrl(relative image-proxy) loads same-origin proxy covers for WebView2", async () => {
+	const uniforms = makeUniforms();
+	const loaded: string[] = [];
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => {
+			loaded.push(url);
+			return { width: 96, height: 96, src: url };
+		},
+	});
+
+	ctl.setCoverUrl("/image-proxy?url=https%3A%2F%2Fimg.example%2Fcover.jpg");
+	await ctl.whenIdle();
+
+	expect(loaded).toEqual(["/image-proxy?url=https%3A%2F%2Fimg.example%2Fcover.jpg"]);
+	expect(uniforms.uCoverTex.value.image).toEqual({ width: 96, height: 96, src: "/image-proxy?url=https%3A%2F%2Fimg.example%2Fcover.jpg" });
+	expect(uniforms.uHasCover.value).toBe(1);
+});
+
 test("setCoverUrl(url) keeps the cover visible when cover-dependent color work throws", async () => {
 	const uniforms = makeUniforms();
 	const ctl = createHomeCoverTextureController({
@@ -174,7 +193,8 @@ test("setCoverUrl(proxy) falls back to the direct cover URL like the baseline lo
 		await ctl.whenIdle();
 
 		expect(loaded).toEqual([proxy, "blob:http://127.0.0.1/bad-proxy-image", direct]);
-		expect(uniforms.uCoverTex.value.image).toMatchObject({ width: 64, height: 64 });
+		expect((uniforms.uCoverTex.value.image as { width: number }).width).toBe(64);
+		expect((uniforms.uCoverTex.value.image as { height: number }).height).toBe(64);
 		expect(uniforms.uHasCover.value).toBe(1);
 	} finally {
 		globalThis.Image = originalImage;
@@ -337,7 +357,9 @@ test("setCoverUrl(url) applies the cover before waiting for slow AI depth work",
 	expect(uniforms.uLoading.value).toBe(0);
 	expect(uniforms.uEdgeTex.value.image).toBe(heuristicCanvas);
 
-	resolveAi?.(aiCanvas);
+	const finishAi = resolveAi as ((image: typeof aiCanvas) => void) | null;
+	if (!finishAi) throw new Error("expected pending AI depth resolver");
+	finishAi(aiCanvas);
 	await ctl.whenIdle();
 	expect(uniforms.uEdgeTex.value.image).toBe(aiCanvas);
 });

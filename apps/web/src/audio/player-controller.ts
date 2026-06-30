@@ -27,6 +27,12 @@ export type HandlerForEvent<E extends PlayerEventName> =
 				? (payload: ErrorPayload) => void
 				: Listener;
 
+const MINERADIO_AUDIO_CONTEXT_KEY = "_mineradioAudioCtx";
+
+type MineradioAudioElement = HTMLAudioElement & {
+	[MINERADIO_AUDIO_CONTEXT_KEY]?: AudioContext;
+};
+
 function timeMsFromSeconds(seconds: number): number {
 	return Math.max(0, Math.floor(seconds * 1000));
 }
@@ -39,7 +45,22 @@ function createAudioElement(): HTMLAudioElement | null {
 	if (typeof window === "undefined") return null;
 	const ctor = (window as unknown as { Audio?: typeof Audio }).Audio;
 	if (typeof ctor !== "function") return null;
-	return new ctor();
+	const audio = new ctor();
+	configureAudioElement(audio);
+	return audio;
+}
+
+function configureAudioElement(audio: HTMLAudioElement): void {
+	audio.crossOrigin = "anonymous";
+}
+
+async function resumeMineradioAudioContext(audio: HTMLAudioElement): Promise<void> {
+	const ctx = (audio as MineradioAudioElement)[MINERADIO_AUDIO_CONTEXT_KEY];
+	if (!ctx || ctx.state !== "suspended") return;
+	try {
+		await ctx.resume();
+	} catch {
+	}
 }
 
 export class PlayerController {
@@ -53,6 +74,7 @@ export class PlayerController {
 		} else {
 			this.audio = createAudioElement();
 		}
+		if (this.audio) configureAudioElement(this.audio);
 
 		this.boundRelays = {
 			play: () => this.emit("play"),
@@ -80,13 +102,18 @@ export class PlayerController {
 
 	load(url: string): void {
 		const audio = this.requireAudio();
+		configureAudioElement(audio);
 		audio.src = url;
 		audio.load();
 	}
 
 	async play(): Promise<void> {
 		const audio = this.requireAudio();
-		await audio.play();
+		const resumeBeforePlay = resumeMineradioAudioContext(audio);
+		const playPromise = audio.play();
+		await resumeBeforePlay;
+		await playPromise;
+		await resumeMineradioAudioContext(audio);
 	}
 
 	pause(): void {

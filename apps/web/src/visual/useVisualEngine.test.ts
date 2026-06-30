@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createStageLyricsHostSuppliers, createStageLyricsShelfSuppliers, isRuntimeShelfPreviewActive, lyricPaletteFromHex, readVisualCurrentTimeSeconds, resolveHomeVisualPreset, resolveRuntimeWallpaperSafe, resolveSkullMouthLyricsActive, resolveSkullShelfCompositionActive, resolveStageLyricLayoutOptions, resolveStageLyricPalette, shouldDimWallpaperParticlesForShelf, shouldRetryVisualCoverLoad, setRuntimeShelfMode } from "./useVisualEngine";
+import { createStageLyricsHostSuppliers, createStageLyricsShelfSuppliers, initAudioSource, isRuntimeShelfPreviewActive, lyricPaletteFromHex, readVisualCurrentTimeSeconds, resolveHomeVisualPreset, resolveRuntimeWallpaperSafe, resolveSkullMouthLyricsActive, resolveSkullShelfCompositionActive, resolveStageLyricLayoutOptions, resolveStageLyricPalette, shouldDimWallpaperParticlesForShelf, shouldResetLyricStageCameraView, shouldRetryVisualCoverLoad, setRuntimeShelfMode } from "./useVisualEngine";
 
 test("isRuntimeShelfPreviewActive follows side-auto shelf visibility readiness", () => {
 	expect(isRuntimeShelfPreviewActive("auto", 0.17)).toBe(true);
@@ -99,6 +99,133 @@ test("readVisualCurrentTimeSeconds prefers frame-accurate audio time over React 
 	expect(readVisualCurrentTimeSeconds({ currentTime: 12.345 } as HTMLAudioElement, 10_000)).toBe(12.345);
 	expect(readVisualCurrentTimeSeconds({ currentTime: NaN } as HTMLAudioElement, 10_000)).toBe(10);
 	expect(readVisualCurrentTimeSeconds(null, 0)).toBe(0);
+});
+
+test("initAudioSource reuses the baseline cached MediaElementSource and AudioContext for the same audio element", async () => {
+	const originalWindow = globalThis.window;
+	const createdSources: unknown[] = [];
+	const createdContexts: unknown[] = [];
+	let resumeCount = 0;
+	const el = {
+		paused: false,
+		ended: false,
+		currentTime: 1.25,
+	} as HTMLAudioElement & Record<string, unknown>;
+	class FakeNode {
+		connections: unknown[] = [];
+		connect(node: unknown) {
+			this.connections.push(node);
+		}
+		disconnect() {
+			this.connections = [];
+		}
+	}
+	class FakeAnalyser extends FakeNode {
+		fftSize = 0;
+		frequencyBinCount = 4;
+		smoothingTimeConstant = 0;
+		getByteFrequencyData(data: Uint8Array) {
+			data.fill(24);
+		}
+		getByteTimeDomainData(data: Uint8Array) {
+			data.fill(128);
+		}
+	}
+	class FakeAudioContext {
+		state = "suspended";
+		sampleRate = 48_000;
+		destination = new FakeNode();
+		constructor() {
+			createdContexts.push(this);
+		}
+		createAnalyser() {
+			return new FakeAnalyser();
+		}
+		createGain() {
+			return { gain: { value: 0 }, connect() {}, disconnect() {} };
+		}
+		createMediaElementSource(audio: HTMLAudioElement) {
+			const source = new FakeNode();
+			createdSources.push({ source, audio, context: this });
+			return source;
+		}
+		resume() {
+			resumeCount += 1;
+			this.state = "running";
+			return Promise.resolve();
+		}
+	}
+	globalThis.window = {
+		AudioContext: FakeAudioContext,
+	} as unknown as Window & typeof globalThis;
+	try {
+		const first = await initAudioSource(() => el);
+		const firstFrame = first();
+		const second = await initAudioSource(() => el);
+		const secondFrame = second();
+
+		expect(createdContexts.length).toBe(1);
+		expect(createdSources.length).toBe(1);
+		if (!firstFrame || !secondFrame) throw new Error("expected audio frames");
+		expect(firstFrame.playing).toBe(true);
+		expect(secondFrame.playing).toBe(true);
+		expect(resumeCount).toBeGreaterThan(0);
+		first.dispose();
+		second.dispose();
+	} finally {
+		globalThis.window = originalWindow;
+	}
+});
+
+test("initAudioSource exposes the cached AudioContext before the first analyser frame", async () => {
+	const originalWindow = globalThis.window;
+	const el = {} as HTMLAudioElement & Record<string, unknown>;
+	class FakeNode {
+		connect() {}
+		disconnect() {}
+	}
+	class FakeAnalyser extends FakeNode {
+		fftSize = 0;
+		frequencyBinCount = 4;
+		smoothingTimeConstant = 0;
+		getByteFrequencyData() {}
+		getByteTimeDomainData() {}
+	}
+	class FakeAudioContext {
+		state = "suspended";
+		sampleRate = 48_000;
+		destination = new FakeNode();
+		createAnalyser() {
+			return new FakeAnalyser();
+		}
+		createGain() {
+			return { gain: { value: 0 }, connect() {}, disconnect() {} };
+		}
+		createMediaElementSource() {
+			return new FakeNode();
+		}
+		resume() {
+			this.state = "running";
+			return Promise.resolve();
+		}
+	}
+	globalThis.window = {
+		AudioContext: FakeAudioContext,
+	} as unknown as Window & typeof globalThis;
+	try {
+		const frameSource = await initAudioSource(() => el);
+		expect(el._mineradioAudioCtx).toBe(frameSource.audioContext);
+		frameSource.dispose();
+	} finally {
+		globalThis.window = originalWindow;
+	}
+});
+
+test("shouldResetLyricStageCameraView fires only when leaving Home preview into playback stage", () => {
+	expect(shouldResetLyricStageCameraView({ wasHomeActive: true, homeActive: false, playbackActive: true })).toBe(true);
+	expect(shouldResetLyricStageCameraView({ wasHomeActive: true, homeActive: false, playbackActive: false })).toBe(false);
+	expect(shouldResetLyricStageCameraView({ wasHomeActive: false, homeActive: false, playbackActive: true })).toBe(false);
+	expect(shouldResetLyricStageCameraView({ wasHomeActive: true, homeActive: true, playbackActive: true })).toBe(false);
 });
 
 test("shouldRetryVisualCoverLoad retries failed cover loads after sidecar recovery without spamming successful textures", () => {

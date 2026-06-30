@@ -10,14 +10,18 @@ class StubAudioElement extends EventTarget {
 	currentTime = 0;
 	duration: number = NaN;
 	src = "";
+	crossOrigin: string | null = null;
 	volume = 1;
 	paused = true;
 	error: StubMediaError | null = null;
 	loadCalled = 0;
 	pauseCalled = 0;
 	playCalled = 0;
+	resumeCalls: string[] = [];
+	_mineradioAudioCtx?: { state: string; resume: () => Promise<void> };
 	async play(): Promise<void> {
 		this.playCalled += 1;
+		this.resumeCalls.push("play");
 		this.paused = false;
 		this.dispatchEvent(new Event("play"));
 	}
@@ -43,6 +47,15 @@ test("load sets src and calls load()", () => {
 	expect(stub.loadCalled).toBe(1);
 });
 
+test("constructor configures audio CORS before load so Web Audio analyser receives proxied media", () => {
+	const stub = new StubAudioElement();
+	const controller = new PlayerController(asHtmlAudioElement(stub));
+	expect(stub.crossOrigin).toBe("anonymous");
+	controller.load("http://127.0.0.1:60365/audio-proxy?url=https%3A%2F%2Fmedia.example%2Fa.flac");
+	expect(stub.crossOrigin).toBe("anonymous");
+	expect(stub.src).toContain("/audio-proxy?");
+});
+
 test("play/pause/seek/volume delegate to the audio element", async () => {
 	const stub = new StubAudioElement();
 	const controller = new PlayerController(asHtmlAudioElement(stub));
@@ -54,6 +67,23 @@ test("play/pause/seek/volume delegate to the audio element", async () => {
 	expect(stub.currentTime).toBe(45);
 	controller.setVolume(0.35);
 	expect(stub.volume).toBe(0.35);
+});
+
+test("play resumes the visual AudioContext before and after media playback like the baseline", async () => {
+	const stub = new StubAudioElement();
+	stub._mineradioAudioCtx = {
+		state: "suspended",
+		resume: async () => {
+			stub.resumeCalls.push("resume");
+			stub._mineradioAudioCtx!.state = "running";
+		},
+	};
+	const controller = new PlayerController(asHtmlAudioElement(stub));
+
+	await controller.play();
+
+	expect(stub.resumeCalls).toEqual(["resume", "play"]);
+	expect(stub.playCalled).toBe(1);
 });
 
 test("timeupdate handler receives positionMs and durationMs", () => {
