@@ -147,6 +147,20 @@ test("uniforms match baseline connector names and expose dot texture", async () 
 	expect(uniforms.uIntensity.value).toBe(0);
 });
 
+test("createConnectorParticles reuses the baseline shared HomeVisual dot texture without disposing it", async () => {
+	const scene = makeFakeScene();
+	const sharedDotTexture = { label: "baseline-dot", disposed: false, dispose() { this.disposed = true; } };
+	const cp = await createConnectorParticles({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		dotTexture: sharedDotTexture as never,
+	});
+	const uniforms = (cp.object as unknown as { material: { uniforms: Record<string, { value: unknown }> } }).material.uniforms;
+	expect(uniforms.uDotTex.value).toBe(sharedDotTexture);
+	cp.dispose();
+	expect(sharedDotTexture.disposed).toBe(false);
+});
+
 test("fragment shader samples the baseline dot texture and multiplies alpha by uIntensity", async () => {
 	const scene = makeFakeScene();
 	const cp = await createConnectorParticles({ scene: scene as never, threeFactory: makeFakeThree() });

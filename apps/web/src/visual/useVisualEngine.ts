@@ -734,6 +734,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			}
 			const connectorParticles = await createConnectorParticles({
 				scene: renderer.scene,
+				dotTexture: homeVisual.getField().materialUniforms.uDotTex?.value ?? null,
 			});
 			if (connectorParticles.object) {
 				connectorParticles.object.visible = false;

@@ -8,6 +8,7 @@ export interface ConnectorParticlesOptions {
 	scene: THREE.Scene;
 	threeFactory?: ThreeFactory;
 	pixelScale?: number;
+	dotTexture?: THREE.Texture | null;
 }
 
 export interface ConnectorParticles {
@@ -163,7 +164,8 @@ export async function createConnectorParticles(
 	const THREE = await factory();
 	const pixelScale = opts.pixelScale ?? 1;
 	const geo = buildGeometry(THREE, CONNECTOR_PARTICLE_COUNT, 0);
-	const dotTexture = createDotTexture(THREE);
+	const dotTexture = opts.dotTexture ?? createDotTexture(THREE);
+	const ownsDotTexture = !opts.dotTexture && !!dotTexture;
 	const uniforms: UniformsRecord = {
 		uTime: { value: 0 },
 		uEnergy: { value: 0 },
@@ -251,7 +253,7 @@ export async function createConnectorParticles(
 					mat.dispose();
 				}
 			}
-			dotTexture?.dispose();
+			if (ownsDotTexture) dotTexture?.dispose();
 			geo.dispose();
 			material.dispose();
 			;(this as { object: THREE.Points | null }).object = null;

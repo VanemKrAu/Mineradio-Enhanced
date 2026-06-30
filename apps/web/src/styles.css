@@ -1526,6 +1526,13 @@ html:fullscreen body.desktop-shell .home-mosaic {
   height: clamp(146px, 16vh, 208px);
 }
 
+body.desktop-shell.desktop-fullscreen .home-mosaic-cell.has-cover,
+html:fullscreen body.desktop-shell .home-mosaic-cell.has-cover {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-color: rgba(8, 10, 14, .54);
+}
+
 @media (max-height: 760px) {
   body.desktop-shell #empty-home {
     top: 118px;
@@ -1533,12 +1540,81 @@ html:fullscreen body.desktop-shell .home-mosaic {
   }
 
   body.desktop-shell .home-hero {
-    min-height: 0;
+    min-height: 330px;
     padding: 22px;
+  }
+
+  body.desktop-shell .home-visual {
+    height: 196px;
+    max-width: 260px;
   }
 
   body.desktop-shell .home-card {
     min-height: 128px;
+    padding: 14px;
+  }
+
+  body.desktop-shell .home-tile {
+    min-height: 130px;
+  }
+
+  body.desktop-shell .home-tile-cover {
+    height: 70px;
+  }
+
+  body.desktop-shell .home-mosaic {
+    height: 150px;
+    min-height: 126px;
+  }
+}
+
+@media (max-width: 1120px) {
+  body.desktop-shell #empty-home {
+    width: calc(100vw - 44px);
+  }
+
+  body.desktop-shell .empty-home-shell {
+    grid-template-columns: minmax(300px, .88fr) minmax(430px, 1.12fr);
+    gap: 12px;
+  }
+
+  body.desktop-shell .home-hero {
+    padding: 22px;
+  }
+
+  body.desktop-shell .home-hero-inner {
+    grid-template-columns: minmax(0, 1.16fr) minmax(126px, .52fr);
+    column-gap: 14px;
+  }
+
+  body.desktop-shell .home-title {
+    font-size: clamp(30px, 4vw, 48px);
+    max-width: 340px;
+  }
+
+  body.desktop-shell .home-sub {
+    font-size: 12.5px;
+    line-height: 1.5;
+    max-width: 314px;
+  }
+
+  body.desktop-shell .home-visual {
+    height: 190px;
+    max-width: 226px;
+  }
+
+  body.desktop-shell .home-mosaic {
+    height: 132px;
+    min-height: 116px;
+    margin-top: 14px;
+  }
+
+  body.desktop-shell .home-grid {
+    gap: 10px;
+  }
+
+  body.desktop-shell .home-card {
+    min-height: 122px;
     padding: 14px;
   }
 
@@ -1577,12 +1653,16 @@ html:fullscreen body.desktop-shell .home-mosaic {
     height: 54px;
   }
 
+  body.desktop-shell .home-rail {
+    gap: 8px;
+  }
+
   body.desktop-shell .home-tile {
-    min-height: 130px;
+    min-height: 120px;
   }
 
   body.desktop-shell .home-tile-cover {
-    height: 70px;
+    height: 62px;
   }
 }
 
@@ -1590,6 +1670,38 @@ html:fullscreen body.desktop-shell .home-mosaic {
   body.desktop-shell #empty-home {
     top: 106px;
     bottom: 30px;
+  }
+
+  body.desktop-shell .home-hero {
+    min-height: 0;
+    padding: 18px;
+  }
+
+  body.desktop-shell .home-title {
+    font-size: clamp(27px, 3.5vw, 40px);
+  }
+
+  body.desktop-shell .home-sub {
+    font-size: 11.8px;
+    line-height: 1.4;
+  }
+
+  body.desktop-shell .home-weather-meta {
+    margin-top: 11px;
+  }
+
+  body.desktop-shell .home-quick-row {
+    margin-top: 12px;
+  }
+
+  body.desktop-shell .home-visual {
+    height: 166px;
+    max-width: 206px;
+  }
+
+  body.desktop-shell .home-mosaic {
+    height: 104px;
+    min-height: 98px;
   }
 
   body.desktop-shell .home-card {
@@ -1627,22 +1739,28 @@ html:fullscreen body.desktop-shell .home-mosaic {
     height: 50px;
     margin-bottom: 8px;
   }
-}
 
-@media (max-width: 1120px) {
-  body.desktop-shell #empty-home {
-    width: calc(100vw - 44px);
-  }
-
-  body.desktop-shell .empty-home-shell {
-    grid-template-columns: minmax(300px, .88fr) minmax(430px, 1.12fr);
-    gap: 12px;
+  body.desktop-shell .home-section-head {
+    min-height: 28px;
   }
 }
 
 @media (max-width: 840px) {
   body.desktop-shell .empty-home-shell {
     grid-template-columns: minmax(250px, .86fr) minmax(360px, 1.14fr);
+  }
+
+  body.desktop-shell .home-hero-inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.desktop-shell .home-visual {
+    display: none;
+  }
+
+  body.desktop-shell .home-mosaic {
+    height: 112px;
+    min-height: 100px;
   }
 
   body.desktop-shell .home-card {
@@ -1677,6 +1795,16 @@ html:fullscreen body.desktop-shell .home-mosaic {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto 1fr;
     overflow: auto;
+    padding-bottom: 4px;
+  }
+
+  body.desktop-shell .home-hero {
+    grid-row: auto;
+    min-height: 330px;
+  }
+
+  body.desktop-shell .home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   body.desktop-shell .home-tile-row {
@@ -1690,7 +1818,7 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home {
 
 @media (max-height: 760px) {
   body.desktop-shell.empty-home-active.controls-visible #empty-home {
-    bottom: 112px;
+    bottom: 106px;
   }
 }
 
