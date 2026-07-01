@@ -72,8 +72,16 @@ pub mod labels {
 pub fn get_database_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<db::DatabaseStatus, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db::build_database_status(&db.conn, &db.path).map_err(|e| e.to_string())
+    match &state.db {
+        Some(db_mutex) => {
+            let db = db_mutex.lock().map_err(|e| e.to_string())?;
+            db::build_database_status(&db.conn, &db.path).map_err(|e| e.to_string())
+        }
+        None => Err(state
+            .db_init_error
+            .clone()
+            .unwrap_or_else(|| "database not initialized".to_string())),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

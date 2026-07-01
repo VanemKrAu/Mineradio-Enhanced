@@ -58,9 +58,10 @@ fn apply_migration(
     };
     let tx = conn.unchecked_transaction()?;
     tx.execute_batch(sql)?;
-    tx.execute_batch(&format!(
-        "INSERT INTO _migrations (version, name) VALUES ({version}, '{name}');"
-    ))?;
+    tx.execute(
+        "INSERT OR IGNORE INTO _migrations (version, name) VALUES (?1, ?2)",
+        rusqlite::params![version, name],
+    )?;
     tx.commit()?;
     Ok(())
 }
@@ -179,7 +180,7 @@ pub struct DbRuntimeState {
 /// 2. 算出数据库文件路径
 /// 3. 打开连接(不存在则自动创建)
 /// 4. 执行所有未应用的迁移
-/// 5. 递增启动计数 `launch_count`
+/// 5. 递增启动计数 `startup_count`
 ///
 /// 返回连接和它的磁盘路径
 pub fn initialize(app_data_dir: &Path) -> rusqlite::Result<DbRuntimeState> {
@@ -207,10 +208,7 @@ pub struct DatabaseStatus {
 /// 读取数据库的诊断信息。
 ///
 /// 是 `get_database_status` command 的纯函数核心,方便单测。
-pub fn build_database_status(
-    conn: &Connection,
-    path: &Path,
-) -> rusqlite::Result<DatabaseStatus> {
+pub fn build_database_status(conn: &Connection, path: &Path) -> rusqlite::Result<DatabaseStatus> {
     Ok(DatabaseStatus {
         path: path.to_string_lossy().to_string(),
         migration_version: current_migration_version(conn)?,
@@ -244,7 +242,7 @@ mod tests {
     #[test]
     fn migrations_creates_tables() {
         let conn = fresh_db();
-        // 假设有一个迁移函数 `run_migrations`，需要实现
+        // 在全新内存数据库上执行全部迁移，验证不会报错
         assert!(run_migrations(&conn).is_ok());
         let result = conn.execute_batch("SELECT COUNT(*) FROM _migrations");
         assert!(result.is_ok());
