@@ -133,6 +133,30 @@ pub fn add_listen_history(
     Ok(())
 }
 
+pub fn current_migration_version(conn: &Connection) -> rusqlite::Result<i64> {
+    conn.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM _migrations",
+        [],
+        |row| row.get(0),
+    )
+}
+
+fn get_startup_count(conn: &Connection) -> rusqlite::Result<i64> {
+    match get_kv(conn, "startup_count")? {
+        Some(value) => value
+            .parse::<i64>()
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e))),
+        None => Ok(0),
+    }
+}
+
+pub fn increment_startup_count(conn: &Connection) -> rusqlite::Result<i64> {
+    let current_count = get_startup_count(conn)?;
+    let new_count = current_count + 1;
+    set_kv(conn, "startup_count", &new_count.to_string())?;
+    Ok(new_count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,5 +257,38 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM listen_history", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_get_startup_count_returns_zero_when_empty() {
+        let conn: Connection = fresh_db();
+        run_migrations(&conn).unwrap();
+        let count = get_startup_count(&conn).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_increment_startup_count_increments() {
+        let conn = fresh_db();
+        run_migrations(&conn).unwrap();
+
+        // 调一次: 0 → 1
+        let after_first = increment_startup_count(&conn).unwrap();
+        assert_eq!(after_first, 1);
+
+        // 再调一次: 1 → 2 (这才是"递增"的关键)
+        let after_second = increment_startup_count(&conn).unwrap();
+        assert_eq!(after_second, 2);
+    }
+
+    #[test]
+    fn test_current_migration_version_returns_max() {
+        // 先跑迁移,让 _migrations 表存在
+        let conn = fresh_db();
+        run_migrations(&conn).unwrap();
+
+        // 跑过迁移: 应该返回最大 version
+        let v = current_migration_version(&conn).unwrap();
+        assert!(v >= 1);
     }
 }
