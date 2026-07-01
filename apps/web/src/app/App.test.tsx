@@ -156,6 +156,13 @@ test("App default sidecar client factory stays stable and does not storm health 
 				data: { version: "0.1.0", providers: [] },
 			}), { headers: { "content-type": "application/json" } });
 		}
+		if (url.includes("/providers/") && url.endsWith("/login-status")) {
+			const provider = url.includes("/providers/qq/") ? "qq" : "netease";
+			return new Response(JSON.stringify({
+				ok: true,
+				data: { provider, loggedIn: false },
+			}), { headers: { "content-type": "application/json" } });
+		}
 		if (url.includes("/providers/") && url.endsWith("/playlists")) {
 			return new Response(JSON.stringify({ ok: true, data: [] }), { headers: { "content-type": "application/json" } });
 		}
@@ -194,8 +201,10 @@ test("App default sidecar client factory stays stable and does not storm health 
 			await new Promise((resolve) => setTimeout(resolve, 0));
 		}
 		const healthCalls = seen.filter((url) => url.endsWith("/health")).length;
+		const loginStatusCalls = seen.filter((url) => url.endsWith("/login-status")).length;
 		expect(healthCalls).toBeLessThanOrEqual(1);
-		expect(seen.length).toBeLessThanOrEqual(8);
+		expect(loginStatusCalls).toBeLessThanOrEqual(2);
+		expect(seen.length).toBeLessThanOrEqual(12);
 	} finally {
 		root.unmount();
 		host.remove();
@@ -351,6 +360,197 @@ test("App mirrors baseline top account capsule auto-hide preference and peek hot
 		host.remove();
 		document.body.className = "";
 		localStorage.clear();
+	}
+});
+
+test("App restores persisted Netease login state on startup", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+
+	const fakeClient = {
+		async health() {
+			return {
+				ok: true,
+				appVersion: "0.0.0-test",
+				apiVersion: "0.1.0",
+				schemaVersion: "0.1.0",
+				providers: [],
+			};
+		},
+		async capabilities() {
+			return { version: "0.1.0", providers: [] };
+		},
+		async loginStatus(provider: string) {
+			if (provider === "netease") {
+				return {
+					provider,
+					loggedIn: true,
+					nickname: "大大绫波丽",
+					avatarUrl: "https://p4.music.126.net/avatar.jpg",
+					userId: "1440597970",
+					vipLevel: "svip",
+					vipLabel: "黑胶SVIP·陆",
+					vipIcon: "netease-svip",
+					vipIconUrl: "https://p1.music.126.net/vip.png",
+					vipTier: 6,
+					vipLevelName: "陆",
+				};
+			}
+			return { provider, loggedIn: false };
+		},
+		async playlistList() {
+			return [];
+		},
+		async podcastMy() {
+			return { loggedIn: false, collections: [] };
+		},
+		async discoverHome() {
+			return { loggedIn: false, user: null, dailySongs: [], playlists: [], podcasts: [], mode: "starter", updatedAt: 1 };
+		},
+		async weatherRadio() {
+			return {
+				ok: true,
+				weather: {
+					provider: "open-meteo",
+					location: { name: "上海", country: "中国", admin1: "", latitude: 31.23, longitude: 121.47, timezone: "Asia/Shanghai", fallback: false },
+					label: "晴",
+					weatherCode: 0,
+					temperature: 22,
+					apparentTemperature: 21,
+					humidity: 60,
+					precipitation: 0,
+					cloudCover: 10,
+					windSpeed: 6,
+					windGusts: 10,
+					isDay: 1,
+					time: "",
+					updatedAt: 1,
+					error: "",
+					mood: { key: "clear", title: "晴天电台", tagline: "把光留给旋律", energy: 0.58, warmth: 0.62, focus: 0.54, melancholy: 0.24, keywords: ["晴天"] },
+				},
+				radio: {
+					title: "晴天电台",
+					subtitle: "把光留给旋律",
+					seedQueries: ["晴天"],
+					updatedAt: 1,
+					songs: [],
+				},
+			};
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+
+	try {
+		flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+		for (let i = 0; i < 16 && !host.querySelector("#user-avatar"); i += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+
+		expect(host.querySelector("#user-avatar")?.getAttribute("src")).toBe("https://p4.music.126.net/avatar.jpg");
+		expect(host.querySelector("#user-vip-tag")?.textContent).toBe("");
+		expect(host.querySelector("#user-vip-tag")?.getAttribute("title")).toBe("黑胶SVIP·陆");
+		expect(host.querySelector("#user-vip-tag")?.classList.contains("official-icon-only")).toBe(true);
+		expect(host.querySelector("#user-vip-tag")?.classList.contains("netease-svip")).toBe(true);
+		expect(host.querySelector("#user-vip-tag img")?.getAttribute("src")).toBe("https://p1.music.126.net/vip.png");
+		expect(host.querySelector("#user-btn")?.textContent).toContain("大大绫波丽");
+	} finally {
+		root.unmount();
+		host.remove();
+		usePlaybackStore.getState().clearQueue();
+		useLyricsStore.getState().reset();
+		localStorage.clear();
+		restoreAudio();
+	}
+});
+
+test("App shows Netease avatar and VIP badge in the top account capsule", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+
+	const fakeClient = {
+		async loginStatus(provider: string) {
+			if (provider === "netease") {
+				return {
+					provider,
+					loggedIn: true,
+					nickname: "大大绫波丽",
+					avatarUrl: "https://p4.music.126.net/avatar.jpg",
+					userId: "1440597970",
+					vipLevel: "svip",
+					vipLabel: "黑胶SVIP·陆",
+					vipIcon: "netease-svip",
+					vipIconUrl: "https://p1.music.126.net/vip.png",
+					vipTier: 6,
+					vipLevelName: "陆",
+				};
+			}
+			return { provider, loggedIn: false };
+		},
+		async createProviderLoginQrKey(provider: string) {
+			return { provider, key: `${provider}-qr-key-1` };
+		},
+		async createProviderLoginQrImage(provider: string, key: string) {
+			return { provider, key, img: `data:image/png;base64,${provider}-img` };
+		},
+		async checkProviderLoginQr(provider: string, key: string) {
+			return { provider, key, code: 801, loggedIn: false };
+		},
+		async playlistList() {
+			return [];
+		},
+		async podcastMy() {
+			return { loggedIn: false, collections: [] };
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+
+	try {
+		flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+		(host.querySelector("#user-btn") as HTMLButtonElement).click();
+		for (let i = 0; i < 12 && !host.querySelector("#user-avatar"); i += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+
+		expect(host.querySelector("#user-avatar")?.getAttribute("src")).toBe("https://p4.music.126.net/avatar.jpg");
+		expect(host.querySelector("#user-vip-tag")?.textContent).toBe("");
+		expect(host.querySelector("#user-vip-tag")?.getAttribute("title")).toBe("黑胶SVIP·陆");
+		expect(host.querySelector("#user-vip-tag")?.classList.contains("official-icon-only")).toBe(true);
+		expect(host.querySelector("#user-vip-tag")?.classList.contains("netease-svip")).toBe(true);
+		expect(host.querySelector("#user-vip-tag img")?.getAttribute("src")).toBe("https://p1.music.126.net/vip.png");
+		expect(host.querySelector("#user-btn")?.textContent).toContain("大大绫波丽");
+	} finally {
+		root.unmount();
+		host.remove();
+		usePlaybackStore.getState().clearQueue();
+		useLyricsStore.getState().reset();
+		localStorage.clear();
+		restoreAudio();
 	}
 });
 
@@ -1076,6 +1276,485 @@ test("App shows the baseline trial banner when provider returns a trial-only URL
 	loginButton?.click();
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	expect(host.querySelector("#login-modal")).not.toBeNull();
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App renders upstream-style Netease QR login inside the login modal", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+
+	const fakeClient = {
+		async loginStatus(provider: string) {
+			return { provider, loggedIn: false };
+		},
+		async createProviderLoginQrKey() {
+			return { provider: "netease", key: "qr-key-1" };
+		},
+		async createProviderLoginQrImage() {
+			return { provider: "netease", key: "qr-key-1", img: "data:image/png;base64,abc" };
+		},
+		async checkProviderLoginQr() {
+			return { provider: "netease", key: "qr-key-1", code: 801, loggedIn: false };
+		},
+		async playlistList() {
+			return [];
+		},
+		async podcastMy() {
+			return { loggedIn: false, collections: [] };
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	(host.querySelector("#user-btn") as HTMLButtonElement).click();
+	for (let i = 0; i < 12 && !host.querySelector("#qr-img")?.getAttribute("src"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(host.querySelector("#login-modal")).not.toBeNull();
+	expect(host.querySelector("#login-provider-netease")?.className).toContain("active");
+	expect(host.querySelector("#login-provider-qq")).not.toBeNull();
+	expect(host.querySelector("#login-modal-title")?.textContent).toContain("扫码登录网易云音乐");
+	expect(host.querySelector("#qr-img")?.getAttribute("src")).toBe("data:image/png;base64,abc");
+	expect(host.querySelector("#qr-status")?.textContent).toContain("网易云音乐 App");
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App renders direct QQ QR login inside the login modal", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+
+	const fakeClient = {
+		async loginStatus(provider: string) {
+			return { provider, loggedIn: false };
+		},
+		async createProviderLoginQrKey(provider: string) {
+			return { provider, key: `${provider}-qr-key-1` };
+		},
+		async createProviderLoginQrImage(provider: string, key: string) {
+			return { provider, key, img: `data:image/png;base64,${provider}-img` };
+		},
+		async checkProviderLoginQr(provider: string, key: string) {
+			return { provider, key, code: provider === "qq" ? 66 : 801, loggedIn: false };
+		},
+		async playlistList() {
+			return [];
+		},
+		async podcastMy() {
+			return { loggedIn: false, collections: [] };
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	(host.querySelector("#user-btn") as HTMLButtonElement).click();
+	for (let i = 0; i < 12 && !host.querySelector("#login-modal"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	(host.querySelector("#login-provider-qq") as HTMLButtonElement).click();
+	for (let i = 0; i < 12 && host.querySelector("#qr-img")?.getAttribute("src") !== "data:image/png;base64,qq-img"; i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(host.querySelector("#login-provider-qq")?.className).toContain("active");
+	expect(host.querySelector("#login-modal-title")?.textContent).toContain("扫码登录 QQ 音乐");
+	expect(host.querySelector("#qr-img")?.getAttribute("src")).toBe("data:image/png;base64,qq-img");
+	expect(host.querySelector("#qq-web-login-card")).toBeNull();
+	expect(host.querySelector("#qr-status")?.textContent).toContain("QQ 音乐 App");
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App opens account dropdown from a single logged-in account and launches only the selected provider login", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+
+	const qrProviders: string[] = [];
+	const fakeClient = {
+		async health() {
+			return {
+				ok: true,
+				appVersion: "0.0.0-test",
+				apiVersion: "0.1.0",
+				schemaVersion: "0.1.0",
+				providers: [],
+			};
+		},
+		async capabilities() {
+			return { version: "0.1.0", providers: [] };
+		},
+		async loginStatus(provider: string) {
+			if (provider === "netease") {
+				return {
+					provider,
+					loggedIn: true,
+					nickname: "网易账号",
+					avatarUrl: "https://p4.music.126.net/avatar.jpg",
+					userId: "1440597970",
+					vipLevel: "svip",
+					vipLabel: "黑胶SVIP·陆",
+					vipIcon: "netease-svip",
+				};
+			}
+			return { provider, loggedIn: false };
+		},
+		async createProviderLoginQrKey(provider: string) {
+			qrProviders.push(provider);
+			return { provider, key: `${provider}-qr-key-1` };
+		},
+		async createProviderLoginQrImage(provider: string, key: string) {
+			return { provider, key, img: `data:image/png;base64,${provider}-img` };
+		},
+		async checkProviderLoginQr(provider: string, key: string) {
+			return { provider, key, code: provider === "qq" ? 66 : 801, loggedIn: false };
+		},
+		async playlistList() {
+			return [];
+		},
+		async podcastMy() {
+			return { loggedIn: false, collections: [] };
+		},
+		async discoverHome() {
+			return { loggedIn: false, user: null, dailySongs: [], playlists: [], podcasts: [], mode: "starter", updatedAt: 1 };
+		},
+		async weatherRadio() {
+			return {
+				ok: true,
+				weather: {
+					provider: "open-meteo",
+					location: { name: "上海", country: "中国", admin1: "", latitude: 31.23, longitude: 121.47, timezone: "Asia/Shanghai", fallback: false },
+					label: "晴",
+					weatherCode: 0,
+					temperature: 22,
+					apparentTemperature: 21,
+					humidity: 60,
+					precipitation: 0,
+					cloudCover: 10,
+					windSpeed: 6,
+					windGusts: 10,
+					isDay: 1,
+					time: "",
+					updatedAt: 1,
+					error: "",
+					mood: { key: "clear", title: "晴天电台", tagline: "把光留给旋律", energy: 0.58, warmth: 0.62, focus: 0.54, melancholy: 0.24, keywords: ["晴天"] },
+				},
+				radio: {
+					title: "晴天电台",
+					subtitle: "把光留给旋律",
+					seedQueries: ["晴天"],
+					updatedAt: 1,
+					songs: [],
+				},
+			};
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	for (let i = 0; i < 16 && !host.querySelector("#user-avatar"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	(host.querySelector("#user-btn") as HTMLButtonElement).click();
+	for (let i = 0; i < 12 && !host.querySelector("#account-dropdown"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(host.querySelector("#account-dropdown")).not.toBeNull();
+	expect(host.querySelector("#account-dropdown")?.textContent).toContain("网易账号");
+	expect(host.querySelector("#account-dropdown")?.textContent).toContain("黑胶SVIP·陆");
+	expect(host.querySelector("#account-add-provider-qq")).not.toBeNull();
+	expect(host.querySelector("#account-add-provider-netease")).toBeNull();
+	expect(host.querySelector("#login-modal")).toBeNull();
+	expect(host.querySelector("#qr-img")).toBeNull();
+	expect(qrProviders).toEqual([]);
+
+	(host.querySelector("#account-add-provider-qq") as HTMLButtonElement).click();
+	for (let i = 0; i < 12 && host.querySelector("#qr-img")?.getAttribute("src") !== "data:image/png;base64,qq-img"; i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(host.querySelector("#account-dropdown")).toBeNull();
+	expect(host.querySelector("#login-provider-netease")).toBeNull();
+	expect(host.querySelector("#login-provider-qq")).toBeNull();
+	expect(host.querySelector("#login-modal-title")?.textContent).toContain("扫码登录 QQ 音乐");
+	expect(host.querySelector("#qr-img")?.getAttribute("src")).toBe("data:image/png;base64,qq-img");
+	expect(qrProviders).toEqual(["qq"]);
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App opens account dropdown instead of QR login when both providers are already logged in", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+
+	const qrProviders: string[] = [];
+	const fakeClient = {
+		async health() {
+			return {
+				ok: true,
+				appVersion: "0.0.0-test",
+				apiVersion: "0.1.0",
+				schemaVersion: "0.1.0",
+				providers: [],
+			};
+		},
+		async capabilities() {
+			return { version: "0.1.0", providers: [] };
+		},
+		async loginStatus(provider: string) {
+			if (provider === "netease") {
+				return {
+					provider,
+					loggedIn: true,
+					nickname: "网易账号",
+					avatarUrl: "https://p4.music.126.net/avatar.jpg",
+					userId: "1440597970",
+					vipLevel: "svip",
+					vipLabel: "黑胶SVIP·陆",
+					vipIcon: "netease-svip",
+				};
+			}
+			return {
+				provider,
+				loggedIn: true,
+				nickname: "QQ 账号",
+				userId: "10001",
+				vipLevel: "vip",
+				vipLabel: "豪华绿钻·叁",
+				vipIcon: "qq-green-vip",
+			};
+		},
+		async createProviderLoginQrKey(provider: string) {
+			qrProviders.push(provider);
+			return { provider, key: `${provider}-qr-key-1` };
+		},
+		async createProviderLoginQrImage(provider: string, key: string) {
+			return { provider, key, img: `data:image/png;base64,${provider}-img` };
+		},
+		async checkProviderLoginQr(provider: string, key: string) {
+			return { provider, key, code: provider === "qq" ? 66 : 801, loggedIn: false };
+		},
+		async playlistList() {
+			return [];
+		},
+		async podcastMy() {
+			return { loggedIn: false, collections: [] };
+		},
+		async discoverHome() {
+			return { loggedIn: false, user: null, dailySongs: [], playlists: [], podcasts: [], mode: "starter", updatedAt: 1 };
+		},
+		async weatherRadio() {
+			return {
+				ok: true,
+				weather: {
+					provider: "open-meteo",
+					location: { name: "上海", country: "中国", admin1: "", latitude: 31.23, longitude: 121.47, timezone: "Asia/Shanghai", fallback: false },
+					label: "晴",
+					weatherCode: 0,
+					temperature: 22,
+					apparentTemperature: 21,
+					humidity: 60,
+					precipitation: 0,
+					cloudCover: 10,
+					windSpeed: 6,
+					windGusts: 10,
+					isDay: 1,
+					time: "",
+					updatedAt: 1,
+					error: "",
+					mood: { key: "clear", title: "晴天电台", tagline: "把光留给旋律", energy: 0.58, warmth: 0.62, focus: 0.54, melancholy: 0.24, keywords: ["晴天"] },
+				},
+				radio: {
+					title: "晴天电台",
+					subtitle: "把光留给旋律",
+					seedQueries: ["晴天"],
+					updatedAt: 1,
+					songs: [],
+				},
+			};
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	for (let i = 0; i < 16 && !host.querySelector("#user-avatar"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	(host.querySelector("#user-btn") as HTMLButtonElement).click();
+	for (let i = 0; i < 12 && !host.querySelector("#account-dropdown"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(host.querySelector("#account-dropdown")).not.toBeNull();
+	expect(host.querySelector("#account-dropdown")?.textContent).toContain("网易账号");
+	expect(host.querySelector("#account-dropdown")?.textContent).toContain("QQ 账号");
+	expect(host.querySelector("#account-dropdown")?.textContent).toContain("黑胶SVIP·陆");
+	expect(host.querySelector("#account-dropdown")?.textContent).toContain("豪华绿钻·叁");
+	expect(host.querySelector("#account-add-provider-netease")).toBeNull();
+	expect(host.querySelector("#account-add-provider-qq")).toBeNull();
+	expect(host.querySelector("#login-modal")).toBeNull();
+	expect(host.querySelector("#login-provider-netease")).toBeNull();
+	expect(host.querySelector("#login-provider-qq")).toBeNull();
+	expect(host.querySelector("#qr-img")).toBeNull();
+	expect(qrProviders).toEqual([]);
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App syncs QQ account status after direct QR login succeeds", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+
+	let qqQrConfirmed = false;
+	let resolveSyncedQqStatus = (_status: { provider: string; loggedIn: boolean; userId: string }) => {};
+	const syncedQqStatus = new Promise<{ provider: string; loggedIn: boolean; userId: string }>((resolve) => {
+		resolveSyncedQqStatus = resolve;
+	});
+	const fakeClient = {
+		async loginStatus(provider: string) {
+			if (provider === "qq" && qqQrConfirmed) {
+				return syncedQqStatus;
+			}
+			return { provider, loggedIn: false };
+		},
+		async createProviderLoginQrKey(provider: string) {
+			return { provider, key: `${provider}-qr-key-1` };
+		},
+		async createProviderLoginQrImage(provider: string, key: string) {
+			return { provider, key, img: `data:image/png;base64,${provider}-img` };
+		},
+		async checkProviderLoginQr(provider: string, key: string) {
+			if (provider === "qq") {
+				qqQrConfirmed = true;
+				return { provider, key, code: 0, loggedIn: true, stored: true };
+			}
+			return { provider, key, code: 801, loggedIn: false };
+		},
+		async playlistList() {
+			return [];
+		},
+		async podcastMy() {
+			return { loggedIn: false, collections: [] };
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	(host.querySelector("#user-btn") as HTMLButtonElement).click();
+	for (let i = 0; i < 12 && !host.querySelector("#login-modal"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	(host.querySelector("#login-provider-qq") as HTMLButtonElement).click();
+	for (let i = 0; i < 12 && host.querySelector("#qr-img")?.getAttribute("src") !== "data:image/png;base64,qq-img"; i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	for (let i = 0; i < 12 && !host.querySelector("#qr-status")?.textContent?.includes("正在同步账号状态"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	expect(host.querySelector("#qr-status")?.textContent).toContain("正在同步账号状态");
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	resolveSyncedQqStatus({ provider: "qq", loggedIn: true, userId: "10001" });
+	for (let i = 0; i < 12 && !host.querySelector(".account-status-line")?.textContent?.includes("已登录"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(host.querySelector("#qr-status")?.textContent).toContain("登录成功");
+	expect(host.querySelector(".account-status-line")?.textContent).toContain("已登录 10001");
 
 	root.unmount();
 	host.remove();

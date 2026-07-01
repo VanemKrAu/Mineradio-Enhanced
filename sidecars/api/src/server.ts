@@ -12,6 +12,9 @@ import {
   PodcastProgramsResponseSchema,
   PodcastSearchResponseSchema,
   ProviderSessionCookieAckSchema,
+  ProviderLoginQrCheckSchema,
+  ProviderLoginQrImageSchema,
+  ProviderLoginQrKeySchema,
   SongLikeAckSchema,
   SongLikeCheckAckSchema,
   PlaylistAddSongAckSchema,
@@ -55,6 +58,8 @@ import {
   getProviderCookie,
   setRuntimeProviderCookie
 } from "./services/auth-session";
+import { neteaseQrLogin, type NeteaseQrLoginService } from "./services/netease-qr-login";
+import { qqQrLogin, type QqQrLoginService } from "./services/qq-qr-login";
 
 export type RouteHandlerDeps = {
   crossSourceResolver?: CrossSourceResolver;
@@ -64,6 +69,8 @@ export type RouteHandlerDeps = {
   weatherRadio?: WeatherRadioService;
   podcast?: Partial<PodcastService>;
   discoverRequester?: DiscoverRequester;
+  neteaseQrLogin?: NeteaseQrLoginService;
+  qqQrLogin?: QqQrLoginService;
   logger?: SidecarLogger;
   now?: () => number;
 };
@@ -75,6 +82,10 @@ export function createRouteHandler(deps: RouteHandlerDeps = {}) {
   const providerAdapters = deps.providerAdapters ?? providers;
   const weatherRadioService = deps.weatherRadio ?? weatherRadio;
   const podcast = { ...podcastService, ...(deps.podcast ?? {}) };
+  const qrLoginByProvider: Record<ProviderId, NeteaseQrLoginService | QqQrLoginService> = {
+    netease: deps.neteaseQrLogin ?? neteaseQrLogin,
+    qq: deps.qqQrLogin ?? qqQrLogin
+  };
   const logger = deps.logger ?? createSidecarLogger();
 
   return async function handleRoute(request: Request): Promise<Response> {
@@ -304,6 +315,46 @@ export function createRouteHandler(deps: RouteHandlerDeps = {}) {
       const adapter = providerAdapters[providerId];
 
       try {
+        if (sub === "login-qr-key" && method === "GET") {
+          const qrLogin = qrLoginByProvider[providerId];
+          response = json(ok(ProviderLoginQrKeySchema.parse(await qrLogin.createKey())));
+          await logRequest(logger, { method, path, status: response.status, startedAt, provider: providerId, action: sub });
+          return response;
+        }
+        if (sub === "login-qr-create" && method === "GET") {
+          const qrLogin = qrLoginByProvider[providerId];
+          const key = url.searchParams.get("key")?.trim() ?? "";
+          if (!key) {
+            response = json(fail({
+              code: "BAD_REQUEST",
+              message: "QR key required",
+              provider: providerId,
+              retryable: false
+            }), 400);
+            await logRequest(logger, { method, path, status: response.status, startedAt, provider: providerId, action: sub });
+            return response;
+          }
+          response = json(ok(ProviderLoginQrImageSchema.parse(await qrLogin.createImage(key))));
+          await logRequest(logger, { method, path, status: response.status, startedAt, provider: providerId, action: sub });
+          return response;
+        }
+        if (sub === "login-qr-check" && method === "GET") {
+          const qrLogin = qrLoginByProvider[providerId];
+          const key = url.searchParams.get("key")?.trim() ?? "";
+          if (!key) {
+            response = json(fail({
+              code: "BAD_REQUEST",
+              message: "QR key required",
+              provider: providerId,
+              retryable: false
+            }), 400);
+            await logRequest(logger, { method, path, status: response.status, startedAt, provider: providerId, action: sub });
+            return response;
+          }
+          response = json(ok(ProviderLoginQrCheckSchema.parse(await qrLogin.check(key))));
+          await logRequest(logger, { method, path, status: response.status, startedAt, provider: providerId, action: sub });
+          return response;
+        }
         if (sub === "session-cookie" && method === "POST") {
           const body = await parseJsonBody(request);
           const cookie =

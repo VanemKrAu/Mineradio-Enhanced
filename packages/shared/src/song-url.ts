@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProviderVipIconSchema } from "./session";
 import { TrackSchema } from "./track";
 
 const PLAYBACK_QUALITY_VALUES = ["jymaster", "hires", "lossless", "exhigh", "standard"] as const;
@@ -76,6 +77,10 @@ export const SongUrlResultSchema = z.object({
 	isVip: z.boolean().optional(),
 	isSvip: z.boolean().optional(),
 	vipLabel: z.string().optional(),
+	vipIcon: ProviderVipIconSchema.optional(),
+	vipIconUrl: z.string().optional(),
+	vipTier: z.number().int().nonnegative().optional(),
+	vipLevelName: z.string().optional(),
 	playbackKeyReady: z.boolean().optional(),
 	restriction: PlaybackRestrictionSchema.optional(),
 	reason: PlaybackRestrictionCategorySchema.optional(),

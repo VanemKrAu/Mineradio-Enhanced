@@ -46,7 +46,7 @@ function withEnv(key: string, value: string | undefined, run: () => Promise<void
     else process.env[key] = prev;
   };
   if (result instanceof Promise) {
-    return result.then(restore, () => { restore(); throw new Error("rejected"); });
+    return result.then(restore, (err) => { restore(); throw err; });
   }
   restore();
   return Promise.resolve();
@@ -678,16 +678,240 @@ test("loginStatus without MINERADIO_QQ_COOKIE returns loggedIn:false WITHOUT cal
   });
 });
 
-test("loginStatus with cookie returns loggedIn:true trusting cookie presence", async () => {
+test("loginStatus with cookie calls qq user detail and maps account profile", async () => {
   await withEnv("MINERADIO_QQ_COOKIE", "uin=123; qqmusic_key=abc", async () => {
+    const calls: Array<{ query: Record<string, unknown>; config?: { cookie?: string } }> = [];
     const deps = noopDeps({
       getConfig: () => ({ cookie: "uin=123; qqmusic_key=abc" }),
-      loginStatus: async () => { throw new Error("should not be called"); }
+      loginStatus: async (query, config) => {
+        calls.push({ query, config });
+        return {
+          body: {
+            result: 100,
+            data: {
+              creator: {
+                hostname: "QQ昵称",
+                nick: "QQ昵称",
+                headpic: "//thirdqq.qlogo.cn/avatar.jpg",
+                userid: "123"
+              },
+              mymusic: [],
+              mydiss: []
+            }
+          }
+        };
+      }
     });
     const adapter = createQqAdapter(deps);
     const r = await adapter.loginStatus();
+    expect(calls).toEqual([
+      {
+        query: { id: "123" },
+        config: { cookie: "uin=123; qqmusic_key=abc" }
+      }
+    ]);
     expect(r.provider).toBe("qq");
     expect(r.loggedIn).toBe(true);
+    expect(r.nickname).toBe("QQ昵称");
+    expect(r.avatarUrl).toBe("https://thirdqq.qlogo.cn/avatar.jpg");
+    expect(r.userId).toBe("123");
+  });
+});
+
+test("loginStatus maps QQ vip info from musicu vip query payload", async () => {
+  await withEnv("MINERADIO_QQ_COOKIE", "uin=123; qqmusic_key=abc", async () => {
+    const calls: string[] = [];
+    const deps = noopDeps({
+      getConfig: () => ({ cookie: "uin=123; qqmusic_key=abc" }),
+      loginStatus: async () => {
+        calls.push("profile");
+        return { body: { result: 100, data: { mymusic: [], mydiss: [] } } };
+      },
+      vipInfo: async (query, config) => {
+        calls.push("vip");
+        expect(query).toEqual({ id: "123" });
+        expect(config).toEqual({ cookie: "uin=123; qqmusic_key=abc" });
+        return {
+          body: {
+            code: 0,
+            getVipInfo: {
+              code: 0,
+              data: {
+                infoMap: {
+                  "123": {
+                    iVipFlag: 1,
+                    iSuperVip: 1,
+                    iSuperVipLevel: 5,
+                    iconUrl: "//y.qq.com/super-vip.png",
+                    ieight: 1,
+                    itwelve: 0,
+                    iYearFlag: 1
+                  }
+                }
+              }
+            },
+            getNickHead: {
+              code: 0,
+              data: {
+                map_userinfo: {
+                  "123": {
+                    nick: "绿钻用户",
+                    headurl: "http://q.qlogo.cn/head.jpg"
+                  }
+                }
+              }
+            }
+          }
+        };
+      }
+    } as Partial<QqClientDeps>);
+    const adapter = createQqAdapter(deps);
+    const r = await adapter.loginStatus();
+
+    expect(calls).toEqual(["profile", "vip"]);
+    expect(r.provider).toBe("qq");
+    expect(r.loggedIn).toBe(true);
+    expect(r.nickname).toBe("绿钻用户");
+    expect(r.avatarUrl).toBe("https://q.qlogo.cn/head.jpg");
+    expect(r.userId).toBe("123");
+    expect(r.vipType).toBe(11);
+    expect(r.vipLevel).toBe("svip");
+    expect(r.isVip).toBe(true);
+    expect(r.isSvip).toBe(true);
+    expect(r.vipLabel).toBe("超级会员·伍");
+    expect(r.vipIcon).toBe("qq-super-vip");
+    expect(r.vipIconUrl).toBe("https://y.qq.com/super-vip.png");
+    expect(r.vipTier).toBe(5);
+    expect(r.vipLevelName).toBe("伍");
+  });
+});
+
+test("loginStatus maps QQ green VIP tier without super member", async () => {
+  await withEnv("MINERADIO_QQ_COOKIE", "uin=123; qqmusic_key=abc", async () => {
+    const deps = noopDeps({
+      getConfig: () => ({ cookie: "uin=123; qqmusic_key=abc" }),
+      loginStatus: async () => ({ body: { data: {} } }),
+      vipInfo: async () => ({
+        body: {
+          getVipInfo: {
+            data: {
+              infoMap: {
+                "123": {
+                  iVipFlag: 1,
+                  iSuperVip: 0,
+                  iVipLevel: 3,
+                  iconUrl: "https://y.qq.com/green-vip.png"
+                }
+              }
+            }
+          }
+        }
+      })
+    } as Partial<QqClientDeps>);
+    const adapter = createQqAdapter(deps);
+    const r = await adapter.loginStatus();
+
+    expect(r.vipLevel).toBe("vip");
+    expect(r.vipLabel).toBe("豪华绿钻·叁");
+    expect(r.vipIcon).toBe("qq-green-vip");
+    expect(r.vipIconUrl).toBe("https://y.qq.com/green-vip.png");
+    expect(r.vipTier).toBe(3);
+    expect(r.vipLevelName).toBe("叁");
+  });
+});
+
+test("loginStatus derives QQ official badge icon from VIP tier when musicu omits image URL", async () => {
+  await withEnv("MINERADIO_QQ_COOKIE", "uin=123; qqmusic_key=abc", async () => {
+    const deps = noopDeps({
+      getConfig: () => ({ cookie: "uin=123; qqmusic_key=abc" }),
+      loginStatus: async () => ({ body: { data: {} } }),
+      vipInfo: async () => ({
+        body: {
+          getVipInfo: {
+            data: {
+              infoMap: {
+                "123": {
+                  iNewVip: 1,
+                  iNewSuperVip: 1,
+                  iCurLevel: 6,
+                  sIcon: "oKnq7K6FoKni7z**"
+                }
+              }
+            }
+          }
+        }
+      })
+    } as Partial<QqClientDeps>);
+    const adapter = createQqAdapter(deps);
+    const r = await adapter.loginStatus();
+
+    expect(r.vipLevel).toBe("svip");
+    expect(r.vipLabel).toBe("超级会员·陆");
+    expect(r.vipIcon).toBe("qq-super-vip");
+    expect(r.vipIconUrl).toBe("https://y.qq.com/mediastyle/lv-icon/v14/2x/svip6.png");
+    expect(r.vipTier).toBe(6);
+    expect(r.vipLevelName).toBe("陆");
+  });
+});
+
+test("loginStatus lets QQ official badge icon override ambiguous super member flags", async () => {
+  await withEnv("MINERADIO_QQ_COOKIE", "uin=123; qqmusic_key=abc", async () => {
+    const deps = noopDeps({
+      getConfig: () => ({ cookie: "uin=123; qqmusic_key=abc" }),
+      loginStatus: async () => ({ body: { data: {} } }),
+      vipInfo: async () => ({
+        body: {
+          getVipInfo: {
+            data: {
+              infoMap: {
+                "123": {
+                  iNewVip: 1,
+                  iNewSuperVip: 1,
+                  iCurLevel: 7,
+                  sIcon: "oKnq7K6FoKni7z**"
+                }
+              }
+            }
+          },
+          getVipIcon: {
+            data: {
+              UserInfoUI: {
+                iconlist: [
+                  { srcUrl: "https://y.qq.com/mediastyle/lv-icon/v14/2x/vip7.png", width: 96, height: 46 },
+                  { srcUrl: "https://y.qq.com/mediastyle/lv-icon/v10/audio/2x/d-vip1.png", width: 34, height: 46 }
+                ]
+              }
+            }
+          }
+        }
+      })
+    } as Partial<QqClientDeps>);
+    const adapter = createQqAdapter(deps);
+    const r = await adapter.loginStatus();
+
+    expect(r.vipLevel).toBe("vip");
+    expect(r.vipLabel).toBe("豪华绿钻·柒");
+    expect(r.vipIcon).toBe("qq-green-vip");
+    expect(r.vipIconUrl).toBe("https://y.qq.com/mediastyle/lv-icon/v14/2x/vip7.png");
+    expect(r.vipTier).toBe(7);
+    expect(r.vipLevelName).toBe("柒");
+  });
+});
+
+test("loginStatus with cookie falls back to cookie userId when qq user detail fails", async () => {
+  await withEnv("MINERADIO_QQ_COOKIE", "uin=o00123; qqmusic_key=abc", async () => {
+    const deps = noopDeps({
+      getConfig: () => ({ cookie: "uin=o00123; qqmusic_key=abc" }),
+      loginStatus: async () => { throw new Error("expired profile endpoint"); }
+    });
+    const adapter = createQqAdapter(deps);
+    const r = await adapter.loginStatus();
+
+    expect(r).toEqual({
+      provider: "qq",
+      loggedIn: true,
+      userId: "00123"
+    });
   });
 });
 

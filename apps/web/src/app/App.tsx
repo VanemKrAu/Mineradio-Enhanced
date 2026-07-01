@@ -56,7 +56,6 @@ import {
   listenGlobalHotkey,
   closeWindow,
   minimizeWindow,
-  openProviderLoginWindow,
   showDesktopLyricsWindow,
   toggleWindowMaximize,
   toggleWindowFullscreen,
@@ -81,7 +80,7 @@ import {
   SidecarRecoveryNotice,
   type SidecarRecoveryNoticeState,
 } from "../components/shell/SidecarRecoveryNotice";
-import { TopRightControls } from "../components/shell/TopRightControls";
+import { TopRightControls, VipBadge } from "../components/shell/TopRightControls";
 import {
   VISUAL_GUIDE_SEEN_STORE_KEY,
   VisualGuideHost,
@@ -120,6 +119,7 @@ import {
   type PodcastCollection,
   type ProviderId,
   type ProviderLoginStatus,
+  type ProviderVipIcon,
   type SongUrlResult,
   type Track,
   type WeatherRadioResponse,
@@ -143,6 +143,29 @@ const DEFAULT_GLOBAL_HOTKEYS: GlobalHotkeyBinding[] = [
   { action: "toggleFullscreen", accelerator: "Control+Alt+KeyF" },
   { action: "toggleDesktopLyrics", accelerator: "Control+Alt+KeyL" },
 ];
+
+type AccountVipBadge = {
+  text: string;
+  icon?: ProviderVipIcon;
+  iconUrl?: string;
+};
+
+function accountVipBadge(status: ProviderLoginStatus | null | undefined): AccountVipBadge | null {
+  if (!status?.loggedIn) return null;
+  const text =
+    status.vipLabel?.trim() ||
+    (status.vipLevel === "svip"
+      ? "SVIP"
+      : status.vipLevel === "vip"
+        ? "VIP"
+        : "");
+  if (!text) return null;
+  return {
+    text,
+    icon: status.vipIcon,
+    iconUrl: status.vipIconUrl,
+  };
+}
 
 function placeholderRuntimeConfig(): RuntimeConfig {
   return {
@@ -238,6 +261,49 @@ interface TrialBannerState {
   text: string;
   provider: ProviderId;
   showLogin: boolean;
+}
+
+interface LoginQrState {
+  key: string;
+  img: string;
+  completed: boolean;
+}
+
+type LoginQrTone = "idle" | "scan" | "fail" | "success" | "preview";
+
+interface LoginQrStatusState {
+  text: string;
+  tone: LoginQrTone;
+}
+
+type LoginModalMode = "full" | "add-account" | "single-provider";
+
+const LOGIN_PROVIDERS = ["netease", "qq"] as const satisfies readonly ProviderId[];
+
+const INITIAL_NETEASE_QR_STATUS: LoginQrStatusState = {
+  text: "正在生成二维码...",
+  tone: "idle",
+};
+
+const INITIAL_QQ_QR_STATUS: LoginQrStatusState = {
+  text: "正在生成二维码...",
+  tone: "idle",
+};
+
+function initialQrStatusForProvider(provider: ProviderId): LoginQrStatusState {
+  return provider === "qq" ? INITIAL_QQ_QR_STATUS : INITIAL_NETEASE_QR_STATUS;
+}
+
+function qrInstructionForProvider(provider: ProviderId): string {
+  return provider === "qq"
+    ? "使用 QQ 音乐 App 扫码，然后在手机上确认登录"
+    : "使用网易云音乐 App 扫码，然后在手机上确认登录";
+}
+
+function qrScannedTextForProvider(provider: ProviderId): string {
+  return provider === "qq"
+    ? "已扫码，请在 QQ 音乐 App 上确认登录"
+    : "已扫码，请在手机上确认登录";
 }
 
 interface HomeListenHistoryRecord extends HomeListenRecord {
@@ -905,7 +971,19 @@ export function App({
   const [sidecarBaseUrl, setSidecarBaseUrl] = useState("");
   const [splashActive, setSplashActive] = useState<boolean>(SHOW_SPLASH);
   const [searchModeRequest, setSearchModeRequest] = useState<SearchMode>("song");
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [loginModalMode, setLoginModalMode] = useState<LoginModalMode>("full");
+  const [loginProvider, setLoginProvider] = useState<ProviderId>("netease");
+  const [neteaseQr, setNeteaseQr] = useState<LoginQrState | null>(null);
+  const [neteaseQrStatus, setNeteaseQrStatus] = useState<LoginQrStatusState>(
+    INITIAL_NETEASE_QR_STATUS,
+  );
+  const [qqQr, setQqQr] = useState<LoginQrState | null>(null);
+  const [qqQrStatus, setQqQrStatus] = useState<LoginQrStatusState>(
+    INITIAL_QQ_QR_STATUS,
+  );
+  const [qqManualCookieOpen, setQqManualCookieOpen] = useState(false);
   const [neteaseStatus, setNeteaseStatus] =
     useState<ProviderLoginStatus | null>(null);
   const [qqStatus, setQqStatus] = useState<ProviderLoginStatus | null>(null);
@@ -1051,6 +1129,7 @@ export function App({
   const localAudioUrlsRef = useRef(new Map<string, string>());
   const lastLoadedKeyRef = useRef<string>("");
   const playbackRequestSeqRef = useRef(0);
+  const loginQrRequestSeqRef = useRef(0);
   const neteaseCookieInputRef = useRef<HTMLTextAreaElement | null>(null);
   const qqCookieInputRef = useRef<HTMLTextAreaElement | null>(null);
   const customLyricInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1616,11 +1695,201 @@ export function App({
     ],
   );
 
+  const refreshProviderLoginQr = useCallback(async (provider: ProviderId) => {
+    const client = sidecarClient;
+    const seq = ++loginQrRequestSeqRef.current;
+    const setQr = provider === "qq" ? setQqQr : setNeteaseQr;
+    const setQrStatus = provider === "qq" ? setQqQrStatus : setNeteaseQrStatus;
+    setQr(null);
+    setQrStatus(initialQrStatusForProvider(provider));
+    if (!client) {
+      setQrStatus({ text: "sidecar 未连接，稍后再试", tone: "fail" });
+      return;
+    }
+    try {
+      const key = await client.createProviderLoginQrKey(provider);
+      const image = await client.createProviderLoginQrImage(provider, key.key);
+      if (seq !== loginQrRequestSeqRef.current) return;
+      setQr({ key: image.key || key.key, img: image.img, completed: false });
+      setQrStatus({
+        text: qrInstructionForProvider(provider),
+        tone: "idle",
+      });
+    } catch (e) {
+      if (seq !== loginQrRequestSeqRef.current) return;
+      const message = e instanceof Error ? e.message : "二维码生成失败";
+      setQrStatus({ text: message, tone: "fail" });
+    }
+  }, [sidecarClient]);
+
+  const resetProviderLoginQr = useCallback(() => {
+    loginQrRequestSeqRef.current += 1;
+    setNeteaseQr(null);
+    setQqQr(null);
+    setNeteaseQrStatus(INITIAL_NETEASE_QR_STATUS);
+    setQqQrStatus(INITIAL_QQ_QR_STATUS);
+  }, []);
+
   const openLoginModal = useCallback(() => {
+    const loggedProviderCount =
+      (neteaseStatus?.loggedIn ? 1 : 0) + (qqStatus?.loggedIn ? 1 : 0);
+    setAccountDropdownOpen(false);
+    resetProviderLoginQr();
     setLoginModalOpen(true);
+    if (loggedProviderCount > 0) {
+      setLoginModalMode("add-account");
+      setLoginProvider(
+        !neteaseStatus?.loggedIn ? "netease" : !qqStatus?.loggedIn ? "qq" : "netease",
+      );
+    } else {
+      setLoginModalMode("full");
+      setLoginProvider("netease");
+    }
+    setQqManualCookieOpen(false);
     void refreshProviderStatus("netease");
     void refreshProviderStatus("qq");
-  }, [refreshProviderStatus]);
+  }, [
+    neteaseStatus?.loggedIn,
+    qqStatus?.loggedIn,
+    refreshProviderStatus,
+    resetProviderLoginQr,
+  ]);
+
+  const openSingleProviderLogin = useCallback((provider: ProviderId) => {
+    setAccountDropdownOpen(false);
+    resetProviderLoginQr();
+    setLoginModalOpen(true);
+    setLoginProvider(provider);
+    setLoginModalMode("single-provider");
+    setQqManualCookieOpen(false);
+  }, [resetProviderLoginQr]);
+
+  const handleAccountButtonClick = useCallback(() => {
+    if (neteaseStatus?.loggedIn || qqStatus?.loggedIn) {
+      setAccountDropdownOpen((open) => !open);
+      return;
+    }
+    openLoginModal();
+  }, [neteaseStatus?.loggedIn, openLoginModal, qqStatus?.loggedIn]);
+
+  useEffect(() => {
+    if (neteaseStatus?.loggedIn || qqStatus?.loggedIn) return;
+    setAccountDropdownOpen(false);
+  }, [neteaseStatus?.loggedIn, qqStatus?.loggedIn]);
+
+  useEffect(() => {
+    if (!accountDropdownOpen) return;
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const dropdown = document.getElementById("account-dropdown");
+      const topRight = document.getElementById("top-right");
+      if (dropdown?.contains(target) || topRight?.contains(target)) return;
+      setAccountDropdownOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnPointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnPointerDown, true);
+  }, [accountDropdownOpen]);
+
+  useEffect(() => {
+    if (!loginModalOpen) return;
+    if (loginModalMode === "add-account") return;
+    void refreshProviderLoginQr(loginProvider);
+  }, [loginModalMode, loginModalOpen, loginProvider, refreshProviderLoginQr]);
+
+  useEffect(() => {
+    const activeQr = loginProvider === "qq" ? qqQr : neteaseQr;
+    if (
+      !loginModalOpen ||
+      loginModalMode === "add-account" ||
+      !activeQr?.key ||
+      activeQr.completed ||
+      !sidecarClient
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let checkInFlight = false;
+    const provider = loginProvider;
+    const setQr = provider === "qq" ? setQqQr : setNeteaseQr;
+    const setQrStatus = provider === "qq" ? setQqQrStatus : setNeteaseQrStatus;
+    const check = async () => {
+      if (checkInFlight) return;
+      checkInFlight = true;
+      try {
+        const result = await sidecarClient.checkProviderLoginQr(provider, activeQr.key);
+        if (cancelled) return;
+        if (result.stored || result.loggedIn) {
+          setQrStatus({ text: "登录成功，正在同步账号状态", tone: "success" });
+          let status: ProviderLoginStatus | null = null;
+          try {
+            status = await sidecarClient.loginStatus(provider);
+          } catch {
+            status = null;
+          }
+          if (cancelled) return;
+          const label = providerLabel(provider);
+          if (status) {
+            setProviderStatus(status);
+            void refreshShelfPlaylists(sidecarClient);
+          }
+          setQr((current) =>
+            current?.key === activeQr.key ? { ...current, completed: true } : current,
+          );
+          if (status?.loggedIn) {
+            setQrStatus({ text: "登录成功，账号状态已同步", tone: "success" });
+            showToast(`${label}已登录: ${status.nickname ?? status.userId ?? "账号"}`);
+          } else {
+            setQrStatus({ text: "登录成功，会话已保存，可刷新状态", tone: "success" });
+            showToast(`${label}会话已保存`);
+          }
+          return;
+        }
+        if (result.expired || result.code === 800 || result.code === 65) {
+          setQr((current) =>
+            current?.key === activeQr.key ? { ...current, completed: true } : current,
+          );
+          setQrStatus({ text: "二维码已过期，请刷新", tone: "fail" });
+          return;
+        }
+        if (result.scanned || result.code === 802 || result.code === 67) {
+          setQrStatus({ text: qrScannedTextForProvider(provider), tone: "scan" });
+          return;
+        }
+        setQrStatus({
+          text: qrInstructionForProvider(provider),
+          tone: "idle",
+        });
+      } catch {
+        if (!cancelled) setQrStatus({ text: "扫码状态读取失败", tone: "fail" });
+      } finally {
+        checkInFlight = false;
+      }
+    };
+    const timer = window.setInterval(() => {
+      void check();
+    }, 1800);
+    void check();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    loginModalMode,
+    loginModalOpen,
+    loginProvider,
+    neteaseQr?.completed,
+    neteaseQr?.key,
+    providerLabel,
+    qqQr?.completed,
+    qqQr?.key,
+    refreshShelfPlaylists,
+    setProviderStatus,
+    showToast,
+    sidecarClient,
+  ]);
 
   const refreshHomeDiscover = useCallback(async () => {
     const client = sidecarClient;
@@ -2148,9 +2417,12 @@ export function App({
 
   const closeLoginModal = useCallback(() => {
     setLoginModalOpen(false);
+    setLoginModalMode("full");
+    setQqManualCookieOpen(false);
+    resetProviderLoginQr();
     if (neteaseCookieInputRef.current) neteaseCookieInputRef.current.value = "";
     if (qqCookieInputRef.current) qqCookieInputRef.current.value = "";
-  }, []);
+  }, [resetProviderLoginQr]);
 
   const importProviderCookie = useCallback(
     async (provider: ProviderId) => {
@@ -2172,6 +2444,7 @@ export function App({
       try {
         await client.setProviderSessionCookie(provider, cookie);
         if (input) input.value = "";
+        setQqManualCookieOpen(false);
         const status = await client.loginStatus(provider);
         setProviderStatus(status);
         void refreshShelfPlaylists(client);
@@ -2183,46 +2456,6 @@ export function App({
       } catch (e) {
         if (input) input.value = "";
         const message = e instanceof Error ? e.message : "手动导入失败";
-        showToast(message);
-      }
-    },
-    [
-      providerLabel,
-      refreshShelfPlaylists,
-      setProviderStatus,
-      showToast,
-      sidecarClient,
-    ],
-  );
-
-  const openProviderWebLogin = useCallback(
-    async (provider: ProviderId) => {
-      const client = sidecarClient;
-      const label = providerLabel(provider);
-      if (!client) {
-        showToast("sidecar 未连接，稍后再试");
-        return;
-      }
-      try {
-        const result = await openProviderLoginWindow(provider);
-        if (!result.stored) {
-          showToast(`${label}登录未完成`);
-          return;
-        }
-        const status = await client.loginStatus(provider);
-        setProviderStatus(status);
-        void refreshShelfPlaylists(client);
-        const suffix =
-          provider === "qq" && result.partial
-            ? "，播放授权不完整，部分歌曲会自动换源"
-            : "";
-        showToast(
-          status.loggedIn
-            ? `${label}已登录: ${status.nickname ?? status.userId ?? "账号"}${suffix}`
-            : `${label}会话已保存，但账号态未确认`,
-        );
-      } catch (e) {
-        const message = e instanceof Error ? e.message : `${label}登录失败`;
         showToast(message);
       }
     },
@@ -2984,6 +3217,16 @@ export function App({
           } catch {
             // 能力矩阵仅用于运行期同步，失败不阻断视觉宿主。
           }
+          const statusResults = await Promise.allSettled([
+            client.loginStatus("netease"),
+            client.loginStatus("qq"),
+          ]);
+          if (cancelledRef.current) return;
+          for (const result of statusResults) {
+            if (result.status === "fulfilled") {
+              setProviderStatus(result.value);
+            }
+          }
           if (!cancelledRef.current) void refreshShelfPlaylists(client);
         } catch {
           if (cancelledRef.current) return;
@@ -3004,7 +3247,13 @@ export function App({
       cancelledRef.current = true;
       if (timer) clearTimeout(timer);
     };
-  }, [initSidecar, initialRuntimeConfig, refreshShelfPlaylists, setMatrix]);
+  }, [
+    initSidecar,
+    initialRuntimeConfig,
+    refreshShelfPlaylists,
+    setMatrix,
+    setProviderStatus,
+  ]);
 
   useEffect(() => {
     if (!audioElementSupported()) return;
@@ -3277,6 +3526,29 @@ export function App({
     lyricsReset,
   ]);
 
+  const missingLoginProviders = LOGIN_PROVIDERS.filter((provider) =>
+    provider === "netease" ? !neteaseStatus?.loggedIn : !qqStatus?.loggedIn,
+  );
+  const loggedProviderStatuses = LOGIN_PROVIDERS
+    .map((provider) => {
+      const status = provider === "netease" ? neteaseStatus : qqStatus;
+      return { provider, status };
+    })
+    .filter(
+      (entry): entry is { provider: ProviderId; status: ProviderLoginStatus } =>
+        entry.status?.loggedIn === true,
+    );
+  const loggedAccountSummaries = loggedProviderStatuses.map(
+    ({ provider, status }) =>
+      `${providerLabel(provider)} ${status.nickname ?? status.userId ?? "已登录"}`,
+  );
+  const topAccountStatus = neteaseStatus?.loggedIn
+    ? neteaseStatus
+    : qqStatus?.loggedIn
+      ? qqStatus
+      : null;
+  const topVipBadge = accountVipBadge(topAccountStatus);
+
   return (
     <div id="desktop-window-shell">
       <input
@@ -3450,18 +3722,95 @@ export function App({
       />
       <TopRightControls
         onHome={goHome}
-        onLogin={openLoginModal}
+        onLogin={handleAccountButtonClick}
         onHideCapsule={toggleUserCapsuleAutoHide}
         capsuleAutoHide={userCapsuleAutoHide}
-        loggedIn={!!neteaseStatus?.loggedIn || !!qqStatus?.loggedIn}
+        loggedIn={topAccountStatus !== null}
         accountLabel={
-          neteaseStatus?.nickname ??
-          qqStatus?.nickname ??
-          neteaseStatus?.userId ??
-          qqStatus?.userId ??
+          topAccountStatus?.nickname ??
+          topAccountStatus?.userId ??
           undefined
         }
+        accountAvatarUrl={topAccountStatus?.avatarUrl}
+        accountVipLevel={topAccountStatus?.vipLevel}
+        accountVipLabel={topVipBadge?.text}
+        accountVipIcon={topVipBadge?.icon}
+        accountVipIconUrl={topVipBadge?.iconUrl}
       />
+      {accountDropdownOpen && loggedProviderStatuses.length > 0 ? (
+        <div
+          id="account-dropdown"
+          className="account-dropdown"
+          role="menu"
+          aria-label="账号信息"
+        >
+          <div className="account-dropdown-title">账号信息</div>
+          <div className="account-dropdown-list">
+            {loggedProviderStatuses.map(({ provider, status }) => {
+              const displayName = status.nickname ?? status.userId ?? "已登录";
+              const vipBadge = accountVipBadge(status);
+              return (
+                <div
+                  key={provider}
+                  id={`account-dropdown-provider-${provider}`}
+                  className={`account-dropdown-row account-pill ${provider}`}
+                >
+                  {status.avatarUrl ? (
+                    <img
+                      className="account-dropdown-avatar"
+                      src={status.avatarUrl}
+                      alt=""
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <span className="account-dropdown-avatar fallback" aria-hidden="true">
+                      {displayName.trim().slice(0, 1) || "账"}
+                    </span>
+                  )}
+                  <div className="account-dropdown-main">
+                    <div className="account-dropdown-provider">
+                      {providerLabel(provider)}
+                      {vipBadge ? (
+                        <VipBadge text={vipBadge.text} icon={vipBadge.icon} iconUrl={vipBadge.iconUrl} />
+                      ) : null}
+                    </div>
+                    <div className="account-dropdown-name">{displayName}</div>
+                  </div>
+                  <div className="account-dropdown-actions">
+                    <button
+                      type="button"
+                      onClick={() => void refreshProviderStatus(provider)}
+                    >
+                      刷新
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void logoutProvider(provider)}
+                    >
+                      退出
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {missingLoginProviders.length > 0 ? (
+              <div className="account-dropdown-divider" />
+            ) : null}
+            {missingLoginProviders.map((provider) => (
+              <button
+                key={provider}
+                id={`account-add-provider-${provider}`}
+                className={`account-dropdown-add ${provider}`}
+                type="button"
+                onClick={() => openSingleProviderLogin(provider)}
+              >
+                <span>添加 {providerLabel(provider)}</span>
+                <span>扫码登录</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <VisualGuideHost
         open={visualGuideOpen}
         onClose={closeVisualGuide}
@@ -3719,119 +4068,234 @@ export function App({
           }}
         >
           <div
-            className="modal dual-login-modal"
+            className={`modal dual-login-modal${loginModalMode === "add-account" ? " add-account-modal" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="login-modal-title"
           >
-            <h2 id="login-modal-title">音乐账号</h2>
-            <div id="login-modal-desc" className="desc">
-              手动导入 cookie 只会发送到本机 sidecar
-              运行时会话，不会写入前端状态、仓库或 diagnostics。
+            {loginModalMode === "full" ? (
+              <div className="login-platform-tabs" id="login-platform-tabs">
+                <button
+                  id="login-provider-netease"
+                  className={`netease${loginProvider === "netease" ? " active" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    setLoginProvider("netease");
+                    setQqManualCookieOpen(false);
+                  }}
+                  aria-selected={loginProvider === "netease"}
+                >
+                  网易云
+                </button>
+                <button
+                  id="login-provider-qq"
+                  className={`qq${loginProvider === "qq" ? " active" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    setLoginProvider("qq");
+                    setQqManualCookieOpen(false);
+                  }}
+                  aria-selected={loginProvider === "qq"}
+                >
+                  QQ 音乐
+                </button>
+              </div>
+            ) : null}
+            <div className="login-intro">
+              <div className="login-intro-kicker">Mineradio</div>
+              <div className="login-intro-title">音乐播放器，也是一座视觉舞台</div>
+              <div className="login-intro-body">
+                搜索或导入一首歌即可播放；登录后会同步歌单、红心和播客，登录态会保存在本机 sidecar 数据目录。
+              </div>
             </div>
-            <div className="manual-cookie-grid">
-              <div className="manual-cookie-panel">
-                <div className="manual-cookie-title">网易云</div>
-                <textarea
-                  ref={neteaseCookieInputRef}
-                  id="netease-cookie-input"
-                  className="manual-cookie-input"
-                  spellCheck={false}
-                  autoComplete="off"
-                  placeholder="MUSIC_U=...; __csrf=..."
-                />
-                <div className="account-status-line">
-                  {neteaseStatus?.loggedIn
-                    ? `已登录 ${neteaseStatus.nickname ?? neteaseStatus.userId ?? ""}`
-                    : "未确认登录"}
+            {loginModalMode === "add-account" ? (
+              <>
+                <h2 id="login-modal-title">
+                  {missingLoginProviders.length > 0 ? "添加账号" : "账号信息"}
+                </h2>
+                <div id="login-modal-desc" className="desc">
+                  {missingLoginProviders.length > 0
+                    ? `当前已登录 ${loggedAccountSummaries.join("、") || "一个音乐平台"}，选择要添加的平台。`
+                    : `当前已登录 ${loggedAccountSummaries.join("、") || "全部音乐平台"}，可刷新状态或退出账号。`}
                 </div>
-                <div className="account-mini-actions">
+                <div id="login-add-account-panel" className="login-add-account-panel">
+                  {loggedProviderStatuses.map(({ provider, status }) => (
+                    <div
+                      key={provider}
+                      id={`logged-login-provider-${provider}`}
+                      className={`login-account-card ${provider}`}
+                    >
+                      <div className="login-account-card-main">
+                        <span className="login-add-provider-name">{providerLabel(provider)}</span>
+                        <span className="login-add-provider-meta">
+                          {status.nickname ?? status.userId ?? "已登录"}
+                        </span>
+                      </div>
+                      <div className="login-account-actions">
+                        <button
+                          className="modal-btn"
+                          type="button"
+                          onClick={() => void refreshProviderStatus(provider)}
+                        >
+                          刷新
+                        </button>
+                        <button
+                          className="modal-btn"
+                          type="button"
+                          onClick={() => void logoutProvider(provider)}
+                        >
+                          退出
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {missingLoginProviders.map((provider) => (
+                    <button
+                      key={provider}
+                      id={`add-login-provider-${provider}`}
+                      className={`login-add-provider-card ${provider}`}
+                      type="button"
+                      onClick={() => openSingleProviderLogin(provider)}
+                    >
+                      <span className="login-add-provider-name">{providerLabel(provider)}</span>
+                      <span className="login-add-provider-meta">扫码添加这个账号</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="btn-row">
                   <button
+                    className="modal-btn"
+                    type="button"
+                    onClick={closeLoginModal}
+                  >
+                    关闭
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 id="login-modal-title">
+                  {loginProvider === "netease" ? "扫码登录网易云音乐" : "扫码登录 QQ 音乐"}
+                </h2>
+                <div id="login-modal-desc" className="desc">
+                  {loginProvider === "netease"
+                    ? "使用网易云音乐 App 扫码，可同步歌单、红心与播客。"
+                    : "使用 QQ 音乐 App 扫码，可同步歌单和播放授权。"}
+                </div>
+                {loginProvider === "netease" ? (
+                  <>
+                    <div id="qr-shell" className="qr-shell">
+                      {neteaseQr?.img ? (
+                        <img id="qr-img" src={neteaseQr.img} alt="网易云音乐登录二维码" />
+                      ) : (
+                        <div className="qr-loading-mark" aria-hidden="true">NE</div>
+                      )}
+                    </div>
+                    <div id="qr-status" className={neteaseQrStatus.tone}>
+                      {neteaseQrStatus.text}
+                    </div>
+                    <div className="account-status-line">
+                      {neteaseStatus?.loggedIn
+                        ? `已登录 ${neteaseStatus.nickname ?? neteaseStatus.userId ?? ""}`
+                        : "未确认登录"}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div id="qr-shell" className="qr-shell">
+                      {qqQr?.img ? (
+                        <img id="qr-img" src={qqQr.img} alt="QQ 音乐登录二维码" />
+                      ) : (
+                        <div className="qr-loading-mark" aria-hidden="true">QQ</div>
+                      )}
+                    </div>
+                    <div id="qr-status" className={qqQrStatus.tone}>
+                      {qqQrStatus.text}
+                    </div>
+                    <div className="account-status-line">
+                      {qqStatus?.loggedIn
+                        ? `已登录 ${qqStatus.nickname ?? qqStatus.userId ?? ""}`
+                        : "未确认登录"}
+                    </div>
+                  </>
+                )}
+                <div
+                  id="qq-cookie-panel"
+                  className={`qq-cookie-panel${qqManualCookieOpen ? " show" : ""}`}
+                >
+                  {loginProvider === "netease" ? (
+                    <textarea
+                      ref={neteaseCookieInputRef}
+                      id="netease-cookie-input"
+                      className="qq-cookie-input"
+                      spellCheck={false}
+                      autoComplete="off"
+                      placeholder="MUSIC_U=...; __csrf=..."
+                    />
+                  ) : (
+                    <textarea
+                      ref={qqCookieInputRef}
+                      id="qq-cookie-input"
+                      className="qq-cookie-input"
+                      spellCheck={false}
+                      autoComplete="off"
+                      placeholder="uin=...; qm_keyst=...; qqmusic_key=..."
+                    />
+                  )}
+                  <div className="qq-cookie-actions">
+                    <div className="qq-cookie-note">
+                      手动导入只会写入本机 sidecar 会话。
+                    </div>
+                    <button
+                      className="modal-btn primary"
+                      type="button"
+                      onClick={() => void importProviderCookie(loginProvider)}
+                    >
+                      保存
+                    </button>
+                  </div>
+                </div>
+                <div className="btn-row">
+                  <button
+                    className="modal-btn"
+                    type="button"
+                    onClick={closeLoginModal}
+                  >
+                    关闭
+                  </button>
+                  <button
+                    id="refresh-qr-btn"
                     className="modal-btn primary"
                     type="button"
-                    onClick={() => void openProviderWebLogin("netease")}
+                    onClick={() => void refreshProviderLoginQr(loginProvider)}
                   >
-                    网页登录
+                    刷新二维码
+                  </button>
+                  <button
+                    id="qq-cookie-toggle-btn"
+                    className="modal-btn show"
+                    type="button"
+                    onClick={() => setQqManualCookieOpen((open) => !open)}
+                  >
+                    手动导入
                   </button>
                   <button
                     className="modal-btn"
                     type="button"
-                    onClick={() => void refreshProviderStatus("netease")}
+                    onClick={() => void refreshProviderStatus(loginProvider)}
                   >
-                    刷新
+                    刷新状态
                   </button>
                   <button
                     className="modal-btn"
                     type="button"
-                    onClick={() => void logoutProvider("netease")}
+                    onClick={() => void logoutProvider(loginProvider)}
                   >
                     退出
                   </button>
-                  <button
-                    className="modal-btn"
-                    type="button"
-                    onClick={() => void importProviderCookie("netease")}
-                  >
-                    导入
-                  </button>
                 </div>
-              </div>
-              <div className="manual-cookie-panel">
-                <div className="manual-cookie-title">QQ 音乐</div>
-                <textarea
-                  ref={qqCookieInputRef}
-                  id="qq-cookie-input"
-                  className="manual-cookie-input"
-                  spellCheck={false}
-                  autoComplete="off"
-                  placeholder="uin=...; qm_keyst=...; qqmusic_key=..."
-                />
-                <div className="account-status-line">
-                  {qqStatus?.loggedIn
-                    ? `已登录 ${qqStatus.nickname ?? qqStatus.userId ?? ""}`
-                    : "未确认登录"}
-                </div>
-                <div className="account-mini-actions">
-                  <button
-                    className="modal-btn primary"
-                    type="button"
-                    onClick={() => void openProviderWebLogin("qq")}
-                  >
-                    扫码登录
-                  </button>
-                  <button
-                    className="modal-btn"
-                    type="button"
-                    onClick={() => void refreshProviderStatus("qq")}
-                  >
-                    刷新
-                  </button>
-                  <button
-                    className="modal-btn"
-                    type="button"
-                    onClick={() => void logoutProvider("qq")}
-                  >
-                    退出
-                  </button>
-                  <button
-                    className="modal-btn"
-                    type="button"
-                    onClick={() => void importProviderCookie("qq")}
-                  >
-                    导入
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="btn-row">
-              <button
-                className="modal-btn"
-                type="button"
-                onClick={closeLoginModal}
-              >
-                关闭
-              </button>
-            </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}

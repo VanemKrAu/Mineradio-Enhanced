@@ -28,6 +28,12 @@ import {
 	DiscoverHomeResponse,
 	DiscoverHomeResponseSchema,
 	ProviderId,
+	ProviderLoginQrCheck,
+	ProviderLoginQrCheckSchema,
+	ProviderLoginQrImage,
+	ProviderLoginQrImageSchema,
+	ProviderLoginQrKey,
+	ProviderLoginQrKeySchema,
 	ProviderSessionCookieAck,
 	ProviderSessionCookieAckSchema,
 	ProviderLoginStatus,
@@ -438,6 +444,32 @@ export class SidecarClient {
 			"DELETE",
 			`/providers/${provider}/session-cookie`,
 			ProviderSessionCookieAckSchema,
+		);
+	}
+
+	async createProviderLoginQrKey(provider: ProviderId): Promise<ProviderLoginQrKey> {
+		return this.request(
+			"GET",
+			`/providers/${provider}/login-qr-key`,
+			ProviderLoginQrKeySchema,
+		);
+	}
+
+	async createProviderLoginQrImage(provider: ProviderId, key: string): Promise<ProviderLoginQrImage> {
+		const params = new URLSearchParams({ key });
+		return this.request(
+			"GET",
+			`/providers/${provider}/login-qr-create?${params.toString()}`,
+			ProviderLoginQrImageSchema,
+		);
+	}
+
+	async checkProviderLoginQr(provider: ProviderId, key: string): Promise<ProviderLoginQrCheck> {
+		const params = new URLSearchParams({ key });
+		return this.request(
+			"GET",
+			`/providers/${provider}/login-qr-check?${params.toString()}`,
+			ProviderLoginQrCheckSchema,
 		);
 	}
 

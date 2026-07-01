@@ -660,6 +660,101 @@ test("clearProviderSessionCookie DELETEs cookie and accepts clear ack", async ()
 	});
 });
 
+test("Netease QR login helpers parse key image and check responses", async () => {
+	const seen: string[] = [];
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		seen.push(url);
+		expect(init?.method).toBe("GET");
+		if (url.includes("/providers/netease/login-qr-key")) {
+			return jsonResponse({ ok: true, data: { provider: "netease", key: "qr-key-1" } });
+		}
+		if (url.includes("/providers/netease/login-qr-create")) {
+			expect(url).toContain("key=qr-key-1");
+			return jsonResponse({
+				ok: true,
+				data: { provider: "netease", key: "qr-key-1", img: "data:image/png;base64,abc" },
+			});
+		}
+		if (url.includes("/providers/netease/login-qr-check")) {
+			expect(url).toContain("key=qr-key-1");
+			return jsonResponse({
+				ok: true,
+				data: { provider: "netease", key: "qr-key-1", code: 801, loggedIn: false },
+			});
+		}
+		throw new Error(`unexpected url ${url}`);
+	}) as typeof fetch;
+
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		expect(await client.createProviderLoginQrKey("netease")).toEqual({
+			provider: "netease",
+			key: "qr-key-1",
+		});
+		expect(await client.createProviderLoginQrImage("netease", "qr-key-1")).toEqual({
+			provider: "netease",
+			key: "qr-key-1",
+			img: "data:image/png;base64,abc",
+		});
+		expect(await client.checkProviderLoginQr("netease", "qr-key-1")).toEqual({
+			provider: "netease",
+			key: "qr-key-1",
+			code: 801,
+			loggedIn: false,
+		});
+	});
+	expect(seen.length).toBe(3);
+});
+
+test("QQ QR login helpers call QQ provider routes and parse responses", async () => {
+	const seen: string[] = [];
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		seen.push(url);
+		expect(init?.method).toBe("GET");
+		if (url.includes("/providers/qq/login-qr-key")) {
+			return jsonResponse({ ok: true, data: { provider: "qq", key: "qr_sig_1|1987342677" } });
+		}
+		if (url.includes("/providers/qq/login-qr-create")) {
+			expect(url).toContain("key=qr_sig_1%7C1987342677");
+			return jsonResponse({
+				ok: true,
+				data: { provider: "qq", key: "qr_sig_1|1987342677", img: "data:image/png;base64,qq" },
+			});
+		}
+		if (url.includes("/providers/qq/login-qr-check")) {
+			expect(url).toContain("key=qr_sig_1%7C1987342677");
+			return jsonResponse({
+				ok: true,
+				data: { provider: "qq", key: "qr_sig_1|1987342677", code: 67, loggedIn: false, scanned: true },
+			});
+		}
+		throw new Error(`unexpected url ${url}`);
+	}) as typeof fetch;
+
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		expect(await client.createProviderLoginQrKey("qq")).toEqual({
+			provider: "qq",
+			key: "qr_sig_1|1987342677",
+		});
+		expect(await client.createProviderLoginQrImage("qq", "qr_sig_1|1987342677")).toEqual({
+			provider: "qq",
+			key: "qr_sig_1|1987342677",
+			img: "data:image/png;base64,qq",
+		});
+		expect(await client.checkProviderLoginQr("qq", "qr_sig_1|1987342677")).toEqual({
+			provider: "qq",
+			key: "qr_sig_1|1987342677",
+			code: 67,
+			loggedIn: false,
+			scanned: true,
+		});
+	});
+	expect(seen.length).toBe(3);
+});
+
 test("loginStatus parses a cookie-free provider profile summary", async () => {
 	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = typeof input === "string" ? input : input.toString();
@@ -701,7 +796,11 @@ test("loginStatus parses Netease VIP profile metadata", async () => {
 				vipLevel: "svip",
 				isVip: true,
 				isSvip: true,
-				vipLabel: "黑胶SVIP",
+				vipLabel: "黑胶SVIP·陆",
+				vipIcon: "netease-svip",
+				vipIconUrl: "https://example.com/vip.png",
+				vipTier: 6,
+				vipLevelName: "陆",
 			},
 		});
 	}) as typeof fetch;
@@ -713,7 +812,11 @@ test("loginStatus parses Netease VIP profile metadata", async () => {
 		expect(status.vipLevel).toBe("svip");
 		expect(status.isVip).toBe(true);
 		expect(status.isSvip).toBe(true);
-		expect(status.vipLabel).toBe("黑胶SVIP");
+		expect(status.vipLabel).toBe("黑胶SVIP·陆");
+		expect(status.vipIcon).toBe("netease-svip");
+		expect(status.vipIconUrl).toBe("https://example.com/vip.png");
+		expect(status.vipTier).toBe(6);
+		expect(status.vipLevelName).toBe("陆");
 		expect(JSON.stringify(status)).not.toContain("MUSIC_U");
 		expect(JSON.stringify(status)).not.toContain("cookie");
 	});

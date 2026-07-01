@@ -362,6 +362,84 @@ test("GET /providers/qq/login-status returns 200 logged-out when no cookie (no n
   expect(b.data.loggedIn).toBe(false);
 });
 
+test("Netease QR login routes return key image and poll status without exposing cookies", async () => {
+  const handler = createRouteHandler({
+    neteaseQrLogin: {
+      createKey: async () => ({ provider: "netease", key: "qr-key-1" }),
+      createImage: async (key: string) => ({
+        provider: "netease",
+        key,
+        img: "data:image/png;base64,abc",
+        url: "https://music.163.com/login?codekey=qr-key-1"
+      }),
+      check: async (key: string) => ({
+        provider: "netease",
+        key,
+        code: 803,
+        message: "授权登录成功",
+        loggedIn: true,
+        stored: true
+      })
+    }
+  });
+
+  const key = await body(await handler(new Request("http://127.0.0.1/providers/netease/login-qr-key")));
+  expect(key).toEqual({ ok: true, data: { provider: "netease", key: "qr-key-1" } });
+
+  const image = await body(await handler(new Request("http://127.0.0.1/providers/netease/login-qr-create?key=qr-key-1")));
+  expect(image.data.img).toBe("data:image/png;base64,abc");
+
+  const checked = await body(await handler(new Request("http://127.0.0.1/providers/netease/login-qr-check?key=qr-key-1")));
+  expect(checked.data).toEqual({
+    provider: "netease",
+    key: "qr-key-1",
+    code: 803,
+    message: "授权登录成功",
+    loggedIn: true,
+    stored: true
+  });
+  expect(JSON.stringify(checked)).not.toContain("MUSIC_U");
+});
+
+test("QQ QR login routes return key image and poll status without exposing cookies", async () => {
+  const handler = createRouteHandler({
+    qqQrLogin: {
+      createKey: async () => ({ provider: "qq", key: "qr_sig_1|1987342677" }),
+      createImage: async (key: string) => ({
+        provider: "qq",
+        key,
+        img: "data:image/png;base64,qq"
+      }),
+      check: async (key: string) => ({
+        provider: "qq",
+        key,
+        code: 0,
+        message: "登录成功",
+        loggedIn: true,
+        scanned: true,
+        stored: true
+      })
+    }
+  });
+
+  const key = await body(await handler(new Request("http://127.0.0.1/providers/qq/login-qr-key")));
+  expect(key).toEqual({ ok: true, data: { provider: "qq", key: "qr_sig_1|1987342677" } });
+
+  const image = await body(await handler(new Request("http://127.0.0.1/providers/qq/login-qr-create?key=qr_sig_1%7C1987342677")));
+  expect(image.data.img).toBe("data:image/png;base64,qq");
+
+  const checked = await body(await handler(new Request("http://127.0.0.1/providers/qq/login-qr-check?key=qr_sig_1%7C1987342677")));
+  expect(checked.data).toMatchObject({
+    provider: "qq",
+    key: "qr_sig_1|1987342677",
+    code: 0,
+    loggedIn: true,
+    stored: true
+  });
+  expect(JSON.stringify(checked)).not.toContain("qqmusic_key");
+  expect(JSON.stringify(checked)).not.toContain("cookie");
+});
+
 test("POST /providers/qq/session-cookie stores runtime cookie without echoing secrets", async () => {
   const secret = "uin=123; qqmusic_key=runtime-secret";
   const r = await call("/providers/qq/session-cookie", {

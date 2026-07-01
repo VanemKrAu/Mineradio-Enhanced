@@ -27,6 +27,7 @@ import {
   mapQqLyricToPayload,
   mapQqPlaylistToSummary,
   mapQqPlaylistToDetail,
+  normalizeProviderImageUrl,
   type QqSong,
   type QqPlaylistBody
 } from "./map";
@@ -48,6 +49,7 @@ export interface QqClientDeps {
   playlistDetail: QqCall;
   addSongToPlaylist: QqCall;
   loginStatus: QqCall;
+  vipInfo?: QqCall;
   logout: QqCall;
   getConfig(): { cookie?: string };
   smartboxSearch?: (keyword: string, limit: number) => Promise<unknown[]>;
@@ -68,6 +70,7 @@ const defaultDeps: QqClientDeps = {
   playlistDetail: cast(qqClient.playlistDetail),
   addSongToPlaylist: cast(qqClient.addSongToPlaylist),
   loginStatus: cast(qqClient.loginStatus),
+  vipInfo: cast(qqClient.vipInfo),
   logout: cast(qqClient.logout),
   getConfig,
   smartboxSearch: fallbackSmartboxSearch,
@@ -187,6 +190,310 @@ function qqPlaybackKeyFromCookie(cookie: string): string {
   const obj = parseCookieText(cookie);
   return obj.qm_keyst || obj.qqmusic_key || obj.music_key || obj.p_skey || obj.skey ||
     obj.psrf_qqaccess_token || obj.psrf_qqrefresh_token || obj.wxrefresh_token || obj.wxskey || "";
+}
+
+function readStringField(obj: Record<string, unknown> | null | undefined, fields: string[]): string {
+  if (!obj) return "";
+  for (const field of fields) {
+    const value = obj[field];
+    if (typeof value === "string" || typeof value === "number") {
+      const text = String(value).trim();
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
+function readNumberField(obj: Record<string, unknown> | null | undefined, fields: string[]): number | undefined {
+  if (!obj) return undefined;
+  for (const field of fields) {
+    const value = obj[field];
+    const num = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim()) : NaN;
+    if (Number.isFinite(num)) return num;
+  }
+  return undefined;
+}
+
+function readFlagField(obj: Record<string, unknown> | null | undefined, fields: string[]): boolean | undefined {
+  if (!obj) return undefined;
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(obj, field)) continue;
+    const value = obj[field];
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return value > 0;
+    if (typeof value === "string") {
+      const text = value.trim().toLowerCase();
+      if (text === "1" || text === "true" || text === "yes" || text === "y") return true;
+      if (text === "0" || text === "false" || text === "no" || text === "n" || text === "") return false;
+      const num = Number(text);
+      if (Number.isFinite(num)) return num > 0;
+    }
+  }
+  return undefined;
+}
+
+const VIP_LEVEL_NAMES = ["", "壹", "贰", "叁", "肆", "伍", "陆", "柒", "捌", "玖", "拾"] as const;
+
+function vipLevelNameOf(tier: number | undefined): string | undefined {
+  if (tier === undefined || !Number.isFinite(tier) || tier <= 0) return undefined;
+  const whole = Math.floor(tier);
+  return VIP_LEVEL_NAMES[whole] ?? String(whole);
+}
+
+function parseVipTierFromText(text: string): number | undefined {
+  const digit = text.match(/(?:Lv\.?|等级|level)?\s*([1-9]\d?)/i)?.[1];
+  if (digit) return Number(digit);
+  const formal: Record<string, number> = {
+    一: 1, 壹: 1,
+    二: 2, 贰: 2,
+    三: 3, 叁: 3,
+    四: 4, 肆: 4,
+    五: 5, 伍: 5,
+    六: 6, 陆: 6,
+    七: 7, 柒: 7,
+    八: 8, 捌: 8,
+    九: 9, 玖: 9,
+    十: 10, 拾: 10,
+  };
+  for (const char of text) {
+    const value = formal[char];
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+function appendVipTier(label: string, tierName: string | undefined): string {
+  if (!label || !tierName || label.includes("·") || label.endsWith(tierName)) return label;
+  return `${label}·${tierName}`;
+}
+
+function normalizeVipIconUrl(value: string): string | undefined {
+  const text = value.trim();
+  if (!text) return undefined;
+  if (text.startsWith("//")) return `https:${text}`;
+  if (/^https?:\/\//i.test(text) || /^data:image\//i.test(text)) return normalizeProviderImageUrl(text);
+  return undefined;
+}
+
+function clampQqVipTier(tier: number | undefined): number | undefined {
+  if (tier === undefined || !Number.isFinite(tier)) return undefined;
+  return Math.max(0, Math.min(9, Math.floor(tier)));
+}
+
+type QqVipBadgeIcon = {
+  url: string;
+  level: "vip" | "svip";
+  tier?: number;
+};
+
+function qqVipBadgeIconFromUrl(value: string): QqVipBadgeIcon | null {
+  const url = normalizeVipIconUrl(value);
+  if (!url) return null;
+  const match = url.match(/\/(svip|vip)([1-9]\d*)\.png(?:[?#].*)?$/i);
+  if (!match) return null;
+  return {
+    url,
+    level: match[1].toLowerCase() === "svip" ? "svip" : "vip",
+    tier: Number(match[2])
+  };
+}
+
+function firstQqVipBadgeIcon(candidates: Record<string, unknown>[]): QqVipBadgeIcon | null {
+  for (const item of candidates) {
+    const badge = qqVipBadgeIconFromUrl(readStringField(item, [
+      "srcUrl",
+      "src",
+      "vipIconUrl",
+      "vipIcon",
+      "iconUrl",
+      "iconurl",
+      "iconURL",
+      "icon",
+      "logoUrl",
+      "imgUrl",
+      "imageUrl",
+      "picUrl",
+      "levelIcon",
+    ]));
+    if (badge) return badge;
+  }
+  return null;
+}
+
+function qqOfficialVipIconUrl(level: "none" | "vip" | "svip", tier: number | undefined): string | undefined {
+  if (level === "none") return undefined;
+  const clampedTier = clampQqVipTier(tier);
+  const badgeTier = clampedTier && clampedTier > 0 ? clampedTier : 1;
+  return `https://y.qq.com/mediastyle/lv-icon/v14/2x/${level}${badgeTier}.png`;
+}
+
+function pushProfileCandidate(candidates: Record<string, unknown>[], value: unknown): void {
+  const obj = asObj(value);
+  if (!obj || candidates.includes(obj)) return;
+  candidates.push(obj);
+}
+
+function pushMappedProfileCandidate(
+  candidates: Record<string, unknown>[],
+  map: Record<string, unknown> | null,
+  fallbackUserId: string | null
+): void {
+  if (!map) return;
+  if (fallbackUserId && map[fallbackUserId]) {
+    pushProfileCandidate(candidates, map[fallbackUserId]);
+    return;
+  }
+  for (const value of Object.values(map)) {
+    pushProfileCandidate(candidates, value);
+  }
+}
+
+function qqLoginProfileCandidates(body: unknown, fallbackUserId: string | null): Record<string, unknown>[] {
+  if (Array.isArray(body)) {
+    const candidates: Record<string, unknown>[] = [];
+    for (const item of body) {
+      for (const candidate of qqLoginProfileCandidates(item, fallbackUserId)) {
+        pushProfileCandidate(candidates, candidate);
+      }
+    }
+    return candidates;
+  }
+  const root = asObj(body);
+  if (!root) return [];
+  const data = asObj(root.data);
+  const user = asObj(root.user);
+  const profile = asObj(root.profile);
+  const dataUser = asObj(data?.user);
+  const dataProfile = asObj(data?.profile);
+  const vipInfoData = asObj(asObj(root.getVipInfo)?.data);
+  const vipInfoMap = asObj(vipInfoData?.infoMap);
+  const nickHeadData = asObj(asObj(root.getNickHead)?.data);
+  const nickHeadMap = asObj(nickHeadData?.map_userinfo);
+  const vipIconData = asObj(asObj(root.getVipIcon)?.data);
+  const userInfoUi = asObj(vipIconData?.UserInfoUI);
+  const iconList = Array.isArray(userInfoUi?.iconlist) ? userInfoUi.iconlist : [];
+
+  const candidates: Record<string, unknown>[] = [];
+  for (const icon of iconList) pushProfileCandidate(candidates, icon);
+  pushMappedProfileCandidate(candidates, vipInfoMap, fallbackUserId);
+  pushMappedProfileCandidate(candidates, nickHeadMap, fallbackUserId);
+  pushProfileCandidate(candidates, asObj(data?.creator));
+  pushProfileCandidate(candidates, asObj(root.creator));
+  pushProfileCandidate(candidates, dataUser);
+  pushProfileCandidate(candidates, dataProfile);
+  pushProfileCandidate(candidates, user);
+  pushProfileCandidate(candidates, profile);
+  pushProfileCandidate(candidates, data);
+  pushProfileCandidate(candidates, root);
+  return candidates;
+}
+
+function mapQqVipStatus(candidates: Record<string, unknown>[]): Partial<ProviderLoginStatus> {
+  let sawVipSignal = false;
+  const mark = (value: unknown): void => {
+    if (value !== undefined && value !== "") sawVipSignal = true;
+  };
+  const badgeIcon = firstQqVipBadgeIcon(candidates);
+  const explicitLevel =
+    candidates.map(item => readStringField(item, ["vipLevel", "level", "vip_level", "vipName", "vip_label", "vipLabel"])).find(Boolean) ?? "";
+  const explicitType =
+    candidates.map(item => readNumberField(item, ["vipType", "vip_type", "iVipType", "type"])).find(value => value !== undefined);
+  const superVip =
+    candidates.map(item => readFlagField(item, ["iSuperVip", "iNewSuperVip", "HugeVip", "hugeVip", "iHugeVip", "svip", "superVip", "isSvip", "isSuperVip", "itwelve", "twelve"])).find(value => value !== undefined);
+  const normalVip =
+    candidates.map(item => readFlagField(item, ["iVipFlag", "iNewVip", "iNewVipFlag", "iMusicVip", "iVip", "vipFlag", "vip", "isVip", "ieight", "eight"])).find(value => value !== undefined);
+  const superTier =
+    candidates.map(item => readNumberField(item, ["iSuperVipLevel", "iSvipLevel", "iNewSuperVipLevel", "iNewSvipLevel", "superVipLevel", "svipLevel", "itwelveLevel", "twelveLevel", "iCurLevel", "iMusicLevel"])).find(value => value !== undefined);
+  const normalTier =
+    candidates.map(item => readNumberField(item, ["iVipLevel", "iNewVipLevel", "vipLevelValue", "vip_level_value", "greenVipLevel", "iGreenVipLevel", "musicVipLevel", "ieightLevel", "eightLevel", "iMusicLevel", "iCurLevel", "iLevel", "level"])).find(value => value !== undefined);
+  const vipIconUrl = normalizeVipIconUrl(
+    candidates.map(item => readStringField(item, [
+      "vipIconUrl",
+      "vipIcon",
+      "iconUrl",
+      "iconurl",
+      "iconURL",
+      "icon",
+      "logoUrl",
+      "imgUrl",
+      "imageUrl",
+      "picUrl",
+      "levelIcon",
+    ])).find(Boolean) ?? ""
+  );
+  mark(explicitLevel);
+  mark(explicitType);
+  mark(superVip);
+  mark(normalVip);
+  mark(superTier);
+  mark(normalTier);
+  mark(vipIconUrl);
+  mark(badgeIcon?.url);
+  if (!sawVipSignal) return {};
+
+  const lowerLevel = explicitLevel.toLowerCase();
+  const level: "none" | "vip" | "svip" =
+    badgeIcon?.level ??
+    (/svip|super|超级会员/.test(lowerLevel) || superVip === true || (typeof explicitType === "number" && explicitType >= 10)
+      ? "svip"
+      : /vip|绿钻|豪华|付费|会员/.test(lowerLevel) || normalVip === true || (typeof explicitType === "number" && explicitType > 0)
+        ? "vip"
+        : "none");
+  const usableExplicitLabel =
+    explicitLevel && !/^(0|1|true|false|vip|svip|none)$/i.test(explicitLevel) && /vip|svip|绿钻|豪华|会员|super/i.test(explicitLevel)
+      ? explicitLevel.replace(/\s+/g, "").replace("绿钻豪华版", "豪华绿钻")
+      : "";
+  const fallbackTier =
+    level === "svip"
+      ? (superTier ?? normalTier ?? parseVipTierFromText(explicitLevel))
+      : level === "vip"
+        ? (normalTier ?? parseVipTierFromText(explicitLevel))
+        : undefined;
+  const tier = badgeIcon?.tier ?? fallbackTier;
+  const tierName = vipLevelNameOf(tier);
+  const baseLabel =
+    usableExplicitLabel ||
+    (level === "svip"
+      ? "超级会员"
+      : level === "vip"
+        ? "豪华绿钻"
+        : "未开通");
+  const label = appendVipTier(baseLabel, tierName);
+  const resolvedVipIconUrl = badgeIcon?.url ?? vipIconUrl ?? qqOfficialVipIconUrl(level, tier);
+  return {
+    vipType: explicitType ?? (level === "svip" ? 11 : level === "vip" ? 1 : 0),
+    vipLevel: level,
+    isVip: level === "vip" || level === "svip",
+    isSvip: level === "svip",
+    vipLabel: label,
+    vipIcon: level === "svip" ? "qq-super-vip" : level === "vip" ? "qq-green-vip" : undefined,
+    vipIconUrl: resolvedVipIconUrl,
+    vipTier: tier,
+    vipLevelName: tierName
+  };
+}
+
+function mapQqLoginStatus(body: unknown, fallbackUserId: string | null): ProviderLoginStatus {
+  const candidates = qqLoginProfileCandidates(body, fallbackUserId);
+  const status: ProviderLoginStatus = {
+    provider: "qq",
+    loggedIn: true
+  };
+  const mappedNickname =
+    candidates.map(item => readStringField(item, ["nick", "nickname", "name", "hostname"])).find(Boolean) ?? "";
+  const mappedAvatar =
+    candidates.map(item => readStringField(item, ["headpic", "headurl", "avatarUrl", "avatar", "logo", "pic", "picurl", "head_pic", "avatar_url"])).find(Boolean) ?? "";
+  const mappedUserId =
+    candidates.map(item => readStringField(item, ["userid", "hostuin", "uin", "qq", "id", "musicid"])).find(Boolean) ??
+    fallbackUserId ??
+    "";
+
+  if (mappedNickname) status.nickname = mappedNickname;
+  const avatarUrl = normalizeProviderImageUrl(mappedAvatar);
+  if (avatarUrl) status.avatarUrl = avatarUrl;
+  if (mappedUserId) status.userId = mappedUserId;
+  Object.assign(status, mapQqVipStatus(candidates));
+  return status;
 }
 
 function readQqPlaylistList(body: unknown): unknown[] {
@@ -572,8 +879,21 @@ export function createQqAdapter(
     async loginStatus(): Promise<ProviderLoginStatus> {
       const cfg = deps.getConfig();
       if (!cfg.cookie) return { provider: "qq", loggedIn: false };
-      // Trust cookie presence; jsososo has no anonymous loginStatus route.
-      return { provider: "qq", loggedIn: true };
+      const userId = qqUserIdFromCookie(cfg.cookie);
+      if (!userId) return { provider: "qq", loggedIn: true };
+      try {
+        const resp = await deps.loginStatus({ id: userId }, { cookie: cfg.cookie });
+        const bodies: unknown[] = [resp.body];
+        if (deps.vipInfo) {
+          try {
+            bodies.push((await deps.vipInfo({ id: userId }, { cookie: cfg.cookie })).body);
+          } catch {
+          }
+        }
+        return mapQqLoginStatus(bodies, userId);
+      } catch {
+        return { provider: "qq", loggedIn: true, userId };
+      }
     },
     async logout(): Promise<void> {
       const cfg = deps.getConfig();

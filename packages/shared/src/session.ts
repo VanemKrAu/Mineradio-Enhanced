@@ -10,6 +10,15 @@ export const ProviderSessionCookieAckSchema = z
 
 export type ProviderSessionCookieAck = z.infer<typeof ProviderSessionCookieAckSchema>;
 
+export const ProviderVipIconSchema = z.enum([
+  "netease-vip",
+  "netease-svip",
+  "qq-green-vip",
+  "qq-super-vip",
+]);
+
+export type ProviderVipIcon = z.infer<typeof ProviderVipIconSchema>;
+
 export const ProviderLoginStatusSchema = z
   .object({
     provider: ProviderIdSchema,
@@ -22,6 +31,10 @@ export const ProviderLoginStatusSchema = z
     isVip: z.boolean().optional(),
     isSvip: z.boolean().optional(),
     vipLabel: z.string().optional(),
+    vipIcon: ProviderVipIconSchema.optional(),
+    vipIconUrl: z.string().optional(),
+    vipTier: z.number().int().nonnegative().optional(),
+    vipLevelName: z.string().optional(),
   })
   .strict();
 
@@ -35,3 +48,38 @@ export const ProviderLogoutAckSchema = z
   .strict();
 
 export type ProviderLogoutAck = z.infer<typeof ProviderLogoutAckSchema>;
+
+export const ProviderLoginQrKeySchema = z
+  .object({
+    provider: ProviderIdSchema,
+    key: z.string().min(1),
+  })
+  .strict();
+
+export type ProviderLoginQrKey = z.infer<typeof ProviderLoginQrKeySchema>;
+
+export const ProviderLoginQrImageSchema = z
+  .object({
+    provider: ProviderIdSchema,
+    key: z.string().min(1),
+    img: z.string().min(1),
+    url: z.string().optional(),
+  })
+  .strict();
+
+export type ProviderLoginQrImage = z.infer<typeof ProviderLoginQrImageSchema>;
+
+export const ProviderLoginQrCheckSchema = z
+  .object({
+    provider: ProviderIdSchema,
+    key: z.string().min(1),
+    code: z.number(),
+    message: z.string().optional(),
+    loggedIn: z.boolean(),
+    scanned: z.boolean().optional(),
+    expired: z.boolean().optional(),
+    stored: z.boolean().optional(),
+  })
+  .strict();
+
+export type ProviderLoginQrCheck = z.infer<typeof ProviderLoginQrCheckSchema>;

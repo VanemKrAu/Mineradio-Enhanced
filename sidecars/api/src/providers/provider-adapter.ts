@@ -4,6 +4,7 @@ import type {
   PlaylistDetail,
   LyricPayload,
   ProviderId,
+  ProviderVipIcon,
   PlaybackRestriction,
   PlaybackRestrictionCategory,
   PlaybackQuality,
@@ -24,6 +25,10 @@ export type ProviderLoginStatus = {
   isVip?: boolean;
   isSvip?: boolean;
   vipLabel?: string;
+  vipIcon?: ProviderVipIcon;
+  vipIconUrl?: string;
+  vipTier?: number;
+  vipLevelName?: string;
 };
 
 export type SongUrlOptions = { quality?: PlaybackQuality };

@@ -57,6 +57,42 @@ function wrap(path: string): QqCall {
   };
 }
 
+async function qqVipInfo(query: Record<string, unknown>, config?: { cookie?: string }): Promise<{ body: unknown }> {
+  const id = String(query.id ?? query.uin ?? "").trim();
+  if (!id) return { body: {} };
+  const data = {
+    getVipInfo: {
+      module: "userInfo.VipQueryServer",
+      method: "SRFVipQuery_V2",
+      param: { uin_list: [id] }
+    },
+    getNickHead: {
+      module: "userInfo.BaseUserInfoServer",
+      method: "get_user_baseinfo_v2",
+      param: { vec_uin: [id] }
+    },
+    getVipIcon: {
+      module: "music.lvz.VipIconUiShowSvr",
+      method: "GetVipIconUiV2",
+      param: { MusicID: id, PID: 8 }
+    }
+  };
+  const params = new URLSearchParams({
+    format: "json",
+    data: JSON.stringify(data)
+  });
+  const headers: Record<string, string> = {
+    Referer: "https://y.qq.com/m/myservice/index.html",
+    "user-agent": "Mozilla/5.0"
+  };
+  if (config?.cookie) headers.Cookie = config.cookie;
+  const res = await fetch(`https://u.y.qq.com/cgi-bin/musicu.fcg?${params.toString()}`, { headers });
+  if (!res.ok) {
+    throw new Error(`qq vipInfo failed with status ${res.status}`);
+  }
+  return { body: await res.json() };
+}
+
 export const qqClient = {
   search: wrap("search"),
   songDetail: wrap("song"),
@@ -66,6 +102,7 @@ export const qqClient = {
   userCollectSonglists: wrap("user/collect/songlist"),
   playlistDetail: wrap("songlist"),
   addSongToPlaylist: wrap("songlist/add"),
-  loginStatus: wrap("user"),
+  loginStatus: wrap("user/detail"),
+  vipInfo: qqVipInfo,
   logout: wrap("user")
 } as const;

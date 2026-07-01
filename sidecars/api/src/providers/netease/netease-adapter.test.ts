@@ -439,6 +439,60 @@ test("loginStatus with cookie proxies hana loginStatus and maps profile", async 
   });
 });
 
+test("loginStatus merges Netease VIP detail label and tier", async () => {
+  await withEnv("MINERADIO_NETEASE_COOKIE", "MUSIC_U=demo", async () => {
+    const calls: string[] = [];
+    const deps = noopDeps({
+      getConfig: () => ({ cookie: "MUSIC_U=demo" }),
+      loginStatus: async () => {
+        calls.push("profile");
+        return {
+          body: {
+            data: {
+              profile: {
+                nickname: "n",
+                avatarUrl: "u",
+                userId: 42,
+                vipType: 11
+              }
+            }
+          }
+        };
+      },
+      vipInfo: async (query, config) => {
+        calls.push("vip");
+        expect(query).toEqual({ uid: "42" });
+        expect(config).toEqual({ cookie: "MUSIC_U=demo" });
+        return {
+          body: {
+            vipInfoV2: {
+              data: {
+                vipLabel: "黑胶SVIP",
+                redVipLevel: 6
+              }
+            },
+            vipInfo: {
+              data: {
+                redVipLevelIcon: "//p1.music.126.net/vip.png"
+              }
+            }
+          }
+        };
+      }
+    });
+    const adapter = createNeteaseAdapter(deps);
+    const r = await adapter.loginStatus();
+
+    expect(calls).toEqual(["profile", "vip"]);
+    expect(r.vipLevel).toBe("svip");
+    expect(r.vipLabel).toBe("黑胶SVIP·陆");
+    expect(r.vipIcon).toBe("netease-svip");
+    expect(r.vipIconUrl).toBe("https://p1.music.126.net/vip.png");
+    expect(r.vipTier).toBe(6);
+    expect(r.vipLevelName).toBe("陆");
+  });
+});
+
 test("logout with cookie calls hana logout", async () => {
   await withEnv("MINERADIO_NETEASE_COOKIE", "MUSIC_U=demo", async () => {
     let calls = 0;
