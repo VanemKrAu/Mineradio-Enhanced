@@ -32,6 +32,35 @@ interface RawUpdateCheckResult {
 	install_state: UpdateInstallState;
 }
 
+type MockUpdateMode = "available" | "signature" | "error" | "none";
+
+interface ImportMetaEnvLike {
+	DEV?: boolean;
+	MODE?: string;
+}
+
+function isDevUpdatePreviewEnabled(): boolean {
+	const env = (import.meta as { env?: ImportMetaEnvLike }).env;
+	if (typeof env?.DEV === "boolean") return env.DEV;
+	if (env?.MODE) return env.MODE !== "production";
+	const nodeEnv = (globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV;
+	return nodeEnv !== "production";
+}
+
+function mockUpdateModeFromLocation(): MockUpdateMode | null {
+	if (!isDevUpdatePreviewEnabled()) return null;
+	if (typeof window === "undefined") return null;
+	const mode = new URLSearchParams(window.location?.search ?? "").get("mockUpdate")?.trim().toLowerCase();
+	if (mode === "available" || mode === "signature" || mode === "error" || mode === "none") return mode;
+	return null;
+}
+
+export function shouldOpenDevUpdatePreview(): boolean {
+	if (mockUpdateModeFromLocation() === null) return false;
+	if (typeof window === "undefined") return false;
+	return new URLSearchParams(window.location?.search ?? "").get("mockUpdateOpen") === "1";
+}
+
 function placeholderUpdateCheckResult(): UpdateCheckResult {
 	return {
 		available: false,
@@ -45,6 +74,60 @@ function placeholderUpdateCheckResult(): UpdateCheckResult {
 		signatureGate: true,
 		installState: "signature-key-missing",
 	};
+}
+
+function availablePreviewUpdate(signatureGate: boolean): UpdateCheckResult {
+	return {
+		available: true,
+		version: "0.2.0",
+		currentVersion: "0.1.0",
+		body: [
+			"模拟更新：修复播放链路",
+			"模拟更新：优化 3D 歌单架",
+			"模拟更新：提升桌面歌词稳定性",
+		].join("\n"),
+		message: signatureGate ? "模拟更新可用，但签名密钥未配置。" : "模拟更新可用，准备下载并安装。",
+		date: "2026-07-01T00:00:00Z",
+		error: null,
+		requiresSignature: true,
+		signatureGate,
+		installState: signatureGate ? "signature-key-missing" : "ready-to-download",
+	};
+}
+
+function devPreviewUpdateCheckResult(): UpdateCheckResult | null {
+	const mode = mockUpdateModeFromLocation();
+	if (mode === "available") return availablePreviewUpdate(false);
+	if (mode === "signature") return availablePreviewUpdate(true);
+	if (mode === "error") {
+		return {
+			available: false,
+			version: null,
+			currentVersion: "0.1.0",
+			body: null,
+			message: "模拟更新检测失败。",
+			date: null,
+			error: "UPDATER_CHECK_FAILED",
+			requiresSignature: true,
+			signatureGate: false,
+			installState: "check-failed",
+		};
+	}
+	if (mode === "none") {
+		return {
+			available: false,
+			version: null,
+			currentVersion: "0.1.0",
+			body: null,
+			message: "模拟当前已是最新版本。",
+			date: null,
+			error: null,
+			requiresSignature: true,
+			signatureGate: false,
+			installState: "not-available",
+		};
+	}
+	return null;
 }
 
 function mapUpdateCheckResult(raw: RawUpdateCheckResult): UpdateCheckResult {
@@ -63,6 +146,8 @@ function mapUpdateCheckResult(raw: RawUpdateCheckResult): UpdateCheckResult {
 }
 
 export async function getUpdaterStatus(): Promise<UpdateCheckResult> {
+	const preview = devPreviewUpdateCheckResult();
+	if (preview) return preview;
 	if (!isTauriRuntime()) {
 		return placeholderUpdateCheckResult();
 	}
@@ -71,6 +156,8 @@ export async function getUpdaterStatus(): Promise<UpdateCheckResult> {
 }
 
 export async function checkForUpdate(): Promise<UpdateCheckResult> {
+	const preview = devPreviewUpdateCheckResult();
+	if (preview) return preview;
 	if (!isTauriRuntime()) {
 		return placeholderUpdateCheckResult();
 	}
@@ -79,6 +166,8 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 }
 
 export async function installUpdate(): Promise<UpdateCheckResult> {
+	const preview = devPreviewUpdateCheckResult();
+	if (preview) return preview;
 	if (!isTauriRuntime()) {
 		return placeholderUpdateCheckResult();
 	}

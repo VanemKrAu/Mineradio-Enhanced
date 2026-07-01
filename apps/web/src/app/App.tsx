@@ -66,7 +66,7 @@ import {
   type SidecarStatus,
   type WindowState,
 } from "../tauri/runtime";
-import { checkForUpdate, getUpdaterStatus, installUpdate } from "../tauri/updater";
+import { checkForUpdate, getUpdaterStatus, installUpdate, shouldOpenDevUpdatePreview } from "../tauri/updater";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
 import { GuideParticlesHost } from "../components/shell/GuideParticlesHost";
 import { PlaylistPanelHost, type PlaylistPanelTab } from "../components/shell/PlaylistPanelHost";
@@ -3074,6 +3074,7 @@ export function App({
 
   useEffect(() => {
     void refreshUpdateStatus(false);
+    if (shouldOpenDevUpdatePreview()) setUpdateModalOpen(true);
   }, [refreshUpdateStatus]);
 
   useEffect(() => {

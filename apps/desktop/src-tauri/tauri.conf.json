@@ -71,9 +71,9 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/zzstar101/Mineradio/releases/latest/download/latest.json"
+        "https://github.com/zzstar101/Mineradio-Tauri/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIzODVFQTQyQTdDQTBFNzQKUldSMERzcW5RdXFGcytvbHNXOVBwaStGOTJMTlZxNEdQcXBYU3l4U1dmNC9OY05zb3BJUFlGd3QK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQxRDBGMTI1MkNERkVEQjkKUldTNTdkOHNKZkhRMFQwVzh4WjBmeStXa1hHb0VlU3VlSEszVEVYbWRKVlRON3dvZlBRdm52R0UK"
     }
   }
 }
