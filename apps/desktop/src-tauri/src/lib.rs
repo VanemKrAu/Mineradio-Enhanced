@@ -1,8 +1,8 @@
 mod commands;
+mod db;
 mod paths;
 mod sidecar;
 mod updater;
-mod db;
 
 use std::{
     path::PathBuf,
@@ -81,6 +81,7 @@ pub struct AppState {
     pub desktop_lyrics: Mutex<DesktopLyricsRuntimeState>,
     pub sidecar: Mutex<sidecar::SidecarRuntimeState>,
     pub sidecar_supervisor_running: AtomicBool,
+    pub db: Mutex<db::DbRuntimeState>,
 }
 
 impl AppState {
@@ -91,6 +92,7 @@ impl AppState {
         schema_version: String,
         updater_public_key_configured: bool,
         sidecar_log_path: PathBuf,
+        db: db::DbRuntimeState,
     ) -> Self {
         Self {
             config: RuntimeConfig {
@@ -115,6 +117,7 @@ impl AppState {
                 sidecar_log_path,
             )),
             sidecar_supervisor_running: AtomicBool::new(true),
+            db: Mutex::new(db),
         }
     }
 }
@@ -247,6 +250,10 @@ pub fn run() {
     let base_url = format!("http://127.0.0.1:{}", port);
     let sidecar_log_path = sidecar::sidecar_log_path(&log_dir);
 
+    // SQLite 本地存储初始化
+    let db_state = db::initialize(&app_data_dir)
+        .expect("failed to initialize SQLite local storage");
+
     let state = AppState::new(
         base_url.clone(),
         app_data_dir.to_string_lossy().to_string(),
@@ -254,6 +261,7 @@ pub fn run() {
         schema_version.clone(),
         updater_public_key_configured,
         sidecar_log_path,
+        db_state,
     );
 
     let setup_app_version = app_version.clone();
@@ -379,6 +387,12 @@ mod tests {
 
     #[test]
     fn app_state_new_builds_config() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let db_state = db::DbRuntimeState {
+            conn,
+            path: std::path::PathBuf::from("/data/mineradio.db"),
+        };
+
         let s = AppState::new(
             "http://127.0.0.1:1".into(),
             "/data".into(),
@@ -386,6 +400,7 @@ mod tests {
             "0.1.0".into(),
             false,
             std::path::PathBuf::from("/logs/sidecar-runtime.log"),
+            db_state,
         );
         assert_eq!(s.config.sidecar_base_url, "http://127.0.0.1:1");
         assert_eq!(s.config.app_data_dir, "/data");

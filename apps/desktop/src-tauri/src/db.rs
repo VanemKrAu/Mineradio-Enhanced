@@ -2,6 +2,7 @@
 //! 提供数据库初始化、模式迁移和基本读/写
 
 use rusqlite::{Connection, OptionalExtension};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// 解析数据库路径
@@ -157,6 +158,35 @@ pub fn increment_startup_count(conn: &Connection) -> rusqlite::Result<i64> {
     Ok(new_count)
 }
 
+/// 数据库运行时状态:把连接和它在磁盘上的路径打包在一起。
+///
+/// 把 path 也放在这里,调用方(Tauri AppState、诊断命令)就能直接报告
+/// 当前数据库位置,不用再重新算一次
+pub struct DbRuntimeState {
+    pub conn: Connection,
+    pub path: PathBuf,
+}
+
+/// 为 Tauri 运行时初始化本地 SQLite 数据库
+///
+/// 步骤:
+/// 1. 确保 `app_data_dir` 目录存在
+/// 2. 算出数据库文件路径
+/// 3. 打开连接(不存在则自动创建)
+/// 4. 执行所有未应用的迁移
+/// 5. 递增启动计数 `launch_count`
+///
+/// 返回连接和它的磁盘路径
+pub fn initialize(app_data_dir: &Path) -> rusqlite::Result<DbRuntimeState> {
+    fs::create_dir_all(app_data_dir)
+        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+    let path = resolve_db_path(app_data_dir);
+    let conn = open_connection(&path)?;
+    run_migrations(&conn)?;
+    increment_startup_count(&conn)?;
+    Ok(DbRuntimeState { conn, path })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,5 +320,30 @@ mod tests {
         // 跑过迁移: 应该返回最大 version
         let v = current_migration_version(&conn).unwrap();
         assert!(v >= 1);
+    }
+
+    #[test]
+    fn initialize_creates_db_and_increments_count() {
+        let temp_dir = std::env::temp_dir().join("mineradio-test-init-1");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let state = initialize(&temp_dir).expect("initialize ok");
+
+        assert!(state.path.exists());
+
+        let count = get_startup_count(&state.conn).expect("read count");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn initialize_twice_increments_count() {
+        let temp_dir = std::env::temp_dir().join("mineradio-test-init-2");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let _ = initialize(&temp_dir).unwrap();
+        let state = initialize(&temp_dir).unwrap();
+
+        let count = get_startup_count(&state.conn).expect("read count");
+        assert_eq!(count, 2);
     }
 }
