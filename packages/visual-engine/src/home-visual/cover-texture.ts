@@ -194,8 +194,10 @@ async function maybeBuildAiDepthImage(
 	const aiImage = await opts.estimateAiDepth(preparedImage);
 	if (!aiImage) return { image: heuristicImage, aiBoostTarget: 0.55, durationMs: 180 };
 	const merge = opts.mergeAiDepth ?? ((heuristic, ai) => mergeAiDepthIntoEdgeCanvas(heuristic as CoverDepthCanvas, ai as CoverDepthCanvas));
+	const mergedImage = merge(heuristicImage, aiImage);
+	if (!mergedImage) return { image: heuristicImage, aiBoostTarget: 0.55, durationMs: 180 };
 	return {
-		image: merge(heuristicImage, aiImage) ?? heuristicImage,
+		image: mergedImage,
 		aiBoostTarget: 1,
 		durationMs: 360,
 	};
@@ -217,14 +219,18 @@ export function createHomeCoverTextureController(
 	let aiDepthEnabled = !!opts.aiDepthEnabled;
 	let preparedCoverImage: HomeCoverImage | null = null;
 	let heuristicEdgeImage: HomeCoverImage | null = null;
+	let aiMergedEdgeImage: HomeCoverImage | null = null;
 	let currentEdgeIsAiMerged = false;
+	let heuristicEdgeIsAiMerged = false;
 
 	function clearCover(): void {
 		token += 1;
 		currentUrl = "";
 		preparedCoverImage = null;
 		heuristicEdgeImage = null;
+		aiMergedEdgeImage = null;
 		currentEdgeIsAiMerged = false;
+		heuristicEdgeIsAiMerged = false;
 		uniforms.uHasCover.value = 0;
 		uniforms.uColorMixT.value = 1;
 		if (uniforms.uLoading) uniforms.uLoading.value = 0;
@@ -235,6 +241,13 @@ export function createHomeCoverTextureController(
 
 	async function applyAiDepthForCurrent(runToken: number): Promise<void> {
 		if (!preparedCoverImage || !heuristicEdgeImage || !uniforms.uEdgeTex) return;
+		if (aiDepthEnabled && aiMergedEdgeImage) {
+			if (runToken !== token) return;
+			markTextureImage(uniforms.uEdgeTex.value, aiMergedEdgeImage);
+			currentEdgeIsAiMerged = true;
+			depthTween?.setTarget(1, 1, 180);
+			return;
+		}
 		const { image: edgeImage, aiBoostTarget, durationMs } = await maybeBuildAiDepthImage(preparedCoverImage, heuristicEdgeImage, {
 			...opts,
 			aiDepthEnabled,
@@ -242,6 +255,11 @@ export function createHomeCoverTextureController(
 		if (runToken !== token || !edgeImage || !uniforms.uEdgeTex) return;
 		markTextureImage(uniforms.uEdgeTex.value, edgeImage);
 		currentEdgeIsAiMerged = aiBoostTarget >= 0.99;
+		if (currentEdgeIsAiMerged) {
+			// 默认 merge 会原地写 heuristic canvas；记录后续是否需要重建纯启发式深度。
+			aiMergedEdgeImage = edgeImage;
+			heuristicEdgeIsAiMerged = edgeImage === heuristicEdgeImage;
+		}
 		depthTween?.setTarget(1, aiBoostTarget, durationMs);
 	}
 
@@ -270,7 +288,9 @@ export function createHomeCoverTextureController(
 				const preparedImage = prepareSquareCoverCanvas(image, { coverResolution, createCanvas: opts.createCanvas });
 				preparedCoverImage = preparedImage;
 				heuristicEdgeImage = null;
+				aiMergedEdgeImage = null;
 				currentEdgeIsAiMerged = false;
+				heuristicEdgeIsAiMerged = false;
 				if (uniforms.uHasCover.value > 0.5 && uniforms.uCoverTex.value.image) {
 					markTextureImage(uniforms.uPrevCoverTex.value, uniforms.uCoverTex.value.image as HomeCoverImage);
 				}
@@ -296,6 +316,7 @@ export function createHomeCoverTextureController(
 					heuristicEdgeImage = builtHeuristicEdgeImage;
 					markTextureImage(uniforms.uEdgeTex.value, heuristicEdgeImage);
 					currentEdgeIsAiMerged = false;
+					heuristicEdgeIsAiMerged = false;
 					depthTween?.setTarget(1, 0.55, 180);
 				} else {
 					depthTween?.setTarget(0, 0, 1);
@@ -329,9 +350,14 @@ export function createHomeCoverTextureController(
 			if (!currentUrl) return;
 			const runToken = ++token;
 			if (!aiDepthEnabled) {
-				if (currentEdgeIsAiMerged) {
+				if (heuristicEdgeIsAiMerged) {
 					const rebuilt = rebuildHeuristicDepthFromPrepared();
-					if (rebuilt) heuristicEdgeImage = rebuilt;
+					if (rebuilt) {
+						heuristicEdgeImage = rebuilt;
+						heuristicEdgeIsAiMerged = false;
+					} else {
+						heuristicEdgeImage = null;
+					}
 				}
 				if (heuristicEdgeImage && uniforms.uEdgeTex) {
 					markTextureImage(uniforms.uEdgeTex.value, heuristicEdgeImage);
