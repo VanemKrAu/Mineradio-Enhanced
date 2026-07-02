@@ -18,6 +18,8 @@ test("useVisualEngine routes adaptive FPS through the runtime visual performance
 	const source = await fetch(new URL("./useVisualEngine.ts", import.meta.url)).then((res) => res.text());
 	expect(source).toContain("getAdaptiveFps: () => readVisualPerformancePolicy().adaptiveFps");
 	expect(source).toContain("readRuntimeVisualPerformanceFx()");
+	expect(source).toContain("width: policy.renderWidth ?? opts?.width");
+	expect(source).toContain("height: policy.renderHeight ?? opts?.height");
 	expect(source).not.toContain("getAdaptiveFps: () => 0");
 });
 
@@ -50,6 +52,21 @@ test("resolveRuntimeVisualPerformancePolicy maps quality and background state to
 		windowFocused: false,
 		prefersReducedMotion: false,
 	})).toEqual({
+		adaptiveFps: 1,
+		pixelRatio: 0.3,
+		renderWidth: 4,
+		renderHeight: 4,
+		bloom: false,
+		aiDepth: false,
+		backCover: false,
+	});
+	expect(resolveRuntimeVisualPerformancePolicy({
+		fx: { performanceQuality: "high", performanceBackground: "auto", bloom: true, aiDepth: true, backCover: true },
+		devicePixelRatio: 2,
+		documentHidden: false,
+		windowFocused: false,
+		prefersReducedMotion: false,
+	})).toEqual({
 		adaptiveFps: 24,
 		pixelRatio: 0.9,
 		bloom: false,
@@ -76,8 +93,10 @@ test("resolveRuntimeVisualPerformancePolicy maps quality and background state to
 		windowFocused: false,
 		prefersReducedMotion: true,
 	})).toEqual({
-		adaptiveFps: 4,
-		pixelRatio: 0.75,
+		adaptiveFps: 1,
+		pixelRatio: 0.3,
+		renderWidth: 4,
+		renderHeight: 4,
 		bloom: false,
 		aiDepth: false,
 		backCover: false,

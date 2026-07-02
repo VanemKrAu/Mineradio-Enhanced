@@ -163,6 +163,8 @@ function mergeFxState(target: FxState, source: Partial<FxState> | undefined): Fx
 export interface RuntimeVisualPerformancePolicy {
 	adaptiveFps: number;
 	pixelRatio: number;
+	renderWidth?: number;
+	renderHeight?: number;
 	bloom: boolean;
 	aiDepth: boolean;
 	backCover: boolean;
@@ -180,13 +182,16 @@ export function resolveRuntimeVisualPerformancePolicy(input: {
 	const fx = input.fx ?? {};
 	const quality = typeof fx.performanceQuality === "string" ? fx.performanceQuality : "high";
 	const background = typeof fx.performanceBackground === "string" ? fx.performanceBackground : "auto";
-	const devicePixelRatio = Math.max(0.75, Number(input.devicePixelRatio) || 1);
+	const devicePixelRatio = Math.max(0.3, Number(input.devicePixelRatio) || 1);
 	const inactive = input.documentHidden === true || input.windowFocused === false;
+	const deepBackground = input.documentHidden === true && background !== "keep";
 	const releaseBackground = inactive && background === "release";
 	const autoBackground = inactive && background !== "keep";
 	let adaptiveFps = 0;
 	let pixelRatioCap = 1.25;
 	let allowExpensiveEffects = true;
+	let renderWidth: number | undefined;
+	let renderHeight: number | undefined;
 
 	if (quality === "eco") {
 		adaptiveFps = 30;
@@ -210,10 +215,19 @@ export function resolveRuntimeVisualPerformancePolicy(input: {
 		pixelRatioCap = releaseBackground ? 0.75 : Math.min(pixelRatioCap, 0.9);
 		allowExpensiveEffects = false;
 	}
+	if (deepBackground) {
+		adaptiveFps = 1;
+		pixelRatioCap = 0.3;
+		renderWidth = 4;
+		renderHeight = 4;
+		allowExpensiveEffects = false;
+	}
 
 	return {
 		adaptiveFps,
 		pixelRatio: Math.min(devicePixelRatio, pixelRatioCap),
+		...(renderWidth ? { renderWidth } : {}),
+		...(renderHeight ? { renderHeight } : {}),
 		bloom: allowExpensiveEffects && fx.bloom === true,
 		aiDepth: allowExpensiveEffects && fx.aiDepth === true,
 		backCover: allowExpensiveEffects && fx.backCover === true,
@@ -1015,10 +1029,22 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				prefersReducedMotion: prefersReducedMotion(),
 			});
 			const initialVisualPerformancePolicy = readVisualPerformancePolicy();
-			let activeVisualPixelRatio = initialVisualPerformancePolicy.pixelRatio;
+			const visualRendererPolicyKey = (policy: RuntimeVisualPerformancePolicy): string => {
+				return `${policy.pixelRatio}|${policy.renderWidth ?? "auto"}|${policy.renderHeight ?? "auto"}`;
+			};
+			let activeVisualRendererPolicyKey = visualRendererPolicyKey(initialVisualPerformancePolicy);
 			const renderer = await createRenderer(host, {
 				pixelRatio: initialVisualPerformancePolicy.pixelRatio,
 				powerPreference: initialVisualPerformancePolicy.pixelRatio <= 0.9 ? "low-power" : "high-performance",
+			});
+			const visualPerformanceResizeOpts = (
+				opts: Parameters<typeof renderer.resize>[0] | undefined,
+				policy: RuntimeVisualPerformancePolicy,
+			): Parameters<typeof renderer.resize>[0] => ({
+				...opts,
+				width: policy.renderWidth ?? opts?.width,
+				height: policy.renderHeight ?? opts?.height,
+				pixelRatio: policy.pixelRatio,
 			});
 			if (cancelled || disposedRef.current) {
 				audioEngine.dispose();
@@ -1030,8 +1056,8 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				...renderer,
 				resize: (opts?: Parameters<typeof renderer.resize>[0]) => {
 					const policy = readVisualPerformancePolicy();
-					activeVisualPixelRatio = policy.pixelRatio;
-					renderer.resize({ ...opts, pixelRatio: policy.pixelRatio });
+					activeVisualRendererPolicyKey = visualRendererPolicyKey(policy);
+					renderer.resize(visualPerformanceResizeOpts(opts, policy));
 					refs.lifecycleRef.current?.requestCameraSnap(10);
 				},
 			};
@@ -1081,9 +1107,10 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			let syncedCoverUrlVersion = refs.coverUrlVersionRef?.current ?? 0;
 			const syncRendererPerformancePolicy = () => {
 				const policy = readVisualPerformancePolicy();
-				if (Math.abs(policy.pixelRatio - activeVisualPixelRatio) < 0.001) return policy;
-				activeVisualPixelRatio = policy.pixelRatio;
-				renderer.resize({ pixelRatio: policy.pixelRatio });
+				const key = visualRendererPolicyKey(policy);
+				if (key === activeVisualRendererPolicyKey) return policy;
+				activeVisualRendererPolicyKey = key;
+				renderer.resize(visualPerformanceResizeOpts(undefined, policy));
 				refs.lifecycleRef.current?.requestCameraSnap(10);
 				return policy;
 			};

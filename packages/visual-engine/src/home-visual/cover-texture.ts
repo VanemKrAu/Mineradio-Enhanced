@@ -57,12 +57,64 @@ const HTTP_URL_RE = /^https?:\/\//i;
 const INLINE_IMAGE_URL_RE = /^data:image\//i;
 const BLOB_URL_RE = /^blob:/i;
 const SAME_ORIGIN_IMAGE_PROXY_RE = /^\/image-proxy(?:[/?#]|$)/i;
+const HOME_COVER_TEXTURE_CACHE_LIMIT = 18;
+
+interface HomeCoverTextureCacheEntry {
+	preparedImage: HomeCoverImage;
+	heuristicImage: HomeCoverImage | null;
+	aiMergedImage: HomeCoverImage | null;
+	heuristicImageIsAiMerged: boolean;
+}
+
+const homeCoverTextureCache = new Map<string, HomeCoverTextureCacheEntry>();
 
 function isAllowedCoverUrl(url: string): boolean {
 	return HTTP_URL_RE.test(url) || INLINE_IMAGE_URL_RE.test(url) || BLOB_URL_RE.test(url) || SAME_ORIGIN_IMAGE_PROXY_RE.test(url);
 }
 
 export { coverTextureSizeForResolution } from "./home-particle-field";
+
+export function resetHomeCoverTextureCacheForTests(): void {
+	homeCoverTextureCache.clear();
+}
+
+function coverTextureCacheKey(url: string, coverResolution: number): string {
+	return `${url}|tex=${coverTextureSizeForResolution(coverResolution)}`;
+}
+
+function getHomeCoverTextureCache(key: string): HomeCoverTextureCacheEntry | null {
+	const cached = homeCoverTextureCache.get(key);
+	if (!cached) return null;
+	homeCoverTextureCache.delete(key);
+	homeCoverTextureCache.set(key, cached);
+	return cached;
+}
+
+function setHomeCoverTextureCache(
+	key: string,
+	entry: Partial<HomeCoverTextureCacheEntry> & { preparedImage: HomeCoverImage },
+): HomeCoverTextureCacheEntry {
+	const next: HomeCoverTextureCacheEntry = {
+		preparedImage: entry.preparedImage,
+		heuristicImage: entry.heuristicImage ?? null,
+		aiMergedImage: entry.aiMergedImage ?? null,
+		heuristicImageIsAiMerged: entry.heuristicImageIsAiMerged === true,
+	};
+	homeCoverTextureCache.delete(key);
+	homeCoverTextureCache.set(key, next);
+	while (homeCoverTextureCache.size > HOME_COVER_TEXTURE_CACHE_LIMIT) {
+		const oldest = homeCoverTextureCache.keys().next().value;
+		if (!oldest) break;
+		homeCoverTextureCache.delete(oldest);
+	}
+	return next;
+}
+
+function patchHomeCoverTextureCache(key: string, patch: Partial<HomeCoverTextureCacheEntry>): HomeCoverTextureCacheEntry | null {
+	const cached = getHomeCoverTextureCache(key);
+	if (!cached) return null;
+	return setHomeCoverTextureCache(key, { ...cached, ...patch, preparedImage: patch.preparedImage ?? cached.preparedImage });
+}
 
 function defaultCreateCanvas(width: number, height: number): ReturnType<HomeCoverCanvasFactory> | null {
 	if (typeof document === "undefined") return null;
@@ -222,6 +274,7 @@ export function createHomeCoverTextureController(
 	let aiMergedEdgeImage: HomeCoverImage | null = null;
 	let currentEdgeIsAiMerged = false;
 	let heuristicEdgeIsAiMerged = false;
+	let currentCoverCacheKey = "";
 
 	function clearCover(): void {
 		token += 1;
@@ -231,6 +284,7 @@ export function createHomeCoverTextureController(
 		aiMergedEdgeImage = null;
 		currentEdgeIsAiMerged = false;
 		heuristicEdgeIsAiMerged = false;
+		currentCoverCacheKey = "";
 		uniforms.uHasCover.value = 0;
 		uniforms.uColorMixT.value = 1;
 		if (uniforms.uLoading) uniforms.uLoading.value = 0;
@@ -259,8 +313,71 @@ export function createHomeCoverTextureController(
 			// 默认 merge 会原地写 heuristic canvas；记录后续是否需要重建纯启发式深度。
 			aiMergedEdgeImage = edgeImage;
 			heuristicEdgeIsAiMerged = edgeImage === heuristicEdgeImage;
+			if (currentCoverCacheKey) {
+				patchHomeCoverTextureCache(currentCoverCacheKey, {
+					aiMergedImage: edgeImage,
+					heuristicImageIsAiMerged: heuristicEdgeIsAiMerged,
+				});
+			}
 		}
 		depthTween?.setTarget(1, aiBoostTarget, durationMs);
+	}
+
+	function applyPreparedCoverImage(preparedImage: HomeCoverImage): void {
+		preparedCoverImage = preparedImage;
+		heuristicEdgeImage = null;
+		aiMergedEdgeImage = null;
+		currentEdgeIsAiMerged = false;
+		heuristicEdgeIsAiMerged = false;
+		if (uniforms.uHasCover.value > 0.5 && uniforms.uCoverTex.value.image) {
+			markTextureImage(uniforms.uPrevCoverTex.value, uniforms.uCoverTex.value.image as HomeCoverImage);
+		}
+		markTextureImage(uniforms.uCoverTex.value, preparedImage);
+		uniforms.uHasCover.value = 1;
+		uniforms.uColorMixT.value = 0;
+		if (uniforms.uLoading) uniforms.uLoading.value = 0;
+		try {
+			opts.onCoverPrepared?.(preparedImage);
+		} catch {
+			// 封面已经进入主纹理；取色/歌词调色失败只能降级，不能阻断粒子封面显示。
+		}
+	}
+
+	function applyHeuristicDepthImage(edgeImage: HomeCoverImage, durationMs = 180): void {
+		if (!uniforms.uEdgeTex) return;
+		heuristicEdgeImage = edgeImage;
+		markTextureImage(uniforms.uEdgeTex.value, heuristicEdgeImage);
+		currentEdgeIsAiMerged = false;
+		heuristicEdgeIsAiMerged = false;
+		depthTween?.setTarget(1, 0.55, durationMs);
+	}
+
+	async function applyCachedCoverDepth(runToken: number, cached: HomeCoverTextureCacheEntry): Promise<void> {
+		if (runToken !== token || !uniforms.uEdgeTex) return;
+		if (aiDepthEnabled && cached.aiMergedImage) {
+			heuristicEdgeImage = cached.heuristicImage;
+			aiMergedEdgeImage = cached.aiMergedImage;
+			heuristicEdgeIsAiMerged = cached.heuristicImageIsAiMerged;
+			markTextureImage(uniforms.uEdgeTex.value, cached.aiMergedImage);
+			currentEdgeIsAiMerged = true;
+			depthTween?.setTarget(1, 1, 180);
+			return;
+		}
+		if (cached.heuristicImage && !cached.heuristicImageIsAiMerged) {
+			applyHeuristicDepthImage(cached.heuristicImage, 120);
+			if (aiDepthEnabled) await applyAiDepthForCurrent(runToken);
+			return;
+		}
+		const rebuilt = rebuildHeuristicDepthFromPrepared();
+		if (runToken !== token || !rebuilt) return;
+		applyHeuristicDepthImage(rebuilt, 120);
+		if (currentCoverCacheKey) {
+			patchHomeCoverTextureCache(currentCoverCacheKey, {
+				heuristicImage: rebuilt,
+				heuristicImageIsAiMerged: false,
+			});
+		}
+		if (aiDepthEnabled) await applyAiDepthForCurrent(runToken);
 	}
 
 	function rebuildHeuristicDepthFromPrepared(): HomeCoverImage | null {
@@ -281,27 +398,25 @@ export function createHomeCoverTextureController(
 		if (url === currentUrl && uniforms.uHasCover.value > 0.5) return;
 		currentUrl = url;
 		const runToken = ++token;
+		currentCoverCacheKey = coverTextureCacheKey(url, coverResolution);
 		if (uniforms.uLoading) uniforms.uLoading.value = 1;
+		const cached = getHomeCoverTextureCache(currentCoverCacheKey);
+		if (cached) {
+			pending = Promise.resolve()
+				.then(async () => {
+					if (runToken !== token) return;
+					applyPreparedCoverImage(cached.preparedImage);
+					await applyCachedCoverDepth(runToken, cached);
+				});
+			return;
+		}
 		pending = loadImage(url)
 			.then(async (image) => {
 				if (runToken !== token) return;
 				const preparedImage = prepareSquareCoverCanvas(image, { coverResolution, createCanvas: opts.createCanvas });
-				preparedCoverImage = preparedImage;
-				heuristicEdgeImage = null;
-				aiMergedEdgeImage = null;
-				currentEdgeIsAiMerged = false;
-				heuristicEdgeIsAiMerged = false;
-				if (uniforms.uHasCover.value > 0.5 && uniforms.uCoverTex.value.image) {
-					markTextureImage(uniforms.uPrevCoverTex.value, uniforms.uCoverTex.value.image as HomeCoverImage);
-				}
-				markTextureImage(uniforms.uCoverTex.value, preparedImage);
-				uniforms.uHasCover.value = 1;
-				uniforms.uColorMixT.value = 0;
-				if (uniforms.uLoading) uniforms.uLoading.value = 0;
-				try {
-					opts.onCoverPrepared?.(preparedImage);
-				} catch {
-					// 封面已经进入主纹理；取色/歌词调色失败只能降级，不能阻断粒子封面显示。
+				applyPreparedCoverImage(preparedImage);
+				if (currentCoverCacheKey) {
+					setHomeCoverTextureCache(currentCoverCacheKey, { preparedImage });
 				}
 
 				let builtHeuristicEdgeImage: HomeCoverImage | null = null;
@@ -313,11 +428,13 @@ export function createHomeCoverTextureController(
 				if (runToken !== token) return;
 				if (builtHeuristicEdgeImage && uniforms.uEdgeTex) {
 					// 缓存启发式深度，切换 AI depth 时避免重复加载/准备封面。
-					heuristicEdgeImage = builtHeuristicEdgeImage;
-					markTextureImage(uniforms.uEdgeTex.value, heuristicEdgeImage);
-					currentEdgeIsAiMerged = false;
-					heuristicEdgeIsAiMerged = false;
-					depthTween?.setTarget(1, 0.55, 180);
+					applyHeuristicDepthImage(builtHeuristicEdgeImage);
+					if (currentCoverCacheKey) {
+						patchHomeCoverTextureCache(currentCoverCacheKey, {
+							heuristicImage: builtHeuristicEdgeImage,
+							heuristicImageIsAiMerged: false,
+						});
+					}
 				} else {
 					depthTween?.setTarget(0, 0, 1);
 					resetDepthUniforms(uniforms);
