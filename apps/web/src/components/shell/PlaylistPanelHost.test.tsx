@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import React from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
-import type { PlaylistDetail, PlaylistSummary, Track } from "@mineradio/shared";
+import type { PlaylistDetail, PlaylistSummary, PodcastCollection, Track } from "@mineradio/shared";
 import { PlaylistPanelHost } from "./PlaylistPanelHost";
 
 function makeTrack(id: string): Track {
@@ -17,6 +17,17 @@ function makeTrack(id: string): Track {
 		durationMs: 1000,
 		qualityHints: [],
 		playableState: "playable",
+	};
+}
+
+function makePodcastCollection(index: number): PodcastCollection {
+	return {
+		key: `podcast-${index}`,
+		title: `播客集合 ${index}`,
+		sub: "Radio",
+		itemType: "radio",
+		count: index,
+		coverUrl: "",
 	};
 }
 
@@ -215,5 +226,31 @@ test("PlaylistPanelHost renders baseline podcast tab and opens collections", asy
 	expect(container.querySelector("#podcast-list")?.textContent).toContain("创建的播客");
 	(container.querySelector("[data-podcast-key=\"created\"]") as HTMLDivElement).click();
 	expect(calls).toEqual(["created"]);
+	unmount();
+});
+
+test("PlaylistPanelHost virtualizes large podcast collection panes without changing collection actions", async () => {
+	const calls: string[] = [];
+	const collections = Array.from({ length: 180 }, (_, index) => makePodcastCollection(index));
+	const { container, unmount } = await renderPanel(
+		<PlaylistPanelHost
+			open
+			tab="podcasts"
+			queue={[]}
+			currentTrack={null}
+			mode="loop"
+			playlists={[]}
+			podcastCollections={collections}
+			onTabChange={() => undefined}
+			onPodcastCollectionOpen={(collection) => calls.push(collection.key)}
+		/>,
+	);
+
+	expect(container.querySelector("#podcast-list")?.getAttribute("data-virtualized")).toBe("true");
+	expect(container.querySelectorAll(".podcast-card").length).toBeLessThan(60);
+	expect(container.querySelector("#podcast-list")?.textContent).toContain("播客集合 0");
+	expect(container.querySelector("#podcast-list")?.textContent).not.toContain("播客集合 179");
+	(container.querySelector("[data-podcast-key=\"podcast-1\"]") as HTMLDivElement).click();
+	expect(calls).toEqual(["podcast-1"]);
 	unmount();
 });

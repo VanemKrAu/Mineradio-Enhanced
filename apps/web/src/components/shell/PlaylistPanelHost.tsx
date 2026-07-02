@@ -13,6 +13,8 @@ const QUEUE_ROW_HEIGHT = 62;
 const QUEUE_VIEWPORT_HEIGHT = 420;
 const DETAIL_ROW_HEIGHT = 54;
 const DETAIL_VIEWPORT_HEIGHT = 460;
+const PODCAST_COLLECTION_ROW_HEIGHT = 62;
+const PODCAST_COLLECTION_VIEWPORT_HEIGHT = 420;
 
 export interface PlaylistPanelHostProps {
 	open: boolean;
@@ -66,6 +68,7 @@ function detailKey(playlist: PlaylistSummary): string {
 export function PlaylistPanelHost(props: PlaylistPanelHostProps): ReactElement {
 	const [queueScrollTop, setQueueScrollTop] = useState(0);
 	const [detailScrollTop, setDetailScrollTop] = useState(0);
+	const [podcastScrollTop, setPodcastScrollTop] = useState(0);
 	const [detail, setDetail] = useState<{
 		key: string;
 		playlist: PlaylistSummary;
@@ -261,27 +264,49 @@ export function PlaylistPanelHost(props: PlaylistPanelHostProps): ReactElement {
 		);
 	};
 
-	const renderPodcasts = () => (
-		<div id="podcast-pane">
-			<div className="queue-toolbar">
-				<div className="queue-chip">收藏 / 创建 / 喜欢</div>
-				<button className="fx-mini-btn ghost" type="button" onClick={props.onRefresh}>刷新</button>
-			</div>
-			<div id="podcast-list">
-				{props.podcastCollections.length === 0 ? (
-					<div className="playlist-empty">登录后显示我的播客</div>
-				) : props.podcastCollections.map((collection) => (
-					<div key={collection.key} className="pl-card podcast-card" data-podcast-key={collection.key} onClick={() => props.onPodcastCollectionOpen?.(collection)}>
-						{coverNode(collection.coverUrl)}
-						<div className="pl-card-main">
-							<div className="pl-name">{collection.title}</div>
-							<div className="pl-sub">{collection.count || 0} 项 · {collection.sub || (collection.itemType === "voice" ? "声音" : "播客")}</div>
+	const renderPodcasts = () => {
+		const window = resolveVirtualListWindow({
+			itemCount: props.podcastCollections.length,
+			rowHeight: PODCAST_COLLECTION_ROW_HEIGHT,
+			viewportHeight: PODCAST_COLLECTION_VIEWPORT_HEIGHT,
+			scrollTop: podcastScrollTop,
+		});
+		const visibleCollections = props.podcastCollections.slice(window.startIndex, window.endIndex);
+		const virtualStyle = window.virtualized
+			? {
+				maxHeight: PODCAST_COLLECTION_VIEWPORT_HEIGHT,
+				overflowY: "auto" as const,
+				paddingTop: window.paddingTop,
+				paddingBottom: window.paddingBottom,
+			}
+			: undefined;
+		return (
+			<div id="podcast-pane">
+				<div className="queue-toolbar">
+					<div className="queue-chip">收藏 / 创建 / 喜欢</div>
+					<button className="fx-mini-btn ghost" type="button" onClick={props.onRefresh}>刷新</button>
+				</div>
+				<div
+					id="podcast-list"
+					data-virtualized={window.virtualized ? "true" : undefined}
+					onScroll={(event) => setPodcastScrollTop(event.currentTarget.scrollTop)}
+					style={virtualStyle}
+				>
+					{props.podcastCollections.length === 0 ? (
+						<div className="playlist-empty">登录后显示我的播客</div>
+					) : visibleCollections.map((collection) => (
+						<div key={collection.key} className="pl-card podcast-card" data-podcast-key={collection.key} onClick={() => props.onPodcastCollectionOpen?.(collection)}>
+							{coverNode(collection.coverUrl)}
+							<div className="pl-card-main">
+								<div className="pl-name">{collection.title}</div>
+								<div className="pl-sub">{collection.count || 0} 项 · {collection.sub || (collection.itemType === "voice" ? "声音" : "播客")}</div>
+							</div>
 						</div>
-					</div>
-				))}
+					))}
+				</div>
 			</div>
-		</div>
-	);
+		);
+	};
 
 	return (
 		<div id="playlist-panel" className={`${props.open ? "show" : ""}${props.pinned ? " pinned" : ""}`.trim()}>

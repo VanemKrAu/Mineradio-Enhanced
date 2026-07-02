@@ -149,7 +149,8 @@ import React from "react";
 import { performance } from "node:perf_hooks";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
-import type { PlaylistDetail, PlaylistSummary, Track } from "@mineradio/shared";
+import type { LyricPayload, PlaylistDetail, PlaylistSummary, PodcastCollection, Track } from "@mineradio/shared";
+import { LyricView } from "./src/components/lyrics/LyricView";
 import { PlaylistPanelHost } from "./src/components/shell/PlaylistPanelHost";
 import { SearchShell } from "./src/components/shell/SearchShell";
 import { PlayerConsoleHost } from "./src/visual/PlayerConsoleHost";
@@ -170,6 +171,30 @@ function makeTrack(id: string): Track {
 		durationMs: 180000,
 		qualityHints: [],
 		playableState: "playable",
+	};
+}
+
+function makePodcastCollection(index: number): PodcastCollection {
+	return {
+		key: "podcast-" + index,
+		title: "Podcast " + index,
+		sub: "Radio",
+		itemType: "radio",
+		count: index,
+		coverUrl: "",
+	};
+}
+
+function makeLyricPayload(count: number): LyricPayload {
+	return {
+		provider: "netease",
+		trackId: "lyric-perf",
+		lines: Array.from({ length: count }, (_, index) => ({
+			timeMs: index * 1000,
+			text: "Lyric line " + index,
+		})),
+		hasTranslation: false,
+		isWordByWord: false,
 	};
 }
 
@@ -286,6 +311,27 @@ async function measurePlaylistDetail(): Promise<Record<string, number>> {
 	return { rowCount, nodeCount, virtualized };
 }
 
+async function measurePodcastCollections(): Promise<Record<string, number>> {
+	const podcastCollections = Array.from({ length: 180 }, (_, index) => makePodcastCollection(index));
+	const { container, unmount } = await mount(
+		React.createElement(PlaylistPanelHost, {
+			open: true,
+			tab: "podcasts",
+			queue: [],
+			currentTrack: null,
+			mode: "loop",
+			playlists: [],
+			podcastCollections,
+			onTabChange: () => undefined,
+		}),
+	);
+	const rowCount = container.querySelectorAll(".podcast-card").length;
+	const nodeCount = container.querySelectorAll("*").length;
+	const virtualized = container.querySelector("#podcast-list")?.getAttribute("data-virtualized") === "true" ? 1 : 0;
+	unmount();
+	return { rowCount, nodeCount, virtualized };
+}
+
 async function measureMiniQueue(): Promise<Record<string, number>> {
 	const queue = Array.from({ length: 240 }, (_, index) => makeTrack(String(index)));
 	const { container, unmount } = await mount(
@@ -298,6 +344,20 @@ async function measureMiniQueue(): Promise<Record<string, number>> {
 	const rowCount = container.querySelectorAll(".mini-queue-item").length;
 	const nodeCount = container.querySelectorAll("*").length;
 	const virtualized = container.querySelector("#mini-queue-list")?.getAttribute("data-virtualized") === "true" ? 1 : 0;
+	unmount();
+	return { rowCount, nodeCount, virtualized };
+}
+
+async function measureLyricView(): Promise<Record<string, number>> {
+	const { container, unmount } = await mount(
+		React.createElement(LyricView, {
+			payload: makeLyricPayload(240),
+			positionMs: 2200,
+		}),
+	);
+	const rowCount = container.querySelectorAll(".lyric-line").length;
+	const nodeCount = container.querySelectorAll("*").length;
+	const virtualized = container.querySelector(".lyric-lines")?.getAttribute("data-virtualized") === "true" ? 1 : 0;
 	unmount();
 	return { rowCount, nodeCount, virtualized };
 }
@@ -413,7 +473,9 @@ async function measureCoverDepthBuild(): Promise<Record<string, number>> {
 const results = {
 	queuePanel: await measureScenario("queuePanel", measureQueuePanel),
 	playlistDetail: await measureScenario("playlistDetail", measurePlaylistDetail),
+	podcastCollections: await measureScenario("podcastCollections", measurePodcastCollections),
 	miniQueue: await measureScenario("miniQueue", measureMiniQueue),
+	lyricView: await measureScenario("lyricView", measureLyricView),
 	searchResults: await measureScenario("searchResults", measureSearchResults),
 	coverDepthBuild: await measureScenario("coverDepthBuild", measureCoverDepthBuild),
 };
@@ -795,7 +857,9 @@ function buildReport(results) {
 		["场景", "优化前 rows", "优化后 rows", "rows 下降", "优化前 DOM", "优化后 DOM", "DOM 下降", "CPU ms 变化", "Wall ms 变化"],
 		["队列面板 240 首", baselineRender.queuePanel.rowCount, optimizedRender.queuePanel.rowCount, formatDrop(baselineRender.queuePanel.rowCount, optimizedRender.queuePanel.rowCount), baselineRender.queuePanel.nodeCount, optimizedRender.queuePanel.nodeCount, formatDrop(baselineRender.queuePanel.nodeCount, optimizedRender.queuePanel.nodeCount), formatChange(baselineRender.queuePanel.cpuMs, optimizedRender.queuePanel.cpuMs), formatChange(baselineRender.queuePanel.wallMs, optimizedRender.queuePanel.wallMs)],
 		["歌单详情 600 首", baselineRender.playlistDetail.rowCount, optimizedRender.playlistDetail.rowCount, formatDrop(baselineRender.playlistDetail.rowCount, optimizedRender.playlistDetail.rowCount), baselineRender.playlistDetail.nodeCount, optimizedRender.playlistDetail.nodeCount, formatDrop(baselineRender.playlistDetail.nodeCount, optimizedRender.playlistDetail.nodeCount), formatChange(baselineRender.playlistDetail.cpuMs, optimizedRender.playlistDetail.cpuMs), formatChange(baselineRender.playlistDetail.wallMs, optimizedRender.playlistDetail.wallMs)],
+		["播客集合 180 个", baselineRender.podcastCollections.rowCount, optimizedRender.podcastCollections.rowCount, formatDrop(baselineRender.podcastCollections.rowCount, optimizedRender.podcastCollections.rowCount), baselineRender.podcastCollections.nodeCount, optimizedRender.podcastCollections.nodeCount, formatDrop(baselineRender.podcastCollections.nodeCount, optimizedRender.podcastCollections.nodeCount), formatChange(baselineRender.podcastCollections.cpuMs, optimizedRender.podcastCollections.cpuMs), formatChange(baselineRender.podcastCollections.wallMs, optimizedRender.podcastCollections.wallMs)],
 		["迷你队列 240 首", baselineRender.miniQueue.rowCount, optimizedRender.miniQueue.rowCount, formatDrop(baselineRender.miniQueue.rowCount, optimizedRender.miniQueue.rowCount), baselineRender.miniQueue.nodeCount, optimizedRender.miniQueue.nodeCount, formatDrop(baselineRender.miniQueue.nodeCount, optimizedRender.miniQueue.nodeCount), formatChange(baselineRender.miniQueue.cpuMs, optimizedRender.miniQueue.cpuMs), formatChange(baselineRender.miniQueue.wallMs, optimizedRender.miniQueue.wallMs)],
+		["歌词视图 240 行", baselineRender.lyricView.rowCount, optimizedRender.lyricView.rowCount, formatDrop(baselineRender.lyricView.rowCount, optimizedRender.lyricView.rowCount), baselineRender.lyricView.nodeCount, optimizedRender.lyricView.nodeCount, formatDrop(baselineRender.lyricView.nodeCount, optimizedRender.lyricView.nodeCount), formatChange(baselineRender.lyricView.cpuMs, optimizedRender.lyricView.cpuMs), formatChange(baselineRender.lyricView.wallMs, optimizedRender.lyricView.wallMs)],
 		["搜索结果 180 首", baselineRender.searchResults.rowCount, optimizedRender.searchResults.rowCount, formatDrop(baselineRender.searchResults.rowCount, optimizedRender.searchResults.rowCount), baselineRender.searchResults.nodeCount, optimizedRender.searchResults.nodeCount, formatDrop(baselineRender.searchResults.nodeCount, optimizedRender.searchResults.nodeCount), formatChange(baselineRender.searchResults.cpuMs, optimizedRender.searchResults.cpuMs), formatChange(baselineRender.searchResults.wallMs, optimizedRender.searchResults.wallMs)],
 	]));
 	rows.push("");
@@ -813,13 +877,13 @@ function buildReport(results) {
 	rows.push("");
 	rows.push("## 结论");
 	rows.push("");
-	rows.push(`- 当前优化版在大列表渲染上收益最明显: 队列 rows 下降 ${formatDrop(baselineRender.queuePanel.rowCount, optimizedRender.queuePanel.rowCount)}，歌单详情 rows 下降 ${formatDrop(baselineRender.playlistDetail.rowCount, optimizedRender.playlistDetail.rowCount)}，迷你队列 rows 下降 ${formatDrop(baselineRender.miniQueue.rowCount, optimizedRender.miniQueue.rowCount)}，搜索结果 rows 下降 ${formatDrop(baselineRender.searchResults.rowCount, optimizedRender.searchResults.rowCount)}。`);
+	rows.push(`- 当前优化版在大列表渲染上收益最明显: 队列 rows 下降 ${formatDrop(baselineRender.queuePanel.rowCount, optimizedRender.queuePanel.rowCount)}，歌单详情 rows 下降 ${formatDrop(baselineRender.playlistDetail.rowCount, optimizedRender.playlistDetail.rowCount)}，播客集合 rows 下降 ${formatDrop(baselineRender.podcastCollections.rowCount, optimizedRender.podcastCollections.rowCount)}，迷你队列 rows 下降 ${formatDrop(baselineRender.miniQueue.rowCount, optimizedRender.miniQueue.rowCount)}，歌词视图 rows 下降 ${formatDrop(baselineRender.lyricView.rowCount, optimizedRender.lyricView.rowCount)}，搜索结果 rows 下降 ${formatDrop(baselineRender.searchResults.rowCount, optimizedRender.searchResults.rowCount)}。`);
 	rows.push(`- Depth 连续构建热路径新增大 scratch 分配从 ${baselineRender.coverDepthBuild.largeFloat32Allocations} 次降到 ${optimizedRender.coverDepthBuild.largeFloat32Allocations} 次，大数组新增分配下降 ${formatDrop(baselineRender.coverDepthBuild.largeFloat32Bytes, optimizedRender.coverDepthBuild.largeFloat32Bytes)}。`);
 	rows.push(`- 隐藏且 ready 的 sidecar 状态轮询频率从 ${formatNumber(60000 / (baseline.derived.sidecarHiddenPollMs || 24000), 2)}/min 降到 ${formatNumber(60000 / optimized.derived.sidecarHiddenPollMs, 2)}/min，稳定后台轮询下降 ${formatDrop(60000 / (baseline.derived.sidecarHiddenPollMs || 24000), 60000 / optimized.derived.sidecarHiddenPollMs)}。`);
 	rows.push("");
 	rows.push("## 下一步优化方向");
 	rows.push("");
-	rows.push("- 把歌词视图和更多播客集合页接入同一个 virtual-list helper，尤其是长歌词和播客节目二级页。");
+	rows.push("- 将我的歌单概览页做扁平化虚拟列表，处理多平台歌单很多时的 DOM 压力。");
 	rows.push("- 继续收敛 cover depth 的临时 canvas 与 ImageData 分配，优先复用归一化 canvas，避免连续切歌时触发额外 GC。");
 	rows.push("- 给 AI depth 增加尺寸/来源维度的 LRU 和失败冷却，避免同封面不同 URL 参数重复估计。");
 	rows.push("- 加一个 CI 可跑的轻量 perf budget，只检查 DOM rows、depth 大数组次数、关键 bundle size，避免性能回退。");
