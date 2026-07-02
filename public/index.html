@@ -18509,6 +18509,7 @@ async function playQueueAt(idx, opts) {
     applyVolumeToAudio();
     var proxyAudioUrl = '/api/audio?url=' + encodeURIComponent(data.url);
     audio.src = proxyAudioUrl;
+    updateMediaSession();
     updatePlaybackProgressUi();
     audio.onended = function(){
       if (token !== trackSwitchToken) return;
@@ -18676,10 +18677,12 @@ async function togglePlay() {
     if (!audio) return;
     if (audio.paused || audio.ended) {
       await attemptAudioPlay({ manual: true });
+      updateMediaSession();
     } else {
       await fadeOutAndPauseAudio();
       playing = false;
       setPlayIcon(false);
+      updateMediaSession();
       hideLoading();
       safePlaybackStep('listen-stats-pause', function(){ updateListenStatsTick(true); });
       forcePlaybackControlsInteractive();
@@ -18702,6 +18705,56 @@ function setPlayIcon(p) {
     ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
     : '<path d="M8 5v14l11-7z"/>';
 }
+// --- SMTC (System Media Transport Controls) via Media Session API ---
+function updateMediaSession() {
+  if (!navigator.mediaSession) return;
+  var song = (playQueue && currentIdx >= 0) ? playQueue[currentIdx] : (currentLocalSong || null);
+  if (!song) {
+    try { navigator.mediaSession.metadata = null; } catch (e) {}
+    navigator.mediaSession.playbackState = 'none';
+    return;
+  }
+  var title = song.name || song.title || '';
+  var artist = song.artist || '';
+  if (!artist && song.ar && Array.isArray(song.ar)) artist = song.ar.join(', ');
+  var album = song.album || song.al || '';
+  var coverUrl = (typeof songCoverSrc === 'function') ? songCoverSrc(song, 300) : '';
+  var artwork = [];
+  if (coverUrl) artwork.push({ src: coverUrl, sizes: '300x300', type: 'image/jpeg' });
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: title || 'Mineradio',
+      artist: artist || '',
+      album: album || '',
+      artwork: artwork
+    });
+    navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+  } catch (e) {
+    console.warn('[MediaSession] metadata update failed:', e);
+  }
+}
+function setupMediaSession() {
+  if (!navigator.mediaSession) return;
+  var actions = {
+    play: function() { if (audio && audio.paused) togglePlay(); },
+    pause: function() { if (audio && !audio.paused) togglePlay(); },
+    previoustrack: function() { prevTrack(); },
+    nexttrack: function() { nextTrack(); },
+    seekforward: function() {
+      if (!audio) return;
+      audio.currentTime = Math.min(audio.duration || Infinity, (audio.currentTime || 0) + 10);
+    },
+    seekbackward: function() {
+      if (!audio) return;
+      audio.currentTime = Math.max(0, (audio.currentTime || 0) - 10);
+    }
+  };
+  for (var action in actions) {
+    try { navigator.mediaSession.setActionHandler(action, actions[action]); }
+    catch (e) { console.warn('[MediaSession] setActionHandler(' + action + ') failed:', e); }
+  }
+}
+// --- end SMTC ---
 function nextTrack() {
   if (!playQueue.length) return;
   playToggleBusy = false;
@@ -20036,6 +20089,7 @@ function handleFiles(files) {
     bindPlaybackProgressEvents(audio);
     applyVolumeToAudio();
     audio.src = url;
+    updateMediaSession();
     updatePlaybackProgressUi();
     lyricSunEnergy = 0; lyricSunTarget = 0; lyricSunHold = 0; lyricSunAvg = 0; lyricSunPeak = 0.55;
     audio.onended = function(){ finalizeListenSession(true); playing = false; setPlayIcon(false); };
@@ -26503,6 +26557,7 @@ bindQualityControl();
 bindVolumeControls();
 initControlGlassSurface();
 bindPlayerControlAnimations();
+setupMediaSession();
 scheduleUiWarmTask(function(){
   updateControlGlassDisplacementMap();
   updateSearchBoxGlassDisplacementMap();

@@ -1,9 +1,9 @@
 {
-  "name": "mineradio",
-  "productName": "Mineradio",
-  "version": "1.1.1",
-  "description": "沉浸式音乐播放器，融合天气电台、歌词舞台、粒子视觉和 3D 歌单架。",
-  "author": "Mineradio",
+  "name": "mineradio-enhanced",
+  "productName": "Mineradio-Enhanced",
+  "version": "1.1.1-enhanced.1",
+  "description": "Mineradio 非官方增强版 — 在原版基础上加入 SMTC (Windows 系统媒体控件) 支持。沉浸式音乐播放器，融合天气电台、歌词舞台、粒子视觉和 3D 歌单架。",
+  "author": "VanemKrAu <fork@mineradio-enhanced> (https://github.com/VanemKrAu/Mineradio-Enhanced)",
   "main": "desktop/main.js",
   "private": true,
   "scripts": {
@@ -12,8 +12,8 @@
     "build:win:dir": "electron-builder --win dir"
   },
   "build": {
-    "appId": "com.mineradio.desktop",
-    "productName": "Mineradio",
+    "appId": "com.mineradio-enhanced.desktop",
+    "productName": "Mineradio-Enhanced",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -34,7 +34,7 @@
     ],
     "asar": false,
     "win": {
-      "executableName": "Mineradio",
+      "executableName": "Mineradio-Enhanced",
       "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "target": [
@@ -52,28 +52,27 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Mineradio",
+      "shortcutName": "Mineradio-Enhanced",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/installerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",
       "include": "build/installer.nsh",
-      "artifactName": "Mineradio-${version}-Setup.${ext}"
+      "artifactName": "Mineradio-Enhanced-${version}-Setup.${ext}"
     },
     "publish": [
       {
         "provider": "github",
-        "owner": "XxHuberrr",
-        "repo": "Mineradio"
+        "owner": "VanemKrAu",
+        "repo": "Mineradio-Enhanced"
       }
-    ]
-  },
-  "mineradio": {
-    "update": {
-      "provider": "github",
-      "owner": "XxHuberrr",
-      "repo": "Mineradio",
+    ],
+    "mineradio": {
+      "update": {
+        "provider": "github",
+        "owner": "VanemKrAu",
+        "repo": "Mineradio-Enhanced",
       "preview": true,
       "preferMirrors": true,
       "mirrors": [
