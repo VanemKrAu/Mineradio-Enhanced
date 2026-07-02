@@ -1,6 +1,6 @@
 # Mineradio-Enhanced 🎵
 
-> **非官方二改增强版** — 基于 [Mineradio](https://github.com/XxHuberrr/Mineradio)（GPL-3.0）修改，在原版基础上加入 **SMTC (Windows 系统媒体控件)** 支持。
+> **非官方二改增强版** — 基于 [Mineradio](https://github.com/XxHuberrr/Mineradio)（GPL-3.0）修改，按个人偏好持续调整。
 >
 > ⚠️ 本项目为个人修改版，仅根据 **本人使用习惯和审美** 进行调整，与他人无关，非官方发布。
 >
@@ -8,7 +8,7 @@
 
 ![Mineradio 暗场启动页](./docs/assets/readme/cinema-beat-smoke.png)
 
-## ✨ 本版新增功能
+## ✨ 本版改动（陆续添加中）
 
 ### 🎛 SMTC 系统媒体控件支持
 
@@ -23,6 +23,8 @@
 
 - 应用名称改为 `Mineradio-Enhanced`，可与原版共存安装
 - Windows AppUserModelID 独立，互不冲突
+
+_更多改动随个人使用逐步加入。_
 
 ## 原版核心特性
 
