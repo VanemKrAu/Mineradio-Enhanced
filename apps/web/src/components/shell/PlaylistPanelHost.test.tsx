@@ -82,6 +82,36 @@ test("PlaylistPanelHost renders baseline panel ids tabs and queue actions", asyn
 	unmount();
 });
 
+test("PlaylistPanelHost virtualizes large queue panes without changing visible row actions", async () => {
+	const calls: string[] = [];
+	const tracks = Array.from({ length: 240 }, (_, index) => makeTrack(String(index)));
+	const { container, unmount } = await renderPanel(
+		<PlaylistPanelHost
+			open
+			tab="queue"
+			queue={tracks}
+			currentTrack={tracks[0] ?? null}
+			mode="loop"
+			playlists={[]}
+			podcastCollections={[]}
+			onTabChange={() => undefined}
+			onPlayQueueIndex={(index) => calls.push(`play:${index}`)}
+			onInsertQueueNext={(index) => calls.push(`next:${index}`)}
+			onRemoveQueueIndex={(index) => calls.push(`remove:${index}`)}
+		/>,
+	);
+
+	expect(container.querySelector("#queue-list")?.getAttribute("data-virtualized")).toBe("true");
+	expect(container.querySelectorAll(".queue-item").length).toBeLessThan(60);
+	expect(container.querySelector("#queue-list")?.textContent).toContain("Song 0");
+	container.querySelectorAll(".queue-item")[1]?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+	(container.querySelector(".queue-next") as HTMLButtonElement).click();
+	(container.querySelector(".qi-act button:last-child") as HTMLButtonElement).click();
+
+	expect(calls).toEqual(["play:1", "next:0", "remove:0"]);
+	unmount();
+});
+
 test("PlaylistPanelHost expands playlist detail and plays detail tracks", async () => {
 	const playlist: PlaylistSummary = {
 		provider: "netease",
@@ -123,6 +153,45 @@ test("PlaylistPanelHost expands playlist detail and plays detail tracks", async 
 	(container.querySelector(".pl-detail-row-artist") as HTMLButtonElement).click();
 
 	expect(calls).toEqual(["我的歌单:0:2", "我的歌单:1:2", "artist:Alice"]);
+	unmount();
+});
+
+test("PlaylistPanelHost virtualizes large playlist detail panes", async () => {
+	const playlist: PlaylistSummary = {
+		provider: "netease",
+		id: "pl-big",
+		name: "超大歌单",
+		coverUrl: "",
+		trackCount: 600,
+		trackIds: [],
+		subscribed: false,
+	};
+	const tracks = Array.from({ length: 600 }, (_, index) => makeTrack(String(index)));
+	const calls: string[] = [];
+	const { container, unmount } = await renderPanel(
+		<PlaylistPanelHost
+			open
+			tab="playlists"
+			queue={[]}
+			currentTrack={null}
+			mode="loop"
+			playlists={[playlist]}
+			podcastCollections={[]}
+			onTabChange={() => undefined}
+			onLoadPlaylistDetail={async (): Promise<PlaylistDetail> => ({ ...playlist, tracks })}
+			onPlayTracks={(items, index) => calls.push(`${index}:${items.length}`)}
+		/>,
+	);
+
+	(container.querySelector(".pl-card") as HTMLDivElement).click();
+	for (let i = 0; i < 8 && !container.querySelector("[data-pl-detail]"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(container.querySelector(".pl-detail-list")?.getAttribute("data-virtualized")).toBe("true");
+	expect(container.querySelectorAll(".pl-detail-row").length).toBeLessThan(70);
+	(container.querySelector("[data-pl-detail-row=\"1\"]") as HTMLDivElement).click();
+	expect(calls).toEqual(["1:600"]);
 	unmount();
 });
 
