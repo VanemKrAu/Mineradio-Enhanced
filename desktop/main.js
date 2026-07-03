@@ -3,6 +3,7 @@ const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
+const wallpaperScanner = require('./wallpaper-scanner.js');
 
 let mainWindow = null;
 let localServer = null;
@@ -1286,6 +1287,28 @@ ipcMain.handle('mineradio-desktop-lyrics-move-by', async (_event, dx, dy) => {
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message || 'DESKTOP_LYRICS_MOVE_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-wallpaper-scan', async (_event, rootPaths) => {
+  try {
+    const list = wallpaperScanner.scanLibraries(rootPaths);
+    return { ok: true, wallpapers: list };
+  } catch (e) {
+    return { ok: false, error: e.message || 'WALLPAPER_SCAN_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-wallpaper-choose-root', async () => {
+  try {
+    const result = await dialog.showOpenDialog({
+      title: '选择壁纸库目录',
+      properties: ['openDirectory', 'createDirectory', 'multiSelections']
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    return { ok: true, roots: result.filePaths };
+  } catch (e) {
+    return { ok: false, error: e.message || 'WALLPAPER_CHOOSE_ROOT_FAILED' };
   }
 });
 

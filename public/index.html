@@ -1276,6 +1276,26 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1080px,cal
 .about-footer{margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07);font-size:10.5px;color:rgba(255,255,255,.32);line-height:1.5}
 .about-close{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:rgba(255,255,255,.66);font-size:18px;line-height:1;cursor:pointer}
 .about-close:hover{background:rgba(255,255,255,.09);color:#fff}
+.wallpaper-picker-modal{position:fixed;inset:0;z-index:1450;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.48);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.wallpaper-picker-modal.show{display:flex}
+.wallpaper-picker-dialog{width:min(820px,calc(100vw - 36px));max-height:min(720px,calc(100vh - 44px));border-radius:18px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(180deg,rgba(14,15,20,.96),rgba(5,6,8,.96));box-shadow:0 32px 110px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.08);padding:20px;color:#fff;overflow:auto}
+.wallpaper-picker-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
+.wallpaper-picker-title{font-size:15px;font-weight:800}
+.wallpaper-picker-actions{display:flex;align-items:center;gap:8px}
+.wallpaper-picker-close{width:30px;height:30px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:rgba(255,255,255,.66);font-size:18px;line-height:1;cursor:pointer}
+.wallpaper-picker-close:hover{background:rgba(255,255,255,.09);color:#fff}
+.wp-btn{height:30px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.035);color:rgba(255,255,255,.78);font:760 12px/1 var(--font-sans);cursor:pointer;padding:0 13px;transition:all .15s;white-space:nowrap}
+.wp-btn:hover{border-color:rgba(var(--fc-accent-rgb),.35);background:rgba(var(--fc-accent-rgb),.12);color:#fff}
+.wp-btn.primary{background:rgba(var(--fc-accent-rgb),.14);border-color:rgba(var(--fc-accent-rgb),.30);color:var(--fc-accent)}
+.wp-btn.primary:hover{background:rgba(var(--fc-accent-rgb),.22)}
+.wp-status{padding:8px 0;font-size:12px;color:rgba(255,255,255,.45)}
+.wp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding:12px 0}
+.wp-card{border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);overflow:hidden;cursor:pointer;transition:all .2s}
+.wp-card:hover{border-color:rgba(var(--fc-accent-rgb),.35);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.wp-card.active{border-color:var(--fc-accent);box-shadow:0 0 0 1px var(--fc-accent),0 8px 24px rgba(0,245,212,.15)}
+.wp-card-img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#1a1a1a}
+.wp-card-name{padding:8px 10px 10px;font-size:11.5px;font-weight:600;color:rgba(255,255,255,.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wp-empty{padding:40px 0;text-align:center;color:rgba(255,255,255,.35);font-size:13px}
 
 /* ============================================================ */
 /*  歌单/队列面板                                                 */
@@ -22018,6 +22038,13 @@ function ensureHotkeySettingsButton() {
   aboutBtn.textContent = '关于';
   aboutBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openAboutModal(); });
   actions.appendChild(aboutBtn);
+  var wpBtn = document.createElement('button');
+  wpBtn.id = 'wallpaper-picker-btn';
+  wpBtn.type = 'button';
+  wpBtn.className = 'fx-mini-btn ghost';
+  wpBtn.textContent = '壁纸';
+  wpBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openWallpaperPicker(); });
+  actions.appendChild(wpBtn);
   head.appendChild(actions);
 }
 function ensureHotkeyModal() {
@@ -22158,6 +22185,124 @@ function openAboutModal() {
 function closeAboutModal() {
   var modal = document.getElementById('about-modal');
   if (modal) modal.classList.remove('show');
+}
+var wallpaperPickerData = { roots: [], wallpapers: [], currentWallpaper: '' };
+function ensureWallpaperPickerModal() {
+  var modal = document.getElementById('wallpaper-picker-modal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'wallpaper-picker-modal';
+  modal.className = 'wallpaper-picker-modal';
+  modal.innerHTML =
+    '<div class="wallpaper-picker-dialog" role="dialog" aria-modal="true">' +
+      '<div class="wallpaper-picker-head">' +
+        '<div class="wallpaper-picker-title">壁纸库</div>' +
+        '<div class="wallpaper-picker-actions">' +
+          '<button class="wp-btn" id="wp-choose-root" type="button">选择壁纸目录</button>' +
+          '<button class="wp-btn" id="wp-refresh" type="button">刷新</button>' +
+          '<button class="wallpaper-picker-close" type="button" id="wp-close" aria-label="关闭">×</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="wp-status" id="wp-status">请先选择壁纸库目录（Wallpaper Engine 的 workshop 文件夹）。</div>' +
+      '<div class="wp-grid" id="wp-grid"></div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){
+    if (e.target === modal || e.target.id === 'wp-close') closeWallpaperPicker();
+  });
+  document.getElementById('wp-choose-root').addEventListener('click', chooseWallpaperRoot);
+  document.getElementById('wp-refresh').addEventListener('click', refreshWallpapers);
+  return modal;
+}
+function openWallpaperPicker() {
+  var modal = ensureWallpaperPickerModal();
+  modal.classList.add('show');
+  refreshWallpapers();
+}
+function closeWallpaperPicker() {
+  var modal = document.getElementById('wallpaper-picker-modal');
+  if (modal) modal.classList.remove('show');
+}
+async function chooseWallpaperRoot() {
+  var api = window.desktopWindow;
+  if (!api || typeof api.chooseWallpaperRoot !== 'function') return;
+  var result = await api.chooseWallpaperRoot();
+  if (result && result.ok && result.roots) {
+    wallpaperPickerData.roots = result.roots;
+    try { localStorage.setItem('mineradio-wallpaper-roots', JSON.stringify(result.roots)); } catch (e) {}
+    refreshWallpapers();
+  }
+}
+function refreshWallpapers() {
+  var api = window.desktopWindow;
+  var statusEl = document.getElementById('wp-status');
+  var gridEl = document.getElementById('wp-grid');
+  if (!statusEl || !gridEl) return;
+  if (!wallpaperPickerData.roots || !wallpaperPickerData.roots.length) {
+    var saved = [];
+    try { saved = JSON.parse(localStorage.getItem('mineradio-wallpaper-roots') || '[]'); } catch (e) {}
+    if (saved.length) wallpaperPickerData.roots = saved;
+  }
+  if (!wallpaperPickerData.roots.length) {
+    statusEl.textContent = '请先选择壁纸库目录（Wallpaper Engine 的 workshop 内容目录）。';
+    gridEl.innerHTML = '';
+    return;
+  }
+  statusEl.textContent = '扫描中...';
+  gridEl.innerHTML = '';
+  if (!api || typeof api.scanWallpapers !== 'function') { statusEl.textContent = '扫描失败：桌面 API 不可用'; return; }
+  var result = await api.scanWallpapers(wallpaperPickerData.roots);
+  if (!result || !result.ok) { statusEl.textContent = '扫描失败：' + ((result && result.error) || '未知错误'); return; }
+  wallpaperPickerData.wallpapers = result.wallpapers || [];
+  if (!wallpaperPickerData.wallpapers.length) {
+    statusEl.textContent = '未找到壁纸。请确认目录下有包含 preview.jpg/png 的子文件夹。';
+    gridEl.innerHTML = '';
+    return;
+  }
+  statusEl.textContent = '共 ' + wallpaperPickerData.wallpapers.length + ' 个壁纸，点击即可设为播放器背景。';
+  gridEl.innerHTML = '';
+  wallpaperPickerData.wallpapers.forEach(function(wp) {
+    var card = document.createElement('div');
+    card.className = 'wp-card';
+    if (wp.previewPath === wallpaperPickerData.currentWallpaper) card.classList.add('active');
+    var img = document.createElement('img');
+    img.className = 'wp-card-img';
+    img.src = 'file:///' + wp.previewPath.replace(/\\/g, '/');
+    img.loading = 'lazy';
+    var name = document.createElement('div');
+    name.className = 'wp-card-name';
+    name.textContent = wp.name;
+    card.appendChild(img);
+    card.appendChild(name);
+    card.addEventListener('click', function(){ applyWallpaper(wp); });
+    gridEl.appendChild(card);
+  });
+}
+function applyWallpaper(wp) {
+  if (!wp || !wp.previewPath) return;
+  wallpaperPickerData.currentWallpaper = wp.previewPath;
+  var imageUrl = 'file:///' + wp.previewPath.replace(/\\/g, '/');
+  document.documentElement.style.setProperty('--custom-bg-image', 'url("' + imageUrl.replace(/"/g, '\\"') + '")');
+  document.documentElement.style.setProperty('--custom-bg-image-opacity', '1');
+  document.body.classList.add('custom-background-override');
+  try { localStorage.setItem('mineradio-wallpaper-current', wp.previewPath); } catch (e) {}
+  var cards = document.querySelectorAll('#wp-grid .wp-card');
+  cards.forEach(function(c){ c.classList.remove('active'); });
+  var active = document.querySelector('#wp-grid .wp-card:last-child');
+  if (active) active.classList.add('active');
+  showToast('壁纸已应用：' + wp.name);
+  closeWallpaperPicker();
+}
+function restoreWallpaper() {
+  try {
+    var saved = localStorage.getItem('mineradio-wallpaper-current');
+    if (saved) {
+      var imageUrl = 'file:///' + saved.replace(/\\/g, '/');
+      document.documentElement.style.setProperty('--custom-bg-image', 'url("' + imageUrl.replace(/"/g, '\\"') + '")');
+      document.documentElement.style.setProperty('--custom-bg-image-opacity', '1');
+      document.body.classList.add('custom-background-override');
+    }
+  } catch (e) {}
 }
 function startHotkeyCapture(action, scope) {
   hotkeyCaptureState = { action: action, scope: scope === 'global' ? 'global' : 'local' };
@@ -26632,6 +26777,7 @@ applyDesktopLyricsState(false);
 applyWallpaperModeState(false);
 setShelfMode(fx.shelf);
 applyStartupStarfieldPreset();
+restoreWallpaper();
 applyPlaylistPanelPinState(false);
 if (fx.floatLayer) createFloatLayer();
 if (fx.particleLyrics) createLyricsParticles();
