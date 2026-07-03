@@ -1,12 +1,12 @@
 # Mineradio-Enhanced
 
-<img src="./build/icon.svg" alt="Mineradio-Enhanced" style="max-width:96px;width:100%;height:auto">
-
 > **非官方二改增强版** — 基于 [Mineradio](https://github.com/XxHuberrr/Mineradio)（GPL-3.0）修改，按个人偏好持续调整。
 >
 > ⚠️ 本项目为个人修改版，仅根据 **本人使用习惯和审美** 进行调整，与他人无关，非官方发布。
 >
 > 如需原版请访问：[github.com/XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
+
+<img src="./build/icon.svg" alt="Mineradio-Enhanced" style="max-width:96px;width:100%;height:auto">
 
 ## ✨ 本版改动（陆续添加中）
 
