@@ -1311,6 +1311,15 @@ ipcMain.handle('mineradio-wallpaper-read-file', async (_event, filePath) => {
   }
 });
 
+ipcMain.handle('mineradio-wallpaper-auto-detect', async () => {
+  try {
+    var roots = wallpaperScanner.autoDetectRoots();
+    return { ok: true, roots: roots };
+  } catch (e) {
+    return { ok: false, error: e.message || 'AUTO_DETECT_FAILED' };
+  }
+});
+
 ipcMain.handle('mineradio-wallpaper-choose-root', async () => {
   try {
     const result = await dialog.showOpenDialog({

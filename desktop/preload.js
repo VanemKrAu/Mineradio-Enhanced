@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   scanWallpapers: (rootPaths) => ipcRenderer.invoke('mineradio-wallpaper-scan', rootPaths || []),
   chooseWallpaperRoot: () => ipcRenderer.invoke('mineradio-wallpaper-choose-root'),
   readWallpaperFile: (filePath) => ipcRenderer.invoke('mineradio-wallpaper-read-file', filePath),
+  autoDetectWallpapers: () => ipcRenderer.invoke('mineradio-wallpaper-auto-detect'),
   onStateChange: (callback) => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('desktop-window-state', listener);

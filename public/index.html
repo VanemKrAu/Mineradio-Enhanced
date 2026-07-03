@@ -22248,9 +22248,22 @@ async function refreshWallpapers() {
     if (saved.length) wallpaperPickerData.roots = saved;
   }
   if (!wallpaperPickerData.roots.length) {
-    statusEl.textContent = '请先选择壁纸库目录（Wallpaper Engine 的 workshop 内容目录）。';
+    statusEl.textContent = '正在自动搜索本地壁纸目录...';
     gridEl.innerHTML = '';
-    return;
+    if (api && typeof api.autoDetectWallpapers === 'function') {
+      try {
+        var detected = await api.autoDetectWallpapers();
+        if (detected && detected.ok && detected.roots && detected.roots.length) {
+          wallpaperPickerData.roots = detected.roots;
+          try { localStorage.setItem('mineradio-wallpaper-roots', JSON.stringify(detected.roots)); } catch (e) {}
+        }
+      } catch (e) { console.warn('[WallpaperPicker] auto-detect failed:', e); }
+    }
+    if (!wallpaperPickerData.roots.length) {
+      statusEl.textContent = '未找到本地壁纸。请确认已安装 Steam + Wallpaper Engine，或手动选择壁纸库目录。';
+      gridEl.innerHTML = '';
+      return;
+    }
   }
   statusEl.textContent = '扫描中...';
   gridEl.innerHTML = '';

@@ -69,4 +69,55 @@ function scanLibraries(rootPaths) {
   return result;
 }
 
-module.exports = { scanLibrary, scanLibraries };
+function autoDetectRoots() {
+  const roots = [];
+  const found = new Set();
+
+  var steamPath = '';
+  try {
+    var { execFileSync } = require('child_process');
+    var output = execFileSync('reg', ['query', 'HKCU\\Software\\Valve\\Steam', '/v', 'SteamPath'], { encoding: 'utf8', timeout: 5000 });
+    var match = output.match(/REG_SZ\s+(.+)/i);
+    if (match) steamPath = match[1].trim();
+  } catch (_) {}
+
+  if (!steamPath || !fs.existsSync(steamPath)) {
+    var common = [
+      path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Steam'),
+      path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Steam'),
+      'C:\\Steam', 'D:\\Steam',
+    ];
+    for (var i = 0; i < common.length; i++) {
+      if (fs.existsSync(common[i])) { steamPath = common[i]; break; }
+    }
+  }
+
+  var libraryPaths = steamPath ? [steamPath] : [];
+  try {
+    var vdfPath = path.join(steamPath, 'steamapps', 'libraryfolders.vdf');
+    if (steamPath && fs.existsSync(vdfPath)) {
+      var vdf = fs.readFileSync(vdfPath, 'utf8');
+      var pathRe = /"path"\s*"([^"]+)"/g;
+      var m;
+      while ((m = pathRe.exec(vdf)) !== null) {
+        var lib = m[1].replace(/\\\\/g, '\\');
+        if (lib && !libraryPaths.includes(lib)) libraryPaths.push(lib);
+      }
+    }
+  } catch (_) {}
+
+  var WE_APPID = '431960';
+  for (var j = 0; j < libraryPaths.length; j++) {
+    var lib = libraryPaths[j];
+    if (!lib) continue;
+    var workshopContent = path.join(lib, 'steamapps', 'workshop', 'content', WE_APPID);
+    if (fs.existsSync(workshopContent) && !found.has(workshopContent)) {
+      found.add(workshopContent);
+      roots.push(workshopContent);
+    }
+  }
+
+  return roots;
+}
+
+module.exports = { scanLibrary, scanLibraries, autoDetectRoots };
