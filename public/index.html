@@ -22226,11 +22226,15 @@ function closeWallpaperPicker() {
 async function chooseWallpaperRoot() {
   var api = window.desktopWindow;
   if (!api || typeof api.chooseWallpaperRoot !== 'function') return;
-  var result = await api.chooseWallpaperRoot();
-  if (result && result.ok && result.roots) {
-    wallpaperPickerData.roots = result.roots;
-    try { localStorage.setItem('mineradio-wallpaper-roots', JSON.stringify(result.roots)); } catch (e) {}
-    refreshWallpapers();
+  try {
+    var result = await api.chooseWallpaperRoot();
+    if (result && result.ok && result.roots) {
+      wallpaperPickerData.roots = result.roots;
+      try { localStorage.setItem('mineradio-wallpaper-roots', JSON.stringify(result.roots)); } catch (e) {}
+      refreshWallpapers();
+    }
+  } catch (e) {
+    console.warn('[WallpaperPicker] chooseWallpaperRoot failed:', e);
   }
 }
 async function refreshWallpapers() {
@@ -22251,58 +22255,102 @@ async function refreshWallpapers() {
   statusEl.textContent = '扫描中...';
   gridEl.innerHTML = '';
   if (!api || typeof api.scanWallpapers !== 'function') { statusEl.textContent = '扫描失败：桌面 API 不可用'; return; }
-  var result = await api.scanWallpapers(wallpaperPickerData.roots);
-  if (!result || !result.ok) { statusEl.textContent = '扫描失败：' + ((result && result.error) || '未知错误'); return; }
-  wallpaperPickerData.wallpapers = result.wallpapers || [];
-  if (!wallpaperPickerData.wallpapers.length) {
-    statusEl.textContent = '未找到壁纸。请确认目录下有包含 preview.jpg/png 的子文件夹。';
+  try {
+    var result = await api.scanWallpapers(wallpaperPickerData.roots);
+    if (!result || !result.ok) { statusEl.textContent = '扫描失败：' + ((result && result.error) || '未知错误'); return; }
+    wallpaperPickerData.wallpapers = result.wallpapers || [];
+    if (!wallpaperPickerData.wallpapers.length) {
+      statusEl.textContent = '未找到壁纸。请确认目录下有包含 preview.jpg/png 的子文件夹。';
+      gridEl.innerHTML = '';
+      return;
+    }
+    statusEl.textContent = '共 ' + wallpaperPickerData.wallpapers.length + ' 个壁纸，点击即可设为播放器背景。';
     gridEl.innerHTML = '';
-    return;
+    wallpaperPickerData.wallpapers.forEach(function(wp) {
+      var card = document.createElement('div');
+      card.className = 'wp-card';
+      card.setAttribute('data-path', wp.previewPath);
+      if (wp.previewPath === wallpaperPickerData.currentWallpaper) card.classList.add('active');
+      var img = document.createElement('img');
+      img.className = 'wp-card-img';
+      img.alt = wp.name;
+      img.loading = 'lazy';
+      loadPreviewImage(img, wp.previewPath);
+      var name = document.createElement('div');
+      name.className = 'wp-card-name';
+      name.textContent = wp.name;
+      card.appendChild(img);
+      card.appendChild(name);
+      card.addEventListener('click', function(){ applyWallpaper(wp); });
+      gridEl.appendChild(card);
+    });
+  } catch (e) {
+    statusEl.textContent = '扫描失败：' + (e.message || '未知错误');
+    console.warn('[WallpaperPicker] refresh failed:', e);
   }
-  statusEl.textContent = '共 ' + wallpaperPickerData.wallpapers.length + ' 个壁纸，点击即可设为播放器背景。';
-  gridEl.innerHTML = '';
-  wallpaperPickerData.wallpapers.forEach(function(wp) {
-    var card = document.createElement('div');
-    card.className = 'wp-card';
-    if (wp.previewPath === wallpaperPickerData.currentWallpaper) card.classList.add('active');
-    var img = document.createElement('img');
-    img.className = 'wp-card-img';
-    img.src = 'file:///' + wp.previewPath.replace(/\\/g, '/');
-    img.loading = 'lazy';
-    var name = document.createElement('div');
-    name.className = 'wp-card-name';
-    name.textContent = wp.name;
-    card.appendChild(img);
-    card.appendChild(name);
-    card.addEventListener('click', function(){ applyWallpaper(wp); });
-    gridEl.appendChild(card);
+}
+function loadPreviewImage(img, filePath) {
+  var api = window.desktopWindow;
+  if (!api || typeof api.readWallpaperFile !== 'function') return;
+  api.readWallpaperFile(filePath).then(function(res){
+    if (res && res.ok && res.dataUrl) img.src = res.dataUrl;
+  }).catch(function(e){
+    console.warn('[WallpaperPicker] load preview failed:', filePath, e);
+  });
+}
+function loadImageAsDataUrl(filePath) {
+  return new Promise(function(resolve){
+    var api = window.desktopWindow;
+    if (!api || typeof api.readWallpaperFile !== 'function') return resolve('');
+    api.readWallpaperFile(filePath).then(function(res){
+      resolve(res && res.ok ? (res.dataUrl || '') : '');
+    }).catch(function(){ resolve(''); });
   });
 }
 function applyWallpaper(wp) {
   if (!wp || !wp.previewPath) return;
   wallpaperPickerData.currentWallpaper = wp.previewPath;
-  var imageUrl = 'file:///' + wp.previewPath.replace(/\\/g, '/');
-  document.documentElement.style.setProperty('--custom-bg-image', 'url("' + imageUrl.replace(/"/g, '\\"') + '")');
-  document.documentElement.style.setProperty('--custom-bg-image-opacity', '1');
-  document.body.classList.add('custom-background-override');
+  var imageUrl = wp._cachedDataUrl || '';
+  if (!imageUrl) {
+    loadImageAsDataUrl(wp.previewPath).then(function(dataUrl){
+      if (dataUrl) {
+        wp._cachedDataUrl = dataUrl;
+        setWallpaperBackground(dataUrl);
+      }
+    });
+    showToast('正在加载壁纸...');
+  } else {
+    setWallpaperBackground(imageUrl);
+    showToast('壁纸已应用：' + wp.name);
+  }
   try { localStorage.setItem('mineradio-wallpaper-current', wp.previewPath); } catch (e) {}
   var cards = document.querySelectorAll('#wp-grid .wp-card');
   cards.forEach(function(c){ c.classList.remove('active'); });
-  var active = document.querySelector('#wp-grid .wp-card:last-child');
-  if (active) active.classList.add('active');
-  showToast('壁纸已应用：' + wp.name);
+  cards.forEach(function(c){
+    if (c.getAttribute('data-path') === wp.previewPath) c.classList.add('active');
+  });
   closeWallpaperPicker();
+}
+function setWallpaperBackground(dataUrl) {
+  if (!dataUrl) return;
+  document.documentElement.style.setProperty('--custom-bg-image', 'url("' + cssImageUrl(dataUrl) + '")');
+  document.documentElement.style.setProperty('--custom-bg-image-opacity', '1');
+  document.body.classList.add('custom-background-override');
 }
 function restoreWallpaper() {
   try {
     var saved = localStorage.getItem('mineradio-wallpaper-current');
-    if (saved) {
-      var imageUrl = 'file:///' + saved.replace(/\\/g, '/');
-      document.documentElement.style.setProperty('--custom-bg-image', 'url("' + imageUrl.replace(/"/g, '\\"') + '")');
-      document.documentElement.style.setProperty('--custom-bg-image-opacity', '1');
-      document.body.classList.add('custom-background-override');
-    }
-  } catch (e) {}
+    if (!saved) return;
+    var api = window.desktopWindow;
+    if (!api || typeof api.readWallpaperFile !== 'function') return;
+    api.readWallpaperFile(saved).then(function(res){
+      if (res && res.ok && res.dataUrl) setWallpaperBackground(res.dataUrl);
+    }).catch(function(e){
+      console.warn('[WallpaperPicker] restore failed:', e);
+    });
+  } catch (e) {
+    console.warn('[WallpaperPicker] restore error:', e);
+  }
 }
 function startHotkeyCapture(action, scope) {
   hotkeyCaptureState = { action: action, scope: scope === 'global' ? 'global' : 'local' };

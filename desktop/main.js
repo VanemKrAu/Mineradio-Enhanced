@@ -1299,6 +1299,18 @@ ipcMain.handle('mineradio-wallpaper-scan', async (_event, rootPaths) => {
   }
 });
 
+ipcMain.handle('mineradio-wallpaper-read-file', async (_event, filePath) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') return { ok: false, error: 'INVALID_PATH' };
+    var ext = path.extname(filePath).toLowerCase();
+    var mime = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }[ext] || 'image/jpeg';
+    var buf = fs.readFileSync(filePath);
+    return { ok: true, dataUrl: 'data:' + mime + ';base64,' + buf.toString('base64') };
+  } catch (e) {
+    return { ok: false, error: e.message || 'READ_FAILED' };
+  }
+});
+
 ipcMain.handle('mineradio-wallpaper-choose-root', async () => {
   try {
     const result = await dialog.showOpenDialog({
