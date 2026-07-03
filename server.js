@@ -439,7 +439,7 @@ function normalizeManifestUpdateInfo(data) {
   const assetUrls = [downloadUrl].concat(Array.isArray(asset.downloadUrls) ? asset.downloadUrls : []);
   const patchUrls = patch ? [patch.downloadUrl].concat(Array.isArray(patch.downloadUrls) ? patch.downloadUrls : []) : [];
   const patchInfo = patch && patch.downloadUrl ? {
-    name: patch.name || updateAssetNameFromUrl(patch.downloadUrl) || `Mineradio-Enhanced-${APP_VERSION}→${latestVersion}.patch.json`,
+    name: patch.name || updateAssetNameFromUrl(patch.downloadUrl) || `Mineradio+-${APP_VERSION}→${latestVersion}.patch.json`,
     size: Number(patch.size || 0) || 0,
     contentType: patch.contentType || patch.content_type || 'application/json',
     downloadUrl: patch.downloadUrl,
@@ -453,7 +453,7 @@ function normalizeManifestUpdateInfo(data) {
     ? release.notes.slice(0, 4).map(cleanReleaseLine).filter(Boolean)
     : (extractReleaseNotes(release.body || data.body).length ? extractReleaseNotes(release.body || data.body) : UPDATE_FALLBACK_NOTES);
   const assetInfo = downloadUrl ? {
-    name: asset.name || updateAssetNameFromUrl(downloadUrl) || `Mineradio-Enhanced-${latestVersion}-Setup.exe`,
+    name: asset.name || updateAssetNameFromUrl(downloadUrl) || `Mineradio+-${latestVersion}-Setup.exe`,
     size: Number(asset.size || 0) || 0,
     contentType: asset.contentType || asset.content_type || '',
     downloadUrl,
@@ -469,7 +469,7 @@ function normalizeManifestUpdateInfo(data) {
     latestVersion,
     release: {
       tagName: release.tagName || release.tag_name || data.tagName || ('v' + latestVersion),
-      name: release.name || data.name || ('Mineradio-Enhanced v' + latestVersion),
+      name: release.name || data.name || ('Mineradio+ v' + latestVersion),
       version: latestVersion,
       publishedAt: release.publishedAt || release.published_at || data.publishedAt || '',
       htmlUrl: release.htmlUrl || release.html_url || data.htmlUrl || '',
@@ -580,7 +580,7 @@ function localUpdateFallback(reason, opts) {
     latestVersion: APP_VERSION,
     release: {
       tagName: 'v' + APP_VERSION,
-      name: 'Mineradio-Enhanced v' + APP_VERSION,
+      name: 'Mineradio+ v' + APP_VERSION,
       version: APP_VERSION,
       htmlUrl: '',
       downloadUrl: '',
@@ -667,7 +667,7 @@ function githubReleaseDownloadUrl(version, fileName) {
 }
 function parseLatestYmlUpdateInfo(text, reason) {
   const latestVersion = normalizeVersion(yamlScalar(text, 'version') || APP_VERSION) || APP_VERSION;
-  const assetPath = yamlScalar(text, 'path') || yamlScalar(text, 'url') || `Mineradio-Enhanced-${latestVersion}-Setup.exe`;
+  const assetPath = yamlScalar(text, 'path') || yamlScalar(text, 'url') || `Mineradio+-${latestVersion}-Setup.exe`;
   const sha512 = normalizeDigest(yamlScalar(text, 'sha512'), 'sha512');
   const size = Number(yamlScalar(text, 'size') || 0) || 0;
   const releaseDate = yamlScalar(text, 'releaseDate');
@@ -690,7 +690,7 @@ function parseLatestYmlUpdateInfo(text, reason) {
     latestVersion,
     release: {
       tagName: 'v' + latestVersion,
-      name: 'Mineradio-Enhanced v' + latestVersion,
+      name: 'Mineradio+ v' + latestVersion,
       version: latestVersion,
       publishedAt: releaseDate,
       htmlUrl: `https://github.com/${UPDATE_CONFIG.owner}/${UPDATE_CONFIG.repo}/releases/tag/v${latestVersion}`,
@@ -743,7 +743,7 @@ async function fetchLatestUpdateInfo() {
       latestVersion,
       release: {
         tagName: data.tag_name || ('v' + latestVersion),
-        name: data.name || ('Mineradio-Enhanced v' + latestVersion),
+        name: data.name || ('Mineradio+ v' + latestVersion),
         version: latestVersion,
         publishedAt: data.published_at || '',
         htmlUrl: data.html_url || '',
@@ -764,13 +764,13 @@ async function fetchLatestUpdateInfo() {
   }
 }
 function safeUpdateFileName(name, version) {
-  const raw = String(name || '').trim() || `Mineradio-Enhanced-${version || APP_VERSION}.exe`;
+  const raw = String(name || '').trim() || `Mineradio+-${version || APP_VERSION}.exe`;
   const cleaned = raw
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 160);
-  return cleaned || `Mineradio-Enhanced-${version || APP_VERSION}.exe`;
+  return cleaned || `Mineradio+-${version || APP_VERSION}.exe`;
 }
 function publicUpdateJob(job) {
   if (!job) return { ok: false, error: 'UPDATE_JOB_NOT_FOUND' };
@@ -3247,7 +3247,7 @@ const server = http.createServer(async (req, res) => {
   if (pn === '/api/app/version') {
     sendJSON(res, {
       name: APP_PACKAGE.name || 'mineradio',
-      productName: APP_PACKAGE.productName || 'Mineradio-Enhanced',
+      productName: APP_PACKAGE.productName || 'Mineradio+',
       version: APP_VERSION,
       update: {
         provider: UPDATE_CONFIG.provider,

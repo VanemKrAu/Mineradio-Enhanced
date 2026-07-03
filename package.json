@@ -1,9 +1,9 @@
 {
-  "name": "mineradio-enhanced",
-  "productName": "Mineradio-Enhanced",
+  "name": "mineradio-plus",
+  "productName": "Mineradio+",
   "version": "1.1.1-enhanced.1",
-  "description": "Mineradio 非官方增强版 — 在原版基础上加入 SMTC (Windows 系统媒体控件) 支持。沉浸式音乐播放器，融合天气电台、歌词舞台、粒子视觉和 3D 歌单架。",
-  "author": "VanemKrAu <fork@mineradio-enhanced> (https://github.com/VanemKrAu/Mineradio-Enhanced)",
+  "description": "Mineradio+ 个人修改增强版。沉浸式音乐播放器，融合天气电台、歌词舞台、粒子视觉和 3D 歌单架。",
+  "author": "VanemKrAu (https://github.com/VanemKrAu/Mineradio-Enhanced)",
   "main": "desktop/main.js",
   "private": true,
   "scripts": {
@@ -12,8 +12,8 @@
     "build:win:dir": "electron-builder --win dir"
   },
   "build": {
-    "appId": "com.mineradio-enhanced.desktop",
-    "productName": "Mineradio-Enhanced",
+    "appId": "com.mineradio-plus.desktop",
+    "productName": "Mineradio+",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -34,7 +34,7 @@
     ],
     "asar": false,
     "win": {
-      "executableName": "Mineradio-Enhanced",
+      "executableName": "Mineradio+",
       "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "target": [
@@ -52,14 +52,14 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Mineradio-Enhanced",
+      "shortcutName": "Mineradio+",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/installerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",
       "include": "build/installer.nsh",
-      "artifactName": "Mineradio-Enhanced-${version}-Setup.${ext}"
+      "artifactName": "Mineradio+-${version}-Setup.${ext}"
     },
     "publish": [
       {

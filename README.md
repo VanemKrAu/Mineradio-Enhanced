@@ -1,4 +1,4 @@
-# Mineradio-Enhanced
+# Mineradio+
 
 > **非官方二改增强版** — 基于 [Mineradio](https://github.com/XxHuberrr/Mineradio)（GPL-3.0）修改，按个人偏好持续调整。
 >
@@ -6,7 +6,7 @@
 >
 > 如需原版请访问：[github.com/XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 
-<img src="./build/icon.svg" alt="Mineradio-Enhanced" style="max-width:96px;width:100%;height:auto">
+<img src="./build/icon.svg" alt="Mineradio+" style="max-width:96px;width:100%;height:auto">
 
 ## ✨ 本版改动（陆续添加中）
 
@@ -21,7 +21,7 @@
 
 ### 其他增强
 
-- 应用名称改为 `Mineradio-Enhanced`，可与原版共存安装
+- 应用名称改为 `Mineradio+`，可与原版共存安装
 - Windows AppUserModelID 独立，互不冲突
 
 _更多改动随个人使用逐步加入。_
@@ -50,7 +50,7 @@ npm install
 npm run build:win
 ```
 
-产物位于 `dist/Mineradio-Enhanced-*-Setup.exe`。
+产物位于 `dist/Mineradio+-*-Setup.exe`。
 
 ## 版权说明
 
@@ -69,7 +69,7 @@ npm run build:win
 
 | 方面 | 官方版 | 本增强版 |
 |------|--------|----------|
-| 应用名称 | Mineradio | Mineradio-Enhanced |
+| 应用名称 | Mineradio | Mineradio+ |
 | SMTC 支持 | ❌ 无 | ✅ 完整支持 |
 | 应用 ID | com.mineradio.desktop | com.mineradio-enhanced.desktop |
 | 可共存安装 | ❌ | ✅ |
