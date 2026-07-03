@@ -1262,11 +1262,20 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1080px,cal
 .hotkey-status .source-icon{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,206,112,.12);color:#ffce70;font-size:11px;flex:0 0 auto}
 .hotkey-capture-tip{display:none;margin-top:10px;padding:9px 11px;border-radius:12px;border:1px solid rgba(var(--fc-accent-rgb),.22);background:rgba(var(--fc-accent-rgb),.075);font-size:12px;color:rgba(255,255,255,.74)}
 .hotkey-modal.capturing .hotkey-capture-tip{display:block}
-@media (max-width:720px){
-  .hotkey-row{grid-template-columns:1fr;gap:7px}
-  .hotkey-toolbar{align-items:flex-start;flex-direction:column}
-  .hotkey-note{text-align:left}
-}
+.about-modal{position:fixed;inset:0;z-index:1450;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.48);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.about-modal.show{display:flex}
+.about-dialog{width:min(420px,calc(100vw - 36px));border-radius:18px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(180deg,rgba(14,15,20,.96),rgba(5,6,8,.96));box-shadow:0 32px 110px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.08);padding:24px;color:#fff;text-align:center}
+.about-logo{width:72px;height:72px;border-radius:18px;margin:0 auto 12px;display:block}
+.about-name{font-size:18px;font-weight:800;letter-spacing:.02em}
+.about-version{margin-top:4px;font-size:13px;color:rgba(255,255,255,.45)}
+.about-desc{margin-top:12px;font-size:12.5px;line-height:1.6;color:rgba(255,255,255,.6)}
+.about-badge{display:inline-block;margin-top:10px;padding:3px 10px;border-radius:999px;background:rgba(0,245,212,.12);border:1px solid rgba(0,245,212,.22);color:var(--fc-accent);font-size:10.5px;font-weight:700;letter-spacing:.04em}
+.about-links{margin-top:16px;display:flex;flex-direction:column;gap:6px}
+.about-link{color:rgba(157,184,207,.78);font-size:11.5px;text-decoration:none;transition:color .15s}
+.about-link:hover{color:#fff}
+.about-footer{margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07);font-size:10.5px;color:rgba(255,255,255,.32);line-height:1.5}
+.about-close{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:rgba(255,255,255,.66);font-size:18px;line-height:1;cursor:pointer}
+.about-close:hover{background:rgba(255,255,255,.09);color:#fff}
 
 /* ============================================================ */
 /*  歌单/队列面板                                                 */
@@ -21995,13 +22004,20 @@ function ensureHotkeySettingsButton() {
   if (head.firstElementChild) head.firstElementChild.classList.add('fx-head-main');
   var actions = document.createElement('div');
   actions.className = 'fx-head-actions';
-  var btn = document.createElement('button');
-  btn.id = 'hotkey-settings-btn';
-  btn.type = 'button';
-  btn.className = 'fx-mini-btn ghost';
-  btn.textContent = '热键';
-  btn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openHotkeySettings(); });
-  actions.appendChild(btn);
+  var hotkeyBtn = document.createElement('button');
+  hotkeyBtn.id = 'hotkey-settings-btn';
+  hotkeyBtn.type = 'button';
+  hotkeyBtn.className = 'fx-mini-btn ghost';
+  hotkeyBtn.textContent = '热键';
+  hotkeyBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openHotkeySettings(); });
+  actions.appendChild(hotkeyBtn);
+  var aboutBtn = document.createElement('button');
+  aboutBtn.id = 'about-btn';
+  aboutBtn.type = 'button';
+  aboutBtn.className = 'fx-mini-btn ghost';
+  aboutBtn.textContent = '关于';
+  aboutBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openAboutModal(); });
+  actions.appendChild(aboutBtn);
   head.appendChild(actions);
 }
 function ensureHotkeyModal() {
@@ -22100,6 +22116,47 @@ function closeHotkeySettings() {
   hotkeyCaptureState = null;
   var modal = document.getElementById('hotkey-modal');
   if (modal) modal.classList.remove('show', 'capturing');
+}
+function ensureAboutModal() {
+  var modal = document.getElementById('about-modal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'about-modal';
+  modal.className = 'about-modal';
+  modal.innerHTML =
+    '<div class="about-dialog" role="dialog" aria-modal="true" aria-label="关于">' +
+      '<button class="about-close" type="button" id="about-close-btn" aria-label="关闭">×</button>' +
+      '<img class="about-logo" src="assets/icon.svg" alt="logo">' +
+      '<div class="about-name">Mineradio-Enhanced</div>' +
+      '<div class="about-version" id="about-version">加载中...</div>' +
+      '<div class="about-desc">基于 Mineradio 的个人修改增强版，按个人偏好持续调整。</div>' +
+      '<div class="about-badge">🎛 SMTC 系统媒体控件</div>' +
+      '<div class="about-links">' +
+        '<a class="about-link" href="https://github.com/VanemKrAu/Mineradio-Enhanced" target="_blank" rel="noopener">GitHub · VanemKrAu/Mineradio-Enhanced</a>' +
+        '<a class="about-link" href="https://github.com/XxHuberrr/Mineradio" target="_blank" rel="noopener">原版 · XxHuberrr/Mineradio</a>' +
+      '</div>' +
+      '<div class="about-footer">本增强版为个人修改版，仅根据本人使用习惯和审美进行调整，非官方发布。</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){
+    if (e.target === modal || e.target.id === 'about-close-btn') closeAboutModal();
+  });
+  return modal;
+}
+function openAboutModal() {
+  var modal = ensureAboutModal();
+  modal.classList.add('show');
+  fetch('/api/app/version').then(function(r){ return r.json(); }).then(function(data){
+    var el = document.getElementById('about-version');
+    if (el) el.textContent = 'v' + (data.version || '1.1.1-enhanced.1');
+  }).catch(function(){
+    var el = document.getElementById('about-version');
+    if (el) el.textContent = 'v1.1.1-enhanced.1';
+  });
+}
+function closeAboutModal() {
+  var modal = document.getElementById('about-modal');
+  if (modal) modal.classList.remove('show');
 }
 function startHotkeyCapture(action, scope) {
   hotkeyCaptureState = { action: action, scope: scope === 'global' ? 'global' : 'local' };
