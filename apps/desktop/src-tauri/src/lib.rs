@@ -404,6 +404,9 @@ pub fn run() {
             commands::login_qq_complete,
             commands::login_netease_close_window,
             commands::login_qq_close_window,
+            commands::login_kugou_show_window,
+            commands::login_kugou_complete,
+            commands::login_kugou_close_window,
             commands::get_minimize_to_tray,
             commands::set_minimize_to_tray,
         ])

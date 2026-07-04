@@ -82,7 +82,7 @@ export interface GlobalHotkeyEventPayload {
 	action: string;
 }
 
-export type ProviderLoginId = "netease" | "qq";
+export type ProviderLoginId = "netease" | "qq" | "kugou";
 
 export interface ProviderLoginWindowResult {
 	provider: ProviderLoginId;
@@ -411,7 +411,12 @@ export async function openProviderLoginWindow(provider: ProviderLoginId): Promis
 	if (!isTauriRuntime()) {
 		return providerLoginPlaceholder(provider);
 	}
-	const command = provider === "qq" ? "login_qq_complete" : "login_netease_complete";
+	const command =
+		provider === "qq"
+			? "login_qq_complete"
+			: provider === "kugou"
+				? "login_kugou_complete"
+				: "login_netease_complete";
 	const result = await invokeTauriCommand<ProviderLoginWindowResult>(command);
 	return result ?? providerLoginPlaceholder(provider);
 }

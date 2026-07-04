@@ -53,12 +53,20 @@ const QQ_LOGIN_COOKIE_PROBE_URLS: &[&str] = &[
     "https://c.y.qq.com",
     "https://i.y.qq.com",
 ];
+const KUGOU_LOGIN_COOKIE_PRIORITY: &[&str] = &[
+    "KuGoo", "kg_mid", "kg_dfid", "KugooID", "userid", "token", "t",
+];
+const KUGOU_LOGIN_COOKIE_PROBE_URLS: &[&str] = &[
+    "https://www.kugou.com",
+    "https://login-user.kugou.com",
+];
 
 pub mod labels {
     pub const MAIN: &str = "main";
     pub const DESKTOP_LYRICS: &str = "desktop-lyrics";
     pub const LOGIN_NETEASE: &str = "login-netease";
     pub const LOGIN_QQ: &str = "login-qq";
+    pub const LOGIN_KUGOU: &str = "login-kugou";
 }
 
 /// 返回 SQLite 本地存储的诊断信息。
@@ -363,6 +371,7 @@ pub fn desktop_lyrics_window_url() -> &'static str {
 pub enum LoginProvider {
     Netease,
     Qq,
+    Kugou,
 }
 
 impl LoginProvider {
@@ -370,6 +379,7 @@ impl LoginProvider {
         match self {
             LoginProvider::Netease => "netease",
             LoginProvider::Qq => "qq",
+            LoginProvider::Kugou => "kugou",
         }
     }
 }
@@ -457,6 +467,16 @@ pub fn login_window_config(provider: LoginProvider) -> LoginWindowConfig {
             width: 900.0,
             height: 720.0,
             min_width: 760.0,
+            min_height: 560.0,
+        },
+        LoginProvider::Kugou => LoginWindowConfig {
+            provider,
+            label: labels::LOGIN_KUGOU,
+            url: "https://www.kugou.com/",
+            title: "酷狗音乐登录",
+            width: 920.0,
+            height: 720.0,
+            min_width: 780.0,
             min_height: 560.0,
         },
     }
@@ -562,6 +582,15 @@ pub fn is_netease_cookie_domain(domain: &str) -> bool {
         || normalized.ends_with(".netease.com")
 }
 
+#[allow(dead_code)]
+pub fn is_kugou_cookie_domain(domain: &str) -> bool {
+    let normalized = normalize_cookie_domain(domain);
+    normalized == "kugou.com"
+        || normalized.ends_with(".kugou.com")
+        || normalized == "kgimg.com"
+        || normalized.ends_with(".kgimg.com")
+}
+
 pub fn login_popup_action(provider: LoginProvider, url: &str) -> LoginPopupAction {
     let Ok(parsed) = tauri::Url::parse(url) else {
         return LoginPopupAction::Deny;
@@ -573,6 +602,7 @@ pub fn login_popup_action(provider: LoginProvider, url: &str) -> LoginPopupActio
     let provider_domain = match provider {
         LoginProvider::Netease => is_netease_cookie_domain(host),
         LoginProvider::Qq => is_qq_cookie_domain(host),
+        LoginProvider::Kugou => is_kugou_cookie_domain(host),
     };
     if provider_domain {
         LoginPopupAction::NavigateInLoginWindow
@@ -627,17 +657,37 @@ pub fn build_qq_login_cookie_header(cookies: &[LoginCookie]) -> String {
     build_login_cookie_header(cookies, is_qq_cookie_domain, QQ_LOGIN_COOKIE_PRIORITY)
 }
 
+#[allow(dead_code)]
+pub fn build_kugou_login_cookie_header(cookies: &[LoginCookie]) -> String {
+    build_login_cookie_header(cookies, is_kugou_cookie_domain, KUGOU_LOGIN_COOKIE_PRIORITY)
+}
+
 fn login_cookie_has_required_session(provider: LoginProvider, cookie_text: &str) -> bool {
     match provider {
         LoginProvider::Netease => netease_cookie_has_login(cookie_text),
         LoginProvider::Qq => qq_cookie_has_playback_login(cookie_text),
+        LoginProvider::Kugou => kugou_cookie_has_login(cookie_text),
     }
 }
 
 fn login_cookie_partial(provider: LoginProvider, cookie_text: &str) -> bool {
-    provider == LoginProvider::Qq
-        && qq_cookie_has_login(cookie_text)
-        && !qq_cookie_has_playback_login(cookie_text)
+    match provider {
+        LoginProvider::Qq => {
+            qq_cookie_has_login(cookie_text) && !qq_cookie_has_playback_login(cookie_text)
+        }
+        LoginProvider::Netease | LoginProvider::Kugou => false,
+    }
+}
+
+#[allow(dead_code)]
+pub fn kugou_cookie_has_login(cookie_text: &str) -> bool {
+    let obj = parse_cookie_header(cookie_text);
+    let userid = obj.get("userid").or_else(|| obj.get("KugooID")).or_else(|| obj.get("kugou_id"));
+    let has_userid = userid.map(|v| v.chars().any(|c| c.is_ascii_digit())).unwrap_or(false);
+    let has_token = ["token", "KuGoo", "t"]
+        .iter()
+        .any(|name| obj.get(*name).map(|v| !v.is_empty()).unwrap_or(false));
+    has_userid && has_token
 }
 
 pub fn build_login_session_cookie_request(
@@ -722,6 +772,7 @@ fn post_login_session_cookie_request(
     {
         "netease" => LoginProvider::Netease,
         "qq" => LoginProvider::Qq,
+        "kugou" => LoginProvider::Kugou,
         _ => return Err("LOGIN_SIDECAR_BAD_RESPONSE".into()),
     };
     Ok(LoginSessionImportResult {
@@ -748,6 +799,7 @@ fn login_cookie_probe_urls(provider: LoginProvider) -> &'static [&'static str] {
     match provider {
         LoginProvider::Netease => NETEASE_LOGIN_COOKIE_PROBE_URLS,
         LoginProvider::Qq => QQ_LOGIN_COOKIE_PROBE_URLS,
+        LoginProvider::Kugou => KUGOU_LOGIN_COOKIE_PROBE_URLS,
     }
 }
 
@@ -755,6 +807,7 @@ fn build_provider_login_cookie_header(provider: LoginProvider, cookies: &[LoginC
     match provider {
         LoginProvider::Netease => build_netease_login_cookie_header(cookies),
         LoginProvider::Qq => build_qq_login_cookie_header(cookies),
+        LoginProvider::Kugou => build_kugou_login_cookie_header(cookies),
     }
 }
 
@@ -1625,6 +1678,26 @@ pub fn login_netease_close_window(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn login_qq_close_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(win) = login_window(&app, LoginProvider::Qq) {
+        win.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+n#[tauri::command]
+pub fn login_kugou_show_window(app: tauri::AppHandle) -> Result<(), String> {
+    ensure_login_window(&app, LoginProvider::Kugou).map(|_| ())
+}
+
+#[tauri::command]
+pub async fn login_kugou_complete(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<LoginSessionImportResult, String> {
+    complete_provider_login_from_window(app, state, LoginProvider::Kugou).await
+}
+
+#[tauri::command]
+pub fn login_kugou_close_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = login_window(&app, LoginProvider::Kugou) {
         win.close().map_err(|e| e.to_string())?;
     }
     Ok(())

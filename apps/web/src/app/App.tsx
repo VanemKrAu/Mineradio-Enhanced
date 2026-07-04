@@ -87,6 +87,7 @@ import {
   type VisualGuideStep,
 } from "../components/shell/VisualGuideHost";
 import { UpdateHost } from "../components/shell/UpdateHost";
+import { AboutHost } from "../components/shell/AboutHost";
 import { EmptyHomeHost, type HomeListenRecord, type HomeListenSummary } from "../home/EmptyHomeHost";
 import { SplashHost, type SplashHostProps } from "../visual/SplashHost";
 import {
@@ -852,16 +853,11 @@ export function applyDesktopWindowShellState(state: WindowState): void {
 
 function DesktopTitlebar({
   maximized,
-  updateSlot,
-  onGuide,
-  onDiy,
-  diyActive,
-  onMinimize,
-  onToggleMaximize,
-  onClose,
+  aboutSlot,
 }: {
   maximized?: boolean;
   updateSlot: ReactElement | null;
+  aboutSlot: ReactElement;
   onGuide: () => void;
   onDiy: () => void;
   diyActive: boolean;
@@ -1044,6 +1040,7 @@ export function App({
   const [customLyricVersion, setCustomLyricVersion] = useState(0);
   const [desktopLyricsEnabled, setDesktopLyricsEnabled] = useState(false);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [aboutModalOpen, setAboutModalOpen] = useState(false);
   const [collectTarget, setCollectTarget] = useState<Track | null>(null);
   const [collectBusyPlaylistId, setCollectBusyPlaylistId] = useState<
     string | null
@@ -3600,6 +3597,18 @@ export function App({
         onGuide={openHomeProductGuide}
         onDiy={toggleDiyMode}
         diyActive={diyMode}
+        aboutSlot={
+          <button
+            id="about-btn"
+            className="icon-btn"
+            type="button"
+            onClick={() => setAboutModalOpen(true)}
+            title="关于"
+            aria-label="关于"
+          >
+            ⓘ
+          </button>
+        }
         onMinimize={() => void minimizeWindow()}
         onToggleMaximize={() => void toggleWindowMaximize()}
         onClose={() => void closeWindow()}
@@ -4377,6 +4386,10 @@ export function App({
       >
         {toast ?? ""}
       </div>
+      <AboutHost
+        open={aboutModalOpen}
+        onClose={() => setAboutModalOpen(false)}
+      />
     </div>
   );
 }
