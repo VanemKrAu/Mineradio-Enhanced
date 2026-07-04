@@ -1732,9 +1732,16 @@ export function App({
   const refreshProviderLoginQr = useCallback(async (provider: ProviderId) => {
     const client = sidecarClient;
     const seq = ++loginQrRequestSeqRef.current;
-    const setQr = provider === "qq" ? setQqQr : setNeteaseQr;
-    const setQrStatus = provider === "qq" ? setQqQrStatus : setNeteaseQrStatus;
+    let setQr: (qr: LoginQrState | null) => void;
+    let setQrStatus: (status: LoginQrStatusState) => void;
+    if (provider === "qq") { setQr = setQqQr; setQrStatus = setQqQrStatus; }
+    else if (provider === "kugou") { setQr = setKugouQr; setQrStatus = setKugouQrStatus; }
+    else { setQr = setNeteaseQr; setQrStatus = setNeteaseQrStatus; }
+    if (provider === "qq") { setQr = setQqQr; setQrStatus = setQqQrStatus; }
+    else if (provider === "kugou") { setQr = setKugouQr; setQrStatus = setKugouQrStatus; }
+    else { setQr = setNeteaseQr; setQrStatus = setNeteaseQrStatus; }
     setQr(null);
+    setQrStatus(initialQrStatusForProvider(provider));
     setQrStatus(initialQrStatusForProvider(provider));
     if (!client) {
       setQrStatus({ text: "sidecar 未连接，稍后再试", tone: "fail" });
@@ -1752,28 +1759,25 @@ export function App({
     } catch (e) {
       if (seq !== loginQrRequestSeqRef.current) return;
       const message = e instanceof Error ? e.message : "二维码生成失败";
-      setQrStatus({ text: message, tone: "fail" });
-    }
-  }, [sidecarClient]);
-
   const resetProviderLoginQr = useCallback(() => {
     loginQrRequestSeqRef.current += 1;
     setNeteaseQr(null);
     setQqQr(null);
+    setKugouQr(null);
     setNeteaseQrStatus(INITIAL_NETEASE_QR_STATUS);
     setQqQrStatus(INITIAL_QQ_QR_STATUS);
+    setKugouQrStatus(INITIAL_KUGOU_QR_STATUS);
   }, []);
-
   const openLoginModal = useCallback(() => {
     const loggedProviderCount =
-      (neteaseStatus?.loggedIn ? 1 : 0) + (qqStatus?.loggedIn ? 1 : 0);
+      (neteaseStatus?.loggedIn ? 1 : 0) + (qqStatus?.loggedIn ? 1 : 0) + (kugouStatus?.loggedIn ? 1 : 0);
     setAccountDropdownOpen(false);
     resetProviderLoginQr();
     setLoginModalOpen(true);
     if (loggedProviderCount > 0) {
       setLoginModalMode("add-account");
       setLoginProvider(
-        !neteaseStatus?.loggedIn ? "netease" : !qqStatus?.loggedIn ? "qq" : "netease",
+        !neteaseStatus?.loggedIn ? "netease" : !qqStatus?.loggedIn ? "qq" : !kugouStatus?.loggedIn ? "kugou" : "netease",
       );
     } else {
       setLoginModalMode("full");
@@ -1782,34 +1786,25 @@ export function App({
     setQqManualCookieOpen(false);
     void refreshProviderStatus("netease");
     void refreshProviderStatus("qq");
+    void refreshProviderStatus("kugou");
   }, [
     neteaseStatus?.loggedIn,
     qqStatus?.loggedIn,
     refreshProviderStatus,
     resetProviderLoginQr,
   ]);
-
-  const openSingleProviderLogin = useCallback((provider: ProviderId) => {
-    setAccountDropdownOpen(false);
-    resetProviderLoginQr();
-    setLoginModalOpen(true);
-    setLoginProvider(provider);
-    setLoginModalMode("single-provider");
-    setQqManualCookieOpen(false);
-  }, [resetProviderLoginQr]);
-
   const handleAccountButtonClick = useCallback(() => {
-    if (neteaseStatus?.loggedIn || qqStatus?.loggedIn) {
+    if (neteaseStatus?.loggedIn || qqStatus?.loggedIn || kugouStatus?.loggedIn) {
       setAccountDropdownOpen((open) => !open);
       return;
     }
     openLoginModal();
-  }, [neteaseStatus?.loggedIn, openLoginModal, qqStatus?.loggedIn]);
+  }, [neteaseStatus?.loggedIn, openLoginModal, qqStatus?.loggedIn, kugouStatus?.loggedIn]);
 
   useEffect(() => {
-    if (neteaseStatus?.loggedIn || qqStatus?.loggedIn) return;
+    if (neteaseStatus?.loggedIn || qqStatus?.loggedIn || kugouStatus?.loggedIn) return;
     setAccountDropdownOpen(false);
-  }, [neteaseStatus?.loggedIn, qqStatus?.loggedIn]);
+  }, [neteaseStatus?.loggedIn, qqStatus?.loggedIn, kugouStatus?.loggedIn]);
 
   useEffect(() => {
     if (!accountDropdownOpen) return;
@@ -1827,7 +1822,7 @@ export function App({
   }, [accountDropdownOpen]);
 
   useEffect(() => {
-    if (!loginModalOpen) return;
+    const activeQr = loginProvider === "qq" ? qqQr : loginProvider === "kugou" ? kugouQr : neteaseQr;
     if (loginModalMode === "add-account") return;
     void refreshProviderLoginQr(loginProvider);
   }, [loginModalMode, loginModalOpen, loginProvider, refreshProviderLoginQr]);
@@ -1840,15 +1835,14 @@ export function App({
       !activeQr?.key ||
       activeQr.completed ||
       !sidecarClient
-    ) {
-      return;
-    }
+    const setQr = provider === "qq" ? setQqQr : provider === "kugou" ? setKugouQr : setNeteaseQr;
+    const setQrStatus = provider === "qq" ? setQqQrStatus : provider === "kugou" ? setKugouQrStatus : setNeteaseQrStatus;
 
     let cancelled = false;
     let checkInFlight = false;
     const provider = loginProvider;
-    const setQr = provider === "qq" ? setQqQr : setNeteaseQr;
-    const setQrStatus = provider === "qq" ? setQqQrStatus : setNeteaseQrStatus;
+    const setQr = provider === "qq" ? setQqQr : provider === "kugou" ? setKugouQr : setNeteaseQr;
+    const setQrStatus = provider === "qq" ? setQqQrStatus : provider === "kugou" ? setKugouQrStatus : setNeteaseQrStatus;
     const check = async () => {
       if (checkInFlight) return;
       checkInFlight = true;

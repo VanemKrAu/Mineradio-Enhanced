@@ -319,7 +319,7 @@ fn main_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     app.get_webview_window(labels::MAIN)
         .ok_or_else(|| "main window not found".to_string())
 }
-nfn wallpaper_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
+fn wallpaper_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     app.get_webview_window(labels::WALLPAPER)
 }
 
@@ -1749,7 +1749,7 @@ pub fn login_kugou_close_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-n// === Wallpaper commands ===
+// === Wallpaper commands ===
 
 #[tauri::command]
 pub fn wallpaper_scan_libraries(
