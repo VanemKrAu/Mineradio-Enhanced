@@ -359,6 +359,17 @@ export async function closeWindow(): Promise<void> {
 	await invokeTauriCommand("window_close");
 }
 
+export async function getMinimizeToTray(): Promise<boolean> {
+	if (!isTauriRuntime()) return false;
+	const result = await invokeTauriCommand<boolean>("get_minimize_to_tray");
+	return result ?? false;
+}
+
+export async function setMinimizeToTray(enabled: boolean): Promise<void> {
+	if (!isTauriRuntime()) return;
+	await invokeTauriCommand("set_minimize_to_tray", { enabled });
+}
+
 export async function openExternalUrl(url: string): Promise<boolean> {
 	if (!isTauriRuntime()) return false;
 	try {

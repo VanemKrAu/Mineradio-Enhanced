@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { FX_DEFAULTS, type FxState } from "@mineradio/visual-engine";
+import { getMinimizeToTray, setMinimizeToTray } from "../tauri/runtime";
 
 const FX_FAB_AUTO_HIDE_STORE_KEY = "mineradio-fx-fab-auto-hide-v1";
 
@@ -460,6 +461,7 @@ export function VisualControlPanelHost(
   const [open, setOpen] = useState(false);
   const [autoHide, setAutoHide] = useState(readFxFabAutoHidePreference);
   const [peek, setPeek] = useState(false);
+  const [minimizeTray, setMinimizeTray] = useState(false);
   const revealArmedRef = useRef(true);
   const previousAutoHideRef = useRef(autoHide);
   const preset = Math.max(0, Math.min(6, Math.round(props.preset ?? 0)));
@@ -497,6 +499,16 @@ export function VisualControlPanelHost(
       window.removeEventListener("mouseleave", clearPeek);
     };
   }, [autoHide, open]);
+
+  useEffect(() => {
+    getMinimizeToTray().then(setMinimizeTray).catch(() => {});
+  }, []);
+
+  const toggleMinimizeTray = useCallback(() => {
+    const next = !minimizeTray;
+    setMinimizeToTray(next).then(() => setMinimizeTray(next)).catch(() => {});
+  }, [minimizeTray]);
+
   const changePreset = useCallback(
     (next: number) => {
       props.onPresetChange?.(next);
@@ -981,6 +993,20 @@ export function VisualControlPanelHost(
             />
             {ADVANCED_SLIDERS.map(slider)}
           </div>
+        </div>
+
+        <div className="fx-section-label">系统</div>
+        <div className="fx-toggle-grid">
+          <button
+            id="t-minimizeToTray"
+            type="button"
+            className={minimizeTray ? "fx-toggle on" : "fx-toggle"}
+            title="关闭窗口时最小化到系统托盘，不退出程序"
+            onClick={toggleMinimizeTray}
+          >
+            <span>关闭后最小化到托盘</span>
+            <span className="dot" />
+          </button>
         </div>
       </div>
     </>

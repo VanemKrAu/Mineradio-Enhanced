@@ -15,6 +15,42 @@ use std::{
 };
 use tauri::Manager;
 
+use tauri::{
+    image::Image,
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::TrayIconBuilder,
+};
+
+// Settings 持久化 — 与 Electron 版保持一致的 settings.json 格式
+const SETTINGS_FILE_NAME: &str = "settings.json";
+
+pub(crate) fn read_settings(app_data_dir: &std::path::Path) -> serde_json::Value {
+    let path = app_data_dir.join(SETTINGS_FILE_NAME);
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    } else {
+        serde_json::json!({})
+    }
+}
+
+pub(crate) fn save_settings(app_data_dir: &std::path::Path, settings: &serde_json::Value) {
+    let _ = std::fs::create_dir_all(app_data_dir);
+    let path = app_data_dir.join(SETTINGS_FILE_NAME);
+    if let Ok(text) = serde_json::to_string_pretty(settings) {
+        let _ = std::fs::write(&path, text);
+    }
+}
+
+fn minimize_to_tray_from_settings(settings: &serde_json::Value) -> bool {
+    settings
+        .get("minimizeToTray")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
 #[derive(serde::Serialize, Clone)]
 pub struct RuntimeConfig {
     pub sidecar_base_url: String,
@@ -83,6 +119,8 @@ pub struct AppState {
     pub sidecar_supervisor_running: AtomicBool,
     pub db: Option<Mutex<db::DbRuntimeState>>,
     pub db_init_error: Option<String>,
+    pub minimize_to_tray: AtomicBool,
+    pub quitting_via_tray: AtomicBool,
 }
 
 impl AppState {
@@ -95,6 +133,7 @@ impl AppState {
         sidecar_log_path: PathBuf,
         db: Option<Mutex<db::DbRuntimeState>>,
         db_init_error: Option<String>,
+        minimize_to_tray: bool,
     ) -> Self {
         Self {
             config: RuntimeConfig {
@@ -121,6 +160,8 @@ impl AppState {
             sidecar_supervisor_running: AtomicBool::new(true),
             db,
             db_init_error,
+            minimize_to_tray: AtomicBool::new(minimize_to_tray),
+            quitting_via_tray: AtomicBool::new(false),
         }
     }
 }
@@ -240,6 +281,46 @@ fn reactivate_main_window_for_single_instance(app: &tauri::AppHandle) {
     }
 }
 
+/// 创建系统托盘图标及其右键菜单。
+pub fn create_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let show = MenuItemBuilder::with_id("show", "\u{663E}\u{793A}\u{7A97}\u{53E3}").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "\u{9000}\u{51FA}").build(app)?;
+    let menu = MenuBuilder::new(app)
+        .item(&show)
+        .separator()
+        .item(&quit)
+        .build()?;
+
+    let icon = Image::from_bytes(include_bytes!("../icons/icon.png"))?;
+
+    TrayIconBuilder::with_id("main")
+        .icon(icon)
+        .tooltip("Mineradio+")
+        .menu(&menu)
+        .on_menu_event(|app, event| {
+            let state = app.state::<AppState>();
+            match event.id.as_ref() {
+                "show" => {
+                    if let Some(window) = app.get_webview_window(commands::labels::MAIN) {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                    }
+                }
+                "quit" => {
+                    state.quitting_via_tray.store(true, Ordering::Relaxed);
+                    if let Some(window) = app.get_webview_window(commands::labels::MAIN) {
+                        let _ = window.close();
+                    }
+                }
+                _ => {}
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
 pub fn run() {
     let app_data_dir = paths::resolve_app_data_dir();
     let log_dir = paths::resolve_log_dir();
@@ -267,6 +348,10 @@ pub fn run() {
         }
     };
 
+    // 读取 persisted 设置
+    let settings = read_settings(&app_data_dir);
+    let minimize_to_tray = minimize_to_tray_from_settings(&settings);
+
     let state = AppState::new(
         base_url.clone(),
         app_data_dir.to_string_lossy().to_string(),
@@ -276,6 +361,7 @@ pub fn run() {
         sidecar_log_path,
         db_state,
         db_init_error,
+        minimize_to_tray,
     );
 
     let setup_app_version = app_version.clone();
@@ -317,7 +403,9 @@ pub fn run() {
             commands::login_netease_complete,
             commands::login_qq_complete,
             commands::login_netease_close_window,
-            commands::login_qq_close_window
+            commands::login_qq_close_window,
+            commands::get_minimize_to_tray,
+            commands::set_minimize_to_tray,
         ])
         .setup(move |app| {
             // NOTE: spawn + health-wait are best-effort. This setup closure only
@@ -346,6 +434,13 @@ pub fn run() {
                 setup_app_version.clone(),
                 setup_resource_dir.clone(),
             );
+
+            // 托盘图标 — 仅当 minimize_to_tray 启用时才创建
+            if state.minimize_to_tray.load(Ordering::Relaxed) {
+                if let Err(e) = create_tray(app.handle()) {
+                    eprintln!("tray creation failed: {e}");
+                }
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -374,7 +469,31 @@ pub fn run() {
             if !matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 return;
             }
+
+            // 从 event 中取出 api 以决定是否阻止关闭
+            let close_api = match &event {
+                tauri::WindowEvent::CloseRequested { api, .. } => Some(api),
+                _ => None,
+            };
+
             let state = window.state::<AppState>();
+            let minimize = state.minimize_to_tray.load(Ordering::Relaxed);
+            let quitting = state.quitting_via_tray.load(Ordering::Relaxed);
+
+            if minimize && !quitting {
+                // 最小化到托盘：阻止关闭，隐藏窗口
+                if let Some(api) = close_api {
+                    api.prevent_close();
+                }
+                let _ = window.hide();
+                // 确保托盘存在
+                if window.app_handle().tray_by_id("main").is_none() {
+                    let _ = create_tray(window.app_handle());
+                }
+                return;
+            }
+
+            // 正常关闭 — 清理 sidecar + 桌面歌词
             state
                 .sidecar_supervisor_running
                 .store(false, Ordering::Relaxed);
@@ -417,6 +536,7 @@ mod tests {
             std::path::PathBuf::from("/logs/sidecar-runtime.log"),
             Some(Mutex::new(db_state)),
             None,
+            false,
         );
         assert_eq!(s.config.sidecar_base_url, "http://127.0.0.1:1");
         assert_eq!(s.config.app_data_dir, "/data");

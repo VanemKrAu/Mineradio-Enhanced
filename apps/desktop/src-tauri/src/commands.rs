@@ -1215,6 +1215,42 @@ pub fn window_close(app: tauri::AppHandle) -> Result<(), String> {
     win.close().map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn get_minimize_to_tray(state: tauri::State<'_, crate::AppState>) -> Result<bool, String> {
+    Ok(state.minimize_to_tray.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+#[tauri::command]
+pub fn set_minimize_to_tray(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+    enabled: bool,
+) -> Result<(), String> {
+    state
+        .minimize_to_tray
+        .store(enabled, std::sync::atomic::Ordering::Relaxed);
+
+    // 持久化到 settings.json（与 lib.rs 中同路径）
+    let app_data_dir = std::path::Path::new(&state.config.app_data_dir);
+    let mut settings = crate::read_settings(app_data_dir);
+    settings["minimizeToTray"] = serde_json::json!(enabled);
+    crate::save_settings(app_data_dir, &settings);
+
+    if enabled {
+        // 确保托盘存在
+        if app.tray_by_id("main").is_none() {
+            let _ = crate::create_tray(&app);
+        }
+    } else {
+        // 移除托盘
+        if let Some(tray) = app.tray_by_id("main") {
+            let _ = tray.remove();
+        }
+    }
+
+    Ok(())
+}
+
 pub fn build_window_state_snapshot(
     is_maximized: bool,
     is_native_full_screen: bool,
