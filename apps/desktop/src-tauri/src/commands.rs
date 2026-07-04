@@ -67,7 +67,6 @@ pub mod labels {
     pub const LOGIN_NETEASE: &str = "login-netease";
     pub const LOGIN_QQ: &str = "login-qq";
     pub const LOGIN_KUGOU: &str = "login-kugou";
-    pub const WALLPAPER: &str = "wallpaper";
 }
 
 /// 返回 SQLite 本地存储的诊断信息。
@@ -319,55 +318,9 @@ fn main_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     app.get_webview_window(labels::MAIN)
         .ok_or_else(|| "main window not found".to_string())
 }
-fn wallpaper_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
-    app.get_webview_window(labels::WALLPAPER)
-}
 
-fn ensure_wallpaper_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
-    if let Some(win) = wallpaper_window(app) {
-        return Ok(win);
-    }
-    let win = tauri::WebviewWindowBuilder::new(
-        app,
-        labels::WALLPAPER,
-        tauri::WebviewUrl::App("index.html?view=wallpaper".into()),
-    )
-    .title("")
-    .fullscreen(true)
-    .transparent(true)
-    .decorations(false)
-    .focusable(false)
-    .skip_taskbar(true)
-    .build()
-    .map_err(|e| e.to_string())?;
-
-
-    Ok(win)
-}
 
 #[tauri::command]
-pub fn wallpaper_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
-    if enabled {
-        let win = ensure_wallpaper_window(&app)?;
-        win.show().map_err(|e| e.to_string())?;
-        #[cfg(target_os = "windows")]
-        if let Ok(hwnd) = win.hwnd() {
-            let _ = crate::wallpaper::attach_to_workerw(hwnd.0 as isize);
-        }
-    } else {
-        if let Some(win) = wallpaper_window(&app) {
-            win.close().map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
-}#[tauri::command]
-pub fn wallpaper_update(app: tauri::AppHandle, state: serde_json::Value) -> Result<(), String> {
-    if let Some(win) = wallpaper_window(&app) {
-        win.emit("mineradio-wallpaper-state", state)
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
 
 pub fn global_hotkey_conflict() -> GlobalHotkeyConflict {
     GlobalHotkeyConflict {

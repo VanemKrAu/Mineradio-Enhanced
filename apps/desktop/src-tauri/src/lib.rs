@@ -414,8 +414,6 @@ pub fn run() {
             commands::wallpaper_extract_texture,
             commands::wallpaper_read_file,
             commands::wallpaper_clear_cache,
-            commands::wallpaper_set_enabled,
-            commands::wallpaper_update,
         ])
         .setup(move |app| {
             // NOTE: spawn + health-wait are best-effort. This setup closure only

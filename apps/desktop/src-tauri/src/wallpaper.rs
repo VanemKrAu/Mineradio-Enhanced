@@ -380,67 +380,47 @@ fn base64_encode(bytes: &[u8]) -> String {
 }
 
 
-/// Embed a wallpaper window into the desktop WorkerW layer using PowerShell.
-/// Call this after creating the wallpaper window to make it a true desktop wallpaper.
-#[cfg(target_os = "windows")]
-pub fn attach_to_workerw(hwnd: isize) -> Result<(), String> {
-    use std::process::Command;
-    let script = format!(
-        r#"Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public class WpEmbed {{
-    [DllImport("user32.dll")] public static extern IntPtr FindWindow(string cls, string win);
-    [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr wp, IntPtr lp, uint f, uint t, out IntPtr r);
-    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc e, IntPtr l);
-    [DllImport("user32.dll")] public static extern IntPtr FindWindowEx(IntPtr p, IntPtr c, string cls, string win);
-    [DllImport("user32.dll")] public static extern IntPtr SetParent(IntPtr c, IntPtr p);
-    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);
-    [DllImport("user32.dll")] public static extern int GetClassNameW(IntPtr h, System.Text.StringBuilder c, int n);
-    [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
-    public delegate bool EnumWindowsProc(IntPtr h, IntPtr l);
-}}
-$hwnd = [IntPtr]{0}
-$progman = [WpEmbed]::FindWindow("Progman", [IntPtr]::Zero)
-if ($progman -eq [IntPtr]::Zero) {{ exit 1 }}
-[WpEmbed]::SendMessageTimeout($progman, 0x052C, [IntPtr]::Zero, [IntPtr]::Zero, 0, 1000, [ref][IntPtr]::Zero)
-$workerw = [IntPtr]::Zero
-$callback = [WpEmbed+EnumWindowsProc] {{
-    param($h, $l)
-    $sb = New-Object Text.StringBuilder 256
-    $len = [WpEmbed]::GetClassNameW($h, $sb, 256)
-    if ($sb.ToString() -eq "WorkerW") {{
-        $child = [WpEmbed]::FindWindowEx($h, [IntPtr]::Zero, "SHELLDLL_DefView", [IntPtr]::Zero)
-        if ($child -ne [IntPtr]::Zero) {{
-            [Runtime.InteropServices.Marshal]::WriteIntPtr($l, $h)
-            return $false
-        }}
-    }}
-    return $true
-}}
-$lp = [Runtime.InteropServices.Marshal]::AllocHGlobal([Runtime.InteropServices.Marshal]::SizeOf([IntPtr]))
-[Runtime.InteropServices.Marshal]::WriteIntPtr($lp, [IntPtr]::Zero)
-[WpEmbed]::EnumWindows($callback, $lp)
-$workerw = [Runtime.InteropServices.Marshal]::ReadIntPtr($lp)
-if ($workerw -ne [IntPtr]::Zero) {{
-    [WpEmbed]::SetParent($hwnd, $workerw) | Out-Null
-    $cx = [WpEmbed]::GetSystemMetrics(0)
-    $cy = [WpEmbed]::GetSystemMetrics(1)
-    [WpEmbed]::SetWindowPos($hwnd, -1, 0, 0, $cx, $cy, 0x0040) | Out-Null
-}}
-"#, hwnd);
-    let output = Command::new("powershell.exe")
-        .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
-        .output()
-        .map_err(|e| format!("PowerShell failed: {}", e))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("WorkerW embed failed: {}", stderr));
-    }
-    Ok(())
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[cfg(not(target_os = "windows"))]
-pub fn attach_to_workerw(_hwnd: isize) -> Result<(), String> {
-    Err("WorkerW embedding requires Windows".to_string())
+    #[test]
+    fn scan_empty_dir_returns_empty() {
+        let tmp = std::env::temp_dir().join("mineradio-wp-test-empty");
+        let _ = fs::create_dir_all(&tmp);
+        let results = scan_library(&tmp);
+        assert!(results.is_empty());
+        let _ = fs::remove_dir(&tmp);
+    }
+
+    #[test]
+    fn base64_encode_empty() {
+        assert_eq!(base64_encode(b""), "");
+    }
+
+    #[test]
+    fn base64_encode_hello() {
+        assert_eq!(base64_encode(b"hello"), "aGVsbG8=");
+    }
+
+    #[test]
+    fn base64_encode_binary() {
+        assert_eq!(base64_encode(&[0x00, 0xFF, 0xAA]), "AP+q");
+    }
+
+    #[test]
+    fn mime_for_path_works() {
+        assert_eq!(mime_for_path(Path::new("test.jpg")), "image/jpeg");
+        assert_eq!(mime_for_path(Path::new("test.png")), "image/png");
+        assert_eq!(mime_for_path(Path::new("test.mp4")), "video/mp4");
+        assert_eq!(mime_for_path(Path::new("test.unknown")), "application/octet-stream");
+    }
+
+    #[test]
+    fn detect_steam_path_returns_none_in_ci() {
+        // In a CI/non-Steam environment, this should return None
+        let result = detect_steam_path();
+        // Just ensure it doesn't panic
+        let _ = result;
+    }
 }

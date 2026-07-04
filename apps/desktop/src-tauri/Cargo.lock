@@ -2128,7 +2128,6 @@ name = "mineradio-tauri"
 version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
- "raw-window-handle",
  "rusqlite",
  "serde",
  "serde_json",
