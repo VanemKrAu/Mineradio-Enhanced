@@ -114,11 +114,17 @@ export class PlayerController {
 		await resumeBeforePlay;
 		await playPromise;
 		await resumeMineradioAudioContext(audio);
+		if (typeof navigator !== "undefined" && navigator.mediaSession) {
+			navigator.mediaSession.playbackState = "playing";
+		}
 	}
 
 	pause(): void {
 		const audio = this.requireAudio();
 		audio.pause();
+		if (typeof navigator !== "undefined" && navigator.mediaSession) {
+			navigator.mediaSession.playbackState = "paused";
+		}
 	}
 
 	seek(timeMs: number): void {
@@ -129,6 +135,53 @@ export class PlayerController {
 	setVolume(volume: number): void {
 		const audio = this.requireAudio();
 		audio.volume = Math.max(0, Math.min(1, volume));
+	}
+
+	// -- SMTC: System Media Transport Controls via Media Session API --
+	updateMediaMetadata(info: {
+		title?: string;
+		artist?: string;
+		album?: string;
+		artwork?: { src: string; sizes?: string; type?: string }[];
+	}): void {
+		if (typeof navigator === "undefined" || !navigator.mediaSession) return;
+		try {
+			navigator.mediaSession.metadata = new MediaMetadata({
+				title: info.title || "Mineradio",
+				artist: info.artist || "",
+				album: info.album || "",
+				artwork: info.artwork || [],
+			});
+		} catch {}
+	}
+
+	private setupMediaSession(): void {
+		if (typeof navigator === "undefined" || !navigator.mediaSession) return;
+		const audio = this.requireAudio();
+		const actions: Record<string, MediaSessionActionHandler> = {
+			play: () => { this.play(); },
+			pause: () => { this.pause(); },
+			seekforward: () => {
+				audio.currentTime = Math.min(audio.duration || 0, (audio.currentTime || 0) + 10);
+			},
+			seekbackward: () => {
+				audio.currentTime = Math.max(0, (audio.currentTime || 0) - 10);
+			},
+		};
+		for (const [action, handler] of Object.entries(actions)) {
+			try { navigator.mediaSession.setActionHandler(action as MediaSessionAction, handler); }
+			catch {}
+		}
+	}
+
+	setPreviousTrackHandler(handler: () => void): void {
+		if (typeof navigator === "undefined" || !navigator.mediaSession) return;
+		try { navigator.mediaSession.setActionHandler("previoustrack", handler); } catch {}
+	}
+
+	setNextTrackHandler(handler: () => void): void {
+		if (typeof navigator === "undefined" || !navigator.mediaSession) return;
+		try { navigator.mediaSession.setActionHandler("nexttrack", handler); } catch {}
 	}
 
 	on<E extends PlayerEventName>(event: E, handler: HandlerForEvent<E>): () => void {
