@@ -33,8 +33,8 @@ test("GET /health returns 200 with both providers", async () => {
   expect(r.headers.get("access-control-allow-origin")).toBe("*");
   const b = await body(r);
   expect(b.ok).toBe(true);
-  expect(b.providers).toEqual(["netease", "qq"]);
-  expect(b.providerStatus.providers.map((p: { providerId: string }) => p.providerId)).toEqual(["netease", "qq"]);
+  expect(b.providers).toEqual(["netease", "qq", "kugou"]);
+  expect(b.providerStatus.providers.map((p: { providerId: string }) => p.providerId)).toEqual(["netease", "qq", "kugou"]);
   expect(b.providerStatus.providers[0].capabilities).toContain("search");
 });
 
@@ -1354,7 +1354,7 @@ test("GET /providers/capabilities returns 200 matrix with both netease and qq on
   expect(r.status).toBe(200);
   const b = await body(r);
   expect(b.ok).toBe(true);
-  expect(b.data.providers.length).toBe(2);
+  expect(b.data.providers.length).toBe(3);
   const netease = b.data.providers.find((e: { providerId: string }) => e.providerId === "netease");
   const qq = b.data.providers.find((e: { providerId: string }) => e.providerId === "qq");
   expect(netease.available).toBe(true);
