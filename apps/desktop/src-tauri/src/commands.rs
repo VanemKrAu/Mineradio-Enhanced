@@ -1728,7 +1728,7 @@ pub fn login_qq_close_window(app: tauri::AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
-n#[tauri::command]
+#[tauri::command]
 pub fn login_kugou_show_window(app: tauri::AppHandle) -> Result<(), String> {
     ensure_login_window(&app, LoginProvider::Kugou).map(|_| ())
 }
@@ -1773,16 +1773,15 @@ pub fn wallpaper_auto_detect_roots() -> Result<Vec<String>, String> {
         .collect())
 }
 
+#[tauri::command]
 pub fn wallpaper_extract_texture(
     app: tauri::AppHandle,
     folder_path: String,
 ) -> Result<crate::wallpaper::ExtractTextureResult, String> {
     let repkg_exe = app.path().resource_dir()
         .map(|d| d.join("build/tools/RePKG.exe"))
-        .filter(|p| p.exists())
         .unwrap_or_else(|| std::path::PathBuf::from("RePKG.exe"));
     Ok(crate::wallpaper::extract_wallpaper_texture(&folder_path, &repkg_exe.to_string_lossy()))
-}
 }
 
 #[tauri::command]

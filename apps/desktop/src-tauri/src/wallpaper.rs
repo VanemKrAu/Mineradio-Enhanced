@@ -3,7 +3,6 @@
 //! Mirrors the Electron `wallpaper-scanner.js` logic in Rust.
 //! RePKG.exe is called as a subprocess; extracted PNGs are cached in `_repkg_cache`.
 
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
