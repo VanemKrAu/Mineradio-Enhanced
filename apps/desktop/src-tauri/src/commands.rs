@@ -340,6 +340,8 @@ fn ensure_wallpaper_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindo
     .skip_taskbar(true)
     .build()
     .map_err(|e| e.to_string())?;
+
+
     Ok(win)
 }
 

@@ -4168,6 +4168,18 @@ export function App({
                 >
                   QQ 音乐
                 </button>
+                <button
+                  id="login-provider-kugou"
+                  className={`kugou${loginProvider === "kugou" ? " active" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    setLoginProvider("kugou");
+                    setQqManualCookieOpen(false);
+                  }}
+                  aria-selected={loginProvider === "kugou"}
+                >
+                  酷狗
+                </button>
               </div>
             ) : null}
             <div className="login-intro">
@@ -4244,7 +4256,7 @@ export function App({
             ) : (
               <>
                 <h2 id="login-modal-title">
-                  {loginProvider === "netease" ? "扫码登录网易云音乐" : "扫码登录 QQ 音乐"}
+                  {loginProvider === "netease" ? "扫码登录网易云音乐" : loginProvider === "kugou" ? "扫码登录酷狗音乐" : "扫码登录 QQ 音乐"}
                 </h2>
                 <div id="login-modal-desc" className="desc">
                   {loginProvider === "netease"

@@ -6253,3 +6253,19 @@ body.controls-visible #fx-fab-hide-btn {
     display: block;
   }
 }
+
+/* === Kugou login theme === */
+.login-platform-tabs button.kugou,
+.login-platform-tabs button.kugou.active {
+  --kugou-accent: #44c7ff;
+}
+.login-platform-tabs button.kugou {
+  color: rgba(68, 199, 255, 0.8);
+  border-color: rgba(68, 199, 255, 0.2);
+}
+.login-platform-tabs button.kugou.active,
+.login-platform-tabs button.kugou:hover {
+  color: #d4f5ff;
+  background: rgba(68, 199, 255, 0.16);
+  border-color: rgba(68, 199, 255, 0.32);
+}
