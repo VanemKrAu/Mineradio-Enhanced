@@ -6,7 +6,7 @@ import type {
 import type {
   PlaybackQuality, PlaylistSummary, PlaylistDetail, LyricPayload, Track,
 } from "@mineradio/shared";
-import { ProviderError, ProviderNotImplementedError } from "../provider-adapter";
+import { ProviderError } from "../provider-adapter";
 import * as client from "./kugou-client";
 import {
   mapKugouSearchToTrack, mapKugouPlaylistToSummary,

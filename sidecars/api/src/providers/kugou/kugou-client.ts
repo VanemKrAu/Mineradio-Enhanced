@@ -15,7 +15,6 @@ const KUGOU_MID = "tls_mid_" + randomUUID().replace(/-/g, "").slice(0, 32);
 const GATEWAY_BASE = "https://gateway.kugou.com";
 const TRACKERCDN_BASE = "https://trackercdn.kugou.com";
 const LYRICS_BASE = "https://lyrics.kugou.com";
-const LOGIN_BASE = "https://login-user.kugou.com";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
