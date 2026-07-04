@@ -1828,15 +1828,16 @@ export function App({
   }, [loginModalMode, loginModalOpen, loginProvider, refreshProviderLoginQr]);
 
   useEffect(() => {
-    const activeQr = loginProvider === "qq" ? qqQr : neteaseQr;
+    const activeQr = loginProvider === "qq" ? qqQr : loginProvider === "kugou" ? kugouQr : neteaseQr;
     if (
       !loginModalOpen ||
       loginModalMode === "add-account" ||
       !activeQr?.key ||
       activeQr.completed ||
       !sidecarClient
-    const setQr = provider === "qq" ? setQqQr : provider === "kugou" ? setKugouQr : setNeteaseQr;
-    const setQrStatus = provider === "qq" ? setQqQrStatus : provider === "kugou" ? setKugouQrStatus : setNeteaseQrStatus;
+    ) {
+      return;
+    }
 
     let cancelled = false;
     let checkInFlight = false;
@@ -1913,6 +1914,8 @@ export function App({
     providerLabel,
     qqQr?.completed,
     qqQr?.key,
+    kugouQr?.completed,
+    kugouQr?.key,
     refreshShelfPlaylists,
     setProviderStatus,
     showToast,

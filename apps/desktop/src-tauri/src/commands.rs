@@ -1773,14 +1773,16 @@ pub fn wallpaper_auto_detect_roots() -> Result<Vec<String>, String> {
         .collect())
 }
 
-#[tauri::command]
-pub fn wallpaper_extract_texture(folder_path: String) -> Result<crate::wallpaper::ExtractTextureResult, String> {
-    let repkg_exe = std::path::Path::new(&folder_path).parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("build").join("tools").join("RePKG.exe"))
-        .and_then(|p| if p.exists() { Some(p) } else { None })
+pub fn wallpaper_extract_texture(
+    app: tauri::AppHandle,
+    folder_path: String,
+) -> Result<crate::wallpaper::ExtractTextureResult, String> {
+    let repkg_exe = app.path().resource_dir()
+        .map(|d| d.join("build/tools/RePKG.exe"))
+        .filter(|p| p.exists())
         .unwrap_or_else(|| std::path::PathBuf::from("RePKG.exe"));
     Ok(crate::wallpaper::extract_wallpaper_texture(&folder_path, &repkg_exe.to_string_lossy()))
+}
 }
 
 #[tauri::command]

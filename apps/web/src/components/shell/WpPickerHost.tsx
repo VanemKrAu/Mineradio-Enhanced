@@ -186,13 +186,9 @@ export function WpPickerHost({ open, onClose }: WpPickerHostProps): ReactElement
 							onClick={() => void handleApply(wp)}
 							title={wp.title}
 						>
-							{wp.previewPath ? (
-								<img
-									className="wp-thumb"
-									src={`mineradio-local://${wp.previewPath}`}
-									alt={wp.title}
-									loading="lazy"
-								/>
+              {wp.previewPath ? (
+                <WpThumbnail path={wp.previewPath} title={wp.title} />
+              ) : (
 							) : (
 								<div className="wp-thumb-placeholder">{wp.title[0]}</div>
 							)}
@@ -200,6 +196,21 @@ export function WpPickerHost({ open, onClose }: WpPickerHostProps): ReactElement
 							{wp.mp4File && <span className="wp-card-badge">MP4</span>}
 						</button>
 					))}
+n
+function WpThumbnail({ path, title }: { path: string; title: string }): ReactElement {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    invokeTauriCommand<string>("wallpaper_read_file", { path })
+      .then((dataUrl) => { if (!cancelled && dataUrl) setSrc(dataUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [path]);
+  if (src) {
+    return <img className="wp-thumb" src={src} alt={title} loading="lazy" />;
+  }
+  return <div className="wp-thumb-placeholder">{title[0]}</div>;
+}
 				</div>
 			</div>
 		</div>

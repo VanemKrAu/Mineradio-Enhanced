@@ -43,6 +43,7 @@
       "../../../THIRD_PARTY_NOTICES.md",
       "../../../PRIVACY.md",
       "../../../SECURITY.md"
+      "../../../build/tools/RePKG.exe"
     ],
     "icon": [
       "icons/icon.ico"
