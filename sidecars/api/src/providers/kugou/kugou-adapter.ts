@@ -118,8 +118,7 @@ export function createKugouAdapter(): ProviderAdapter {
     },
 
     async logout(): Promise<void> {
-      const { clearRuntimeProviderCookie } = await import("../../services/auth-session");
-      clearRuntimeProviderCookie(PROVIDER);
+      // Cookie is cleared by server.ts route handler
     },
   };
 }
