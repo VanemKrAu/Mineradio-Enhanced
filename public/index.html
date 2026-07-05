@@ -22446,7 +22446,7 @@ function renderWallpaperGrid() {
     name.textContent = wp.name;
     card.appendChild(img);
     card.appendChild(name);
-    card.addEventListener('click', function(){ applyWallpaper(wp); });
+    card.addEventListener('click', function(){ console.log('[WP] card clicked:', wp.name); applyWallpaper(wp); });
     gridEl.appendChild(card);
   });
 }
