@@ -22553,7 +22553,14 @@ window._applyWallpaper = applyWallpaper;
 window._wallpaperPickerData = wallpaperPickerData;
 window._debugApply = function(name) {
   var wp = wallpaperPickerData.wallpapers.find(function(w) { return w.name === name; });
-  if (!wp) { console.log('Wallpaper not found:', name); return; }
+  if (!wp) {
+    console.log('Wallpaper not found:', name);
+    console.log('Available (first 10):', wallpaperPickerData.wallpapers.slice(0,10).map(function(w){return w.name}));
+    // try partial match
+    var match = wallpaperPickerData.wallpapers.find(function(w) { return w.name.indexOf(name) >= 0; });
+    if (match) { console.log('Partial match:', match.name); wp = match; }
+    else return;
+  }
   console.log('Applying:', wp.name, wp.folderPath);
   applyWallpaper(wp);
 };
