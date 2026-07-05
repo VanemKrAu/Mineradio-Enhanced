@@ -369,7 +369,7 @@ function isNeteaseCookieDomain(domain) {
 }
 function kugouCookieHasLogin(cookieText) {
   var obj = parseCookieHeader(cookieText);
-  var uid = String(obj.userid || obj.KugooID || '').replace(/D/g, '');
+  var uid = String(obj.userid || obj.KugooID || '').replace(/\D/g, '');
   var token = obj.token || obj.KuGoo || obj.t || '';
   return !!(uid && token);
 }

@@ -93,7 +93,7 @@ function kugouCalculateMid(seed) {
 // -- cookie helpers --
 function kugouCookieObject() { return _parseCookieString ? _parseCookieString(kgCookie) : {}; }
 function kugouCookieUserId(obj) { obj = obj || kugouCookieObject(); return String(obj.userid || obj.user_id || obj.uid || obj.KugooID || '').replace(/\D/g, ''); }
-function kugouCookieToken(obj) { obj = obj || kugouCookieObject(); return obj.token || obj.Token || obj.kg_token || obj.t || ''; }
+function kugouCookieToken(obj) { obj = obj || kugouCookieObject(); return obj.token || obj.Token || obj.kg_token || obj.KuGoo || obj.t || ''; }
 function kugouCookieMid(obj) { obj = obj || kugouCookieObject(); return obj.mid || obj.MID || obj.KUGOU_API_MID || KUGOU_DEFAULT_MID; }
 function kugouCookieDfid(obj) { obj = obj || kugouCookieObject(); return obj.dfid || obj.KG_dfid || obj.kg_dfid || ''; }
 function kugouCookieNickname(obj) { obj = obj || kugouCookieObject(); return obj.nickname || obj.user_name || obj.name || ''; }
@@ -124,7 +124,7 @@ function getKugouLoginInfo() {
   return {
     provider: 'kugou', loggedIn, preview: true,
     hasCookie: !!kgCookie, userId: loggedIn ? userId : '',
-    nickname: loggedIn ? (kugouCookieNickname(obj) || '酷狗概念版用户') : '酷狗概念版',
+    nickname: loggedIn ? (kugouCookieNickname(obj) || '酷狗音乐用户') : '酷狗音乐',
     avatar: loggedIn ? kugouCookieAvatar(obj) : '',
     vipType, isVip: vipType >= 1, isSvip: vipType >= 2, vipLevel: vipType,
     playbackKeyReady: true
@@ -488,7 +488,7 @@ function mountRoutes(app, deps) {
       if (!c) return res.json({ ok: false, error: 'EMPTY_COOKIE' });
       saveKugouCookie(c);
       const info = getKugouLoginInfo();
-      if (!info.loggedIn) return res.json({ ok: false, error: 'COOKIE_INVALID', message: 'Cookie 无效，请确认已登录酷狗概念版后重新导入' });
+      if (!info.loggedIn) return res.json({ ok: false, error: 'COOKIE_INVALID', message: 'Cookie 无效，请确认已登录酷狗音乐后重新导入' });
       res.json({ ok: true, loginInfo: info });
     } catch (e) { res.json({ ok: false, error: e.message }); }
   });

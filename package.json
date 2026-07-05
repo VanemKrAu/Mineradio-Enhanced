@@ -29,7 +29,7 @@
       "server.js",
       "dj-analyzer.js",
       "server-kugou.js",
-      "server-kugou-concept.js",
+      "server-kugou.js",
       "package.json",
       "!public/index.*.html",
       "public/index.html"

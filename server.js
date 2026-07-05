@@ -3250,10 +3250,8 @@ async function getLoginInfo() {
 // ====================================================================
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost:' + PORT);
-  var kgStd = null;
-  var kgLite = null;
-  try { kgStd = require('./server-kugou'); kgStd._initDeps({ parseCookieString, normalizeCookieHeader, rawCookieFallback, requestText, requestJson }); } catch(e) {}
-  try { kgLite = require('./server-kugou-concept'); kgLite.init({ parseCookieString, normalizeCookieHeader, rawCookieFallback, requestText, requestJson }); } catch(e) {}
+  var kg = null;
+  try { kg = require('./server-kugou'); kg._initDeps({ parseCookieString, normalizeCookieHeader, rawCookieFallback, requestText, requestJson }); } catch(e) {}
 
   const pn = url.pathname;
 
@@ -4173,33 +4171,20 @@ const server = http.createServer(async (req, res) => {
   }
 
 
-  // ---------- 酷狗概念版 ----------
-  if (pn === '/api/kugou-lite/search') {
-    try { sendJSON(res, { songs: await kgLite.handleKugouSearch(url.searchParams.get('keywords')||'', url.searchParams.get('limit')||'12') }); } catch(e) { sendJSON(res, { songs:[] }); }
-    return;
+  // ---------- 酷狗音乐 ----------
+  if (pn === '/api/kugou/search') {
+    sendJSON(res, { songs:[] }); return;
   }
   if (pn === '/api/kugou/login/status') {
     try { sendJSON(res, await kg.getLoginInfoFresh()); } catch(e) { sendJSON(res, { provider:'kugou', loggedIn:false, error:e.message }, 500); }
-    return;
-  }
-  if (pn === '/api/kugou-lite/login/status') {
-    try { sendJSON(res, kgLite.getKugouLoginInfo()); } catch(e) { sendJSON(res, { provider:'kugou', loggedIn:false, error:e.message }, 500); }
     return;
   }
   if (pn === '/api/kugou/login/qr/key') {
     try { sendJSON(res, await kg.handleQrKey()); } catch(e) { sendJSON(res, { ok:false, error:e.message }); }
     return;
   }
-  if (pn === '/api/kugou-lite/login/qr/key') {
-    try { sendJSON(res, await kgLite.handleKugouQrKey()); } catch(e) { sendJSON(res, { ok:false, error:e.message }); }
-    return;
-  }
   if (pn === '/api/kugou/login/qr/check') {
     try { sendJSON(res, await kg.handleQrCheck(url.searchParams.get('key')||'')); } catch(e) { sendJSON(res, { ok:false, error:e.message }); }
-    return;
-  }
-  if (pn === '/api/kugou-lite/login/qr/check') {
-    try { sendJSON(res, await kgLite.handleKugouQrCheck(url.searchParams.get('key')||'')); } catch(e) { sendJSON(res, { ok:false, error:e.message }); }
     return;
   }
   if (pn === '/api/kugou/login/cookie') {
@@ -4217,9 +4202,6 @@ const server = http.createServer(async (req, res) => {
   }
   if (pn === '/api/kugou/logout') {
     kg.saveCookie(''); sendJSON(res, { ok:true, provider:'kugou', loggedIn:false }); return;
-  }
-  if (pn === '/api/kugou-lite/logout') {
-    kgLite.saveKugouCookie(''); sendJSON(res, { ok:true, provider:'kugou', loggedIn:false }); return;
   }
   if (pn === '/api/kugou/user/playlists') {
     try { sendJSON(res, await kg.handlePlaylists()); } catch(e) { sendJSON(res, { provider:'kugou', loggedIn:false, playlists:[], error:e.message }); }

@@ -2525,10 +2525,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
       <button id="login-provider-qq" class="qq" type="button" onclick="setLoginProvider('qq')">QQ 音乐</button>
       <button id="login-provider-kugou" class="kugou" type="button" onclick="setLoginProvider('kugou')">酷狗音乐</button>
     </div>
-    <div id="kugou-sub-tabs" class="kugou-sub-tabs" style="display:none">
-      <button id="kugou-sub-std" class="kugou-sub active" type="button" onclick="setKugouSubMode('std')">标准版</button>
-      <button id="kugou-sub-lite" class="kugou-sub" type="button" onclick="setKugouSubMode('lite')">概念版</button>
-    </div>
+    
     <div class="login-intro">
       <div class="login-intro-kicker">Mineradio</div>
       <div class="login-intro-title">音乐播放器，也是一座视觉舞台</div>
@@ -2755,8 +2752,8 @@ var playlist = [], playQueue = [], currentIdx = -1, playing = false, playToggleB
 var searchMode = 'song', podcastResults = [], podcastPrograms = [], podcastCurrentRadio = null;
 var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
 var qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ 音乐', userId: '', avatar: '', vipType: 0 };
-var kugouSubMode = 'std';
-var kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: true, nickname: '酷狗概念版', userId: '', avatar: '', vipType: 0, playbackKeyReady: false };
+
+var kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: true, nickname: '酷狗音乐', userId: '', avatar: '', vipType: 0, playbackKeyReady: false };
 var qqLoginAutoRefreshTimer = null;
 var qqLoginWasLoggedIn = false;
 var loginProvider = 'netease';
@@ -17363,7 +17360,7 @@ function updateSearchModeTabs() {
 function setSearchMode(mode) {
   mode = (mode === 'podcast' || mode === 'netease' || mode === 'qq' || mode === 'kugou') ? mode : 'song';
   if (searchMode === mode) return;
-  if (mode === 'kugou' && !kugouLoginStatus.loggedIn) { showToast('请先登录酷狗概念版'); return; }
+  if (mode === 'kugou' && !kugouLoginStatus.loggedIn) { showToast('请先登录酷狗音乐'); return; }
   searchMode = mode;
   updateSearchModeTabs();
   clearSearchResults();
@@ -17718,8 +17715,8 @@ function mergeSongSearchResults(neteaseSongs, qqSongs, limit, q) {
 }
 async function fetchMusicSearchResults(q, mode) {
   if (mode === 'kugou') {
-    var kgOnly = await apiJson('/api/kugou-lite/search?keywords=' + encodeURIComponent(q) + '&limit=12');
-    return (kgOnly && kgOnly.songs || []).map(function(s){s.provider='kugou';return s;}).slice(0,18);
+    var kgOnly = await apiJson('/api/kugou/search?keywords=' + encodeURIComponent(q) + '&limit=12');
+    showToast('酷狗搜索暂不可用'); return [];
   }
   if (mode === 'qq') {
     var qqOnly = await apiJson('/api/qq/search?keywords=' + encodeURIComponent(q) + '&limit=12');
@@ -18796,6 +18793,12 @@ function updateMediaSession() {
   var artist = song.artist || '';
   if (!artist && song.ar && Array.isArray(song.ar)) artist = song.ar.join(', ');
   var album = song.album || song.al || '';
+  // Append current lyric to album field for SMTC display
+  var lyricText = (stageLyrics && stageLyrics.currentText) || '';
+  if (lyricText) {
+    lyricText = String(lyricText).replace(/\s+/g,' ').trim().substring(0, 30);
+    album = album ? (lyricText + ' · ' + album) : lyricText;
+  }
   var coverUrl = (typeof songCoverSrc === 'function') ? songCoverSrc(song, 300) : '';
   var artwork = [];
   if (coverUrl) artwork.push({ src: coverUrl, sizes: '300x300', type: 'image/jpeg' });
@@ -23820,7 +23823,7 @@ function onUserBtnClick() {
 }
 function platformMeta(provider) {
   if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ 音乐', app: 'QQ 音乐 App', dot: 'qq' };
-  if (provider === 'kugou') return { key: 'kugou', short: 'KG', label: '酷狗概念版', app: '酷狗概念版', dot: 'kugou' };
+  if (provider === 'kugou') return { key: 'kugou', short: 'KG', label: '酷狗音乐', app: '酷狗音乐', dot: 'kugou' };
   return { key: 'netease', short: 'NE', label: '网易云音乐', app: '网易云音乐 App', dot: 'netease' };
 }
 function platformStatus(provider) {
@@ -23982,7 +23985,7 @@ function startQQLoginStatusAutoRefresh() {
 }
 async function refreshKugouLoginStatus() {
   try {
-    var info = await apiJson('/api/kugou-lite/login/status?t=' + Date.now());
+    var info = await apiJson('/api/kugou/login/status?t=' + Date.now());
     kugouLoginStatus = Object.assign(kugouLoginStatus, info || {}, { provider: 'kugou' });
     if (!kugouLoginStatus.loggedIn) {
       kugouPlaylists = [];
@@ -24060,13 +24063,7 @@ function updateLoginProviderUi() {
   if (neteaseBtn) neteaseBtn.classList.toggle('active', loginProvider === 'netease');
   if (qqBtn) qqBtn.classList.toggle('active', isQQ);
   if (kgBtn) kgBtn.classList.toggle('active', isKugou);
-  var kgSubTabs = document.getElementById('kugou-sub-tabs');
-  var kgSubStd = document.getElementById('kugou-sub-std');
-  var kgSubLite = document.getElementById('kugou-sub-lite');
-  if (kgSubTabs) kgSubTabs.style.display = isKugou ? 'flex' : 'none';
-  if (kgSubStd) kgSubStd.classList.toggle('active', isKugou && kugouSubMode === 'std');
-  if (kgSubLite) kgSubLite.classList.toggle('active', isKugou && kugouSubMode === 'lite');
-  var kgLabel = kugouSubMode === 'lite' ? '酷狗概念版' : '酷狗音乐';
+  var kgLabel = false ? '酷狗音乐' : '酷狗音乐';
   if (title) title.textContent = isKugou ? (kgLabel + '登录') : ('扫码登录' + meta.label);
   if (desc) desc.innerHTML = isKugou
     ? '打开 <b>' + kgLabel + '官方网页登录窗口</b> 扫码，成功后会自动同步账号会话。'
@@ -24094,7 +24091,7 @@ function updateLoginProviderUi() {
     var cardLabel = qqCard.querySelector("span");
     if (cardMark) cardMark.textContent = isKugou ? "KG" : (isQQ ? "QQ" : "NE");
     if (cardLabel) cardLabel.textContent = isKugou
-      ? (kugouSubMode === "lite" ? (kugouLoginStatus.loggedIn ? "已登录" : "概念版扫码登录") : (kugouLoginStatus.loggedIn ? "已登录" : "标准版登录"))
+      ? (kugouLoginStatus.loggedIn ? "已登录" : "标准版登录")
       : (isQQ ? (qqWebLoginBusy ? "等待扫码确认" : "打开官方扫码窗口") : (neteaseWebLoginBusy ? "等待扫码确认" : "打开官方登录窗口"));
   }
   if (st) {
@@ -24107,8 +24104,8 @@ function updateLoginProviderUi() {
   }
   if (refreshBtn) {
     refreshBtn.disabled = isKugou ? false : (isQQ ? !!qqWebLoginBusy : !!neteaseWebLoginBusy);
-    refreshBtn.textContent = isKugou ? (kugouSubMode === 'lite' ? '打开概念版登录' : '打开标准版登录') : (isQQ ? (qqWebLoginBusy ? '等待扫码…' : '扫码登录') : (canOpenNeteaseWeb ? (neteaseWebLoginBusy ? '等待扫码…' : '网页登录') : '刷新二维码'));
-    refreshBtn.onclick = isKugou ? (kugouSubMode === 'lite' ? openKugouLiteWebLogin : openKugouWebLogin) : (isQQ ? openQQWebLogin : (canOpenNeteaseWeb ? openNeteaseWebLogin : refreshQr));
+    refreshBtn.textContent = isKugou ? '打开标准版登录' : (isQQ ? (qqWebLoginBusy ? '等待扫码…' : '扫码登录') : (canOpenNeteaseWeb ? (neteaseWebLoginBusy ? '等待扫码…' : '网页登录') : '刷新二维码'));
+    refreshBtn.onclick = isKugou ? openKugouWebLogin : (isQQ ? openQQWebLogin : (canOpenNeteaseWeb ? openNeteaseWebLogin : refreshQr));
   }
 }
 async function refreshQr() {
@@ -24118,7 +24115,7 @@ async function refreshQr() {
     var kuImg = document.getElementById('qr-img');
     var kuStatus = document.getElementById('qr-status');
     if (kuImg) kuImg.src = '';
-    var kgLabel = kugouSubMode === 'lite' ? '酷狗概念版' : '酷狗音乐';
+    var kgLabel = false ? '酷狗音乐' : '酷狗音乐';
     if (kuStatus) { kuStatus.textContent = kugouLoginStatus.loggedIn ? ('已保存' + kgLabel + '会话 · ' + (kugouLoginStatus.nickname || '')) : '点击卡片打开' + kgLabel + '官方窗口'; kuStatus.className = 'preview'; }
     return;
   }
@@ -24167,7 +24164,7 @@ function toggleQQCookiePanel() {
 }
 function openProviderWebLogin() {
   if (loginProvider === 'qq') return openQQWebLogin();
-  if (loginProvider === 'kugou') return kugouSubMode === 'lite' ? openKugouLiteWebLogin() : openKugouWebLogin();
+  if (loginProvider === 'kugou') return openKugouWebLogin();
   return openNeteaseWebLogin();
 }
 async function openNeteaseWebLogin() {
@@ -24287,49 +24284,6 @@ async function openKugouWebLogin() {
     setTimeout(closeLoginModal, 500);
   } catch(e) {
     showToast(e && e.message || "酷狗登录失败");
-  }
-}
-function setKugouSubMode(mode) {
-  kugouSubMode = mode;
-  updateLoginProviderUi();
-  refreshQr();
-}
-async function openKugouLiteWebLogin() {
-  var qrImg = document.getElementById('qr-img');
-  var qrStatus = document.getElementById('qr-status');
-  stopQrPoll();
-  if (qrStatus) { qrStatus.textContent = '生成二维码...'; qrStatus.className = ''; }
-  try {
-    var k = await apiJson('/api/kugou-lite/login/qr/key');
-    if (!k || !k.ok || !k.key) throw new Error('获取 QR key 失败');
-    if (qrImg && k.qrImage) { qrImg.src = k.qrImage; qrImg.style.display = 'block'; }
-    var card = document.getElementById('qq-web-login-card');
-    if (card) card.style.display = 'none';
-    if (qrStatus) qrStatus.textContent = '请使用酷狗概念版 App 扫码';
-    var pollKey = k.key;
-    qrPollTimer = setInterval(async function() {
-      try {
-        var chk = await apiJson('/api/kugou-lite/login/qr/check?key=' + encodeURIComponent(pollKey));
-        if (chk && chk.ok && chk.loggedIn) {
-          stopQrPoll();
-          kugouLoginStatus = chk.loginInfo || await apiJson('/api/kugou-lite/login/status');
-          if (qrStatus) qrStatus.textContent = '酷狗概念版已登录';
-          renderUserBtn(); refreshUserPlaylists(true);
-          showToast('酷狗概念版已登录');
-          setTimeout(closeLoginModal, 500);
-          return;
-        }
-        if (chk && chk.status >= 3) {
-          if (qrStatus) qrStatus.textContent = '已确认登录，正在同步...';
-        } else if (chk && chk.status >= 1) {
-          if (qrStatus) qrStatus.textContent = '已扫描，请在手机上确认';
-        } else {
-          if (qrStatus) qrStatus.textContent = '请使用酷狗概念版 App 扫码';
-        }
-      } catch(e) {}
-    }, 2000);
-  } catch(e) {
-    if (qrStatus) { qrStatus.textContent = '错误: ' + e.message; qrStatus.className = 'fail'; }
   }
 }
 function getKugouLoginDefaults() {
@@ -24507,7 +24461,7 @@ function openProviderLogin(provider) {
 }
 async function logoutActiveAccount() {
   if (activeAccountProvider === 'kugou') {
-    try { await apiJson('/api/kugou-lite/logout'); } catch (e) {}
+    try { await apiJson('/api/kugou/logout'); } catch (e) {}
     try {
       if (window.desktopWindow && typeof window.desktopWindow.clearKugouMusicLogin === 'function') {
         await window.desktopWindow.clearKugouMusicLogin();
