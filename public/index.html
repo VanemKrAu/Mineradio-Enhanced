@@ -23937,6 +23937,21 @@ function startQQLoginStatusAutoRefresh() {
     refreshQQLoginStatus().catch(function(e){ console.warn('QQ login auto refresh failed:', e); });
   }, 45000);
 }
+async function refreshKugouLoginStatus() {
+  try {
+    var info = await apiJson('/api/kugou-lite/login/status?t=' + Date.now());
+    kugouLoginStatus = Object.assign(kugouLoginStatus, info || {}, { provider: 'kugou' });
+    if (!kugouLoginStatus.loggedIn) {
+      kugouPlaylists = [];
+      userPlaylists = userPlaylists.filter(function(pl){ return pl.provider !== 'kugou'; });
+    } else if (!userPlaylists.some(function(pl){ return pl && pl.provider === 'kugou'; })) {
+      refreshUserPlaylists(true);
+    }
+    if (!hasPlatformLogin(activeAccountProvider)) activeAccountProvider = firstLoggedProvider();
+    renderUserBtn();
+    return kugouLoginStatus;
+  } catch(e) { console.warn('Kugou login refresh failed:', e); return kugouLoginStatus; }
+}
 function renderUserBtn() {
   var btn = document.getElementById('user-btn');
   if (!btn) return;
@@ -27229,7 +27244,7 @@ if (fx.floatLayer) createFloatLayer();
 if (fx.particleLyrics) createLyricsParticles();
 if (fx.backCover) createBackCoverLayer();
 initIdleGuideCanvas();
-var startupLoginStatusPromise = Promise.all([refreshLoginStatus(), refreshQQLoginStatus()]);
+var startupLoginStatusPromise = Promise.all([refreshLoginStatus(), refreshQQLoginStatus(), refreshKugouLoginStatus()]);
 startQQLoginStatusAutoRefresh();
 if (startupLoginStatusPromise && startupLoginStatusPromise.then) {
   startupLoginStatusPromise.then(function(){
