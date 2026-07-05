@@ -22536,7 +22536,16 @@ function applyWallpaper(wp) {
                 showToast("壁纸已应用（视频）：" + wp.name);
               } else {
                 wallpaperPickerData.currentMedia = { type: "image", src: res.dataUrl, name: wp.name, folder: wp.folderPath };
+                console.log('[WP] setting bg image, dataUrl len:', res.dataUrl.length);
                 setCustomBackgroundImage(res.dataUrl);
+                console.log('[WP] bg set done, fx.backgroundImage truthy:', !!fx.backgroundImage);
+                // show DOM state
+                var bgEl = document.getElementById('custom-bg');
+                var vidEl = document.getElementById('custom-bg-video');
+                console.log('[WP] custom-bg --bg-image:', bgEl ? bgEl.style.getPropertyValue('--custom-bg-image').substring(0,60) : 'no el');
+                console.log('[WP] video display:', vidEl ? vidEl.style.display : 'no el');
+                console.log('[WP] video src:', vidEl ? vidEl.getAttribute('src') : 'no el');
+                document.body.classList.remove('custom-background-video');
                 showToast("壁纸已应用（纹理）：" + wp.name);
               }
             } else { showToast("读取失败"); }
