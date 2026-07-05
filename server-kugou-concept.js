@@ -80,8 +80,8 @@ function mapKugouPlaylist(record) { var id = cleanKugouText(firstKugouValue(reco
 function extractKugouPlaylistList(body) { try { var d = JSON.parse(body); if (d && d.data && Array.isArray(d.data.list)) return d.data.list; if (Array.isArray(d && d.list)) return d.list; } catch(e) {} return []; }
 
 // ---- signature ----
-function kugouWebSignature(params) { var keys = Object.keys(params || {}).sort(); return md5(KUGOU_WEB_SIGN_KEY + keys.map(function(k){return k+'='+(params[k]||'')}).join('') + KUGOU_WEB_SIGN_KEY); }
-function kugouAndroidSignature(params, data) { var keys = Object.keys(params || {}).sort(); return md5(KUGOU_ANDROID_SIGN_KEY + keys.map(function(k){return k+'='+(params[k]||'')}).join('') + (data||'') + KUGOU_ANDROID_SIGN_KEY); }
+function kugouWebSignature(params) { var keys = Object.keys(params || {}).sort(); return md5(KUGOU_WEB_SIGN_KEY + keys.map(function(k){return k+'='+(params[k]!=null?params[k]:'')}).join('') + KUGOU_WEB_SIGN_KEY); }
+function kugouAndroidSignature(params, data) { var keys = Object.keys(params || {}).sort(); return md5(KUGOU_ANDROID_SIGN_KEY + keys.map(function(k){return k+'='+(params[k]!=null?params[k]:'')}).join('') + (data||'') + KUGOU_ANDROID_SIGN_KEY); }
 function kugouSignKey(hash, mid, userid, appid) { return md5(String(hash) + KUGOU_LITE_SIGN_KEY_SALT + String(mid||'') + String(userid||'') + String(appid||KUGOU_LITE_APPID)); }
 
 function buildKugouLoginUrl(pathname, params) { var signed = Object.assign({}, params||{}); if (!signed.signature) signed.signature = kugouWebSignature(signed); return KUGOU_LOGIN_BASE_URL + pathname + '?' + Object.keys(signed).map(function(k){return k+'='+encodeURIComponent(signed[k]||'')}).join('&'); }
@@ -163,7 +163,7 @@ async function handleKugouQrCheck(key) {
 
 async function handleKugouSearch(keywords, limit) {
   var size = Math.min(Math.max(Number(limit)||10,1),60);
-  try { var body = await kugouApiRequest('/v3/search/song', {keyword:String(keywords||'').trim(), page:'1', pagesize:String(size), platform:'AndroidFilter'}, {headers:{'x-router':'complexsearch.kugou.com'}}); return (extractKugouSearchList(body)||[]).map(mapKugouSearchSong).filter(Boolean); }
+  try { var body = await kugouApiRequest('/v6/search/complex', {keyword:String(keywords||'').trim(), page:1, pagesize:size, platform:'AndroidFilter', cursor:0}, {headers:{'x-router':'complexsearch.kugou.com'}}); return (extractKugouSearchList(body)||[]).map(mapKugouSearchSong).filter(Boolean); }
   catch(e){console.warn('[KugouSearch]',e.message);return[];}
 }
 
