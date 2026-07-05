@@ -17363,6 +17363,7 @@ function updateSearchModeTabs() {
 function setSearchMode(mode) {
   mode = (mode === 'podcast' || mode === 'netease' || mode === 'qq' || mode === 'kugou') ? mode : 'song';
   if (searchMode === mode) return;
+  if (mode === 'kugou' && !kugouLoginStatus.loggedIn) { showToast('请先登录酷狗概念版'); return; }
   searchMode = mode;
   updateSearchModeTabs();
   clearSearchResults();

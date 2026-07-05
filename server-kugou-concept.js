@@ -94,7 +94,7 @@ async function kugouApiRequest(pathname, params, opts) {
   if (opts.addKey !== false && rp.hash) { rp.key = kugouSignKey(rp.hash, rp.mid, rp.userid, rp.appid); }
   rp.signature = kugouAndroidSignature(rp, opts.data);
   var qs = Object.keys(rp).map(function(k){return k+'='+encodeURIComponent(rp[k]||'')}).join('&');
-  var headers = {'User-Agent':KUGOU_ANDROID_UA}; if (opts.headers) Object.assign(headers, opts.headers);
+  var headers = {'User-Agent':KUGOU_ANDROID_UA, 'dfid':rp.dfid||'-', 'mid':rp.mid||'', 'clienttime':rp.clienttime||'', 'kg-rc':'1', 'kg-thash':'5d816a0', 'kg-rec':'1', 'kg-rf':'B9EDA08A64250DEFFBCADDEE00F8F25F'}; if (opts.headers) Object.assign(headers, opts.headers);
   if (opts.cookie !== false) headers['Cookie'] = kugouApiCookieHeader();
   var url = KUGOU_GATEWAY_BASE_URL + pathname + '?' + qs;
   var text = await _requestText(url, {method: opts.method||'GET', headers: headers}, opts.data);
@@ -163,7 +163,7 @@ async function handleKugouQrCheck(key) {
 
 async function handleKugouSearch(keywords, limit) {
   var size = Math.min(Math.max(Number(limit)||10,1),60);
-  try { var body = await kugouApiRequest('/v3/search/song', {key:String(keywords||'').trim(), page:'1', pagesize:String(size), keyword:String(keywords||'').trim()}, {headers:{'x-router':'complexsearch.kugou.com'}}); return (extractKugouSearchList(body)||[]).map(mapKugouSearchSong).filter(Boolean); }
+  try { var body = await kugouApiRequest('/v3/search/song', {keyword:String(keywords||'').trim(), page:'1', pagesize:String(size), platform:'AndroidFilter'}, {headers:{'x-router':'complexsearch.kugou.com'}}); return (extractKugouSearchList(body)||[]).map(mapKugouSearchSong).filter(Boolean); }
   catch(e){console.warn('[KugouSearch]',e.message);return[];}
 }
 
