@@ -4173,7 +4173,8 @@ const server = http.createServer(async (req, res) => {
 
   // ---------- 酷狗音乐 ----------
   if (pn === '/api/kugou/search') {
-    sendJSON(res, { songs:[] }); return;
+    try { sendJSON(res, { songs: await kg.handleSearch(url.searchParams.get('keywords')||'', url.searchParams.get('limit')||'12') }); } catch(e) { sendJSON(res, { songs:[] }); }
+    return;
   }
   if (pn === '/api/kugou/login/status') {
     try { sendJSON(res, await kg.getLoginInfoFresh()); } catch(e) { sendJSON(res, { provider:'kugou', loggedIn:false, error:e.message }, 500); }
