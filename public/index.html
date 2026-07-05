@@ -20887,7 +20887,7 @@ function applyCustomBackground() {
   document.body.classList.toggle('custom-background-flat', override && !media);
   document.body.classList.toggle('custom-background-video', hasVideo);
   if (layer) {
-    console.log('[BG] applyCustomBackground: image type is data:', (image||'').substring(0,4) === 'data', 'video:', hasVideo, 'override:', override);
+
     layer.style.setProperty('--custom-bg-image', image ? 'url("' + cssImageUrl(image) + '")' : 'none');
     layer.style.setProperty('--custom-bg-image-opacity', image ? opacity.toFixed(3) : '0');
     layer.style.setProperty('--custom-bg-video-opacity', hasVideo ? opacity.toFixed(3) : '0');
@@ -22473,7 +22473,6 @@ function loadImageAsDataUrl(filePath) {
   });
 }
 function applyWallpaper(wp) {
-  console.log('[WP] applyWallpaper called:', wp ? wp.name : 'null');
   if (!wp || !wp.previewPath) return;
   wallpaperPickerData.currentWallpaper = wp.previewPath;
   wallpaperPickerData.currentFolder = wp.folderPath || '';
@@ -22503,7 +22502,7 @@ function applyWallpaper(wp) {
   }
   tryPkg();
   function tryPkg() {
-    console.log('[WP] tryPkg called');
+
     if (api && typeof api.extractWallpaperScene === "function") {
       showToast("正在解析场景...");
       api.extractWallpaperScene(wp.folderPath).then(function(sceneResult) {
@@ -22523,7 +22522,7 @@ function applyWallpaper(wp) {
     } else { tryPkgTex(); }
   }
   function tryPkgTex() {
-    console.log('[WP] tryPkgTex called');
+
     // 2b) Fall back to PKG texture (image) extraction
     if (api && typeof api.extractWallpaperTexture === "function") {
       showToast("正在提取纹理...");
@@ -22537,9 +22536,8 @@ function applyWallpaper(wp) {
                 setCustomBackgroundMedia({ type: "video", src: res.dataUrl, name: wp.name, mime: "video/mp4" });
                 showToast("壁纸已应用（视频）：" + wp.name);
               } else {
-                wallpaperPickerData.currentMedia = { type: "image", src: res.dataUrl, name: wp.name, folder: wp.folderPath };
-                // Convert base64 data URL to blob URL (CSS can't handle 4MB data URLs)
-                var blobUrl = res.dataUrl;
+                // Convert data URL to blob URL (CSS can't handle 4MB data URLs)
+                var bgSrc = res.dataUrl;
                 try {
                   var arr = res.dataUrl.split(',');
                   if (arr.length === 2) {
@@ -22547,20 +22545,13 @@ function applyWallpaper(wp) {
                     var binary = atob(arr[1]);
                     var bytes = new Uint8Array(binary.length);
                     for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                    var blob = new Blob([bytes], {type: mime});
-                    blobUrl = URL.createObjectURL(blob);
-                    console.log('[WP] blob url:', blobUrl);
+                    bgSrc = URL.createObjectURL(new Blob([bytes], {type: mime}));
                   }
-                } catch(e) { console.warn('[WP] blob conversion failed:', e.message); }
-                setCustomBackgroundImage(blobUrl);
-                console.log('[WP] bg set done, fx.backgroundImage truthy:', !!fx.backgroundImage);
-                var bgEl = document.getElementById('custom-bg');
-                var vidEl = document.getElementById('custom-bg-video');
-                console.log('[WP] custom-bg --bg-image:', bgEl ? bgEl.style.getPropertyValue('--custom-bg-image').substring(0,80) : 'no el');
-                document.body.classList.remove('custom-background-video');
+                } catch(e) {}
+                wallpaperPickerData.currentMedia = { type: "image", src: bgSrc, name: wp.name, folder: wp.folderPath };
+                setCustomBackgroundImage(bgSrc);
                 showToast("壁纸已应用（纹理）：" + wp.name);
-              }
-            } else { showToast("读取失败"); }
+              }} else { showToast("读取失败"); }
           }).catch(function(){ showToast("加载失败"); });
         } else { noSource(); }
       }).catch(function(){ noSource(); });
@@ -22570,26 +22561,6 @@ function applyWallpaper(wp) {
     showToast("该壁纸无 MP4 视频且无可提取纹理，无法应用");
   }
 }
-window._applyWallpaper = applyWallpaper;
-window._wallpaperPickerData = wallpaperPickerData;
-window._debugApply = function(name) {
-  var wp = wallpaperPickerData.wallpapers.find(function(w) { return w.name === name; });
-  if (!wp) {
-    wp = wallpaperPickerData.wallpapers.find(function(w) { return w.name.indexOf(name) >= 0; });
-  }
-  if (!wp) { console.log('Not found:', name); return; }
-  console.log('Applying:', wp.name, wp.folderPath);
-  applyWallpaper(wp);
-};
-window._debugFull = async function(name) {
-  var api = window.desktopWindow;
-  var r = await api.autoDetectWallpapers();
-  wallpaperPickerData.roots = r.roots;
-  var s = await api.scanWallpapers(r.roots);
-  wallpaperPickerData.wallpapers = s.wallpapers;
-  console.log('Scanned:', s.wallpapers.length);
-  _debugApply(name || '猫娘');
-};
 function restoreWallpaper() {
   try {
     var saved = localStorage.getItem("mineradio-wallpaper-current");
@@ -22602,7 +22573,7 @@ function restoreWallpaper() {
   } catch (e) {}
 }
 function setWallpaperBackground(p) {
-  console.trace('[BG] setWallpaperBackground called');
+  
   if (!p) return;
   var url = 'file:///' + String(p).replace(/\\/g, '/');
   var layer = document.getElementById('custom-bg');
