@@ -24057,6 +24057,17 @@ function updateLoginProviderUi() {
 async function refreshQr() {
   stopQrPoll();
   updateLoginProviderUi();
+  if (loginProvider === 'kugou') {
+    var kgSub = kugouSubMode;
+    if (kgSub === 'lite') { openKugouLiteWebLogin(); }
+    else {
+      var kuImg = document.getElementById('qr-img');
+      var kuStatus = document.getElementById('qr-status');
+      if (kuImg) kuImg.src = '';
+      if (kuStatus) { kuStatus.textContent = kugouLoginStatus.loggedIn ? ('已保存酷狗音乐会话 · ' + (kugouLoginStatus.nickname || '')) : '点击"打开标准版登录"登录酷狗音乐'; kuStatus.className = 'preview'; }
+    }
+    return;
+  }
   if (loginProvider === 'qq') {
     qrKey = null;
     var qqStatus = document.getElementById('qr-status');
