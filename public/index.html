@@ -447,11 +447,14 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home{bottom:126px}
 #user-btn.logged-out:hover{color:#fff2bd;border-color:rgba(244,210,138,.56);background:rgba(244,210,138,.11);box-shadow:0 16px 42px rgba(244,210,138,.10),inset 0 1px 0 rgba(255,255,255,.10)}
 #user-btn .login-word{display:block;line-height:1;transform:translateY(.5px)}
 #user-btn.logged-in{padding:0 16px 0 4px;min-width:0;color:#fff;border-color:rgba(244,210,138,0.52);background:rgba(244,210,138,0.07);box-shadow:0 0 0 1px rgba(244,210,138,.08),0 14px 42px rgba(0,0,0,.28)}
+#user-btn.logged-in.qq{border-color:rgba(0,245,212,.48);background:rgba(0,245,212,.06);box-shadow:0 0 0 1px rgba(0,245,212,.08),0 14px 42px rgba(0,0,0,.28)}
+#user-btn.logged-in.kugou{border-color:rgba(30,144,255,.48);background:rgba(30,144,255,.06);box-shadow:0 0 0 1px rgba(30,144,255,.08),0 14px 42px rgba(30,144,255,.18)}
 #user-btn.multi-account{height:auto;min-width:0;padding:0;flex-direction:column;align-items:flex-end;gap:7px;border:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
 #user-btn.multi-account:hover{background:transparent;border-color:transparent;box-shadow:none;transform:none;color:#fff}
 #user-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,0.1)}
 #user-vip-tag{font-size:9px;padding:2px 6px;border-radius:3px;background:linear-gradient(135deg,#fff3c2,var(--champagne),#c9963d);color:#201303;font-weight:800;letter-spacing:.5px;box-shadow:0 0 12px rgba(244,210,138,.24)}
 #user-vip-tag.qq{background:linear-gradient(135deg,#e7fff9,#00f5d4,#61a8ff);color:#03100f;box-shadow:0 0 12px rgba(0,245,212,.22)}
+#user-vip-tag.kugou{background:linear-gradient(135deg,#e7f4ff,#1e90ff,#4169e1);color:#010e1a;box-shadow:0 0 12px rgba(30,144,255,.22)}
 .account-source-dot{width:7px;height:7px;border-radius:50%;background:var(--source-local);box-shadow:0 0 12px currentColor;flex-shrink:0}
 .account-source-dot.netease{background:var(--source-netease);color:var(--source-netease)}
 .account-source-dot.qq{background:var(--source-qq);color:var(--source-qq)}
@@ -23810,7 +23813,7 @@ function hasProviderSvip(provider, status) {
 function providerVipBadge(provider, status, idAttr) {
   if (!hasProviderVip(provider, status)) return '';
   var id = idAttr ? ' id="' + idAttr + '"' : '';
-  var cls = 'top-account-vip' + (provider === 'qq' ? ' qq' : '');
+  var cls = 'top-account-vip' + (provider === 'qq' ? ' qq' : provider === 'kugou' ? ' kugou' : '');
   var level = providerVipLevel(provider, status);
   var label = provider === 'qq' ? 'QQ VIP' : (level === 'svip' ? 'SVIP' : 'VIP');
   return '<span' + id + ' class="' + cls + '">' + label + '</span>';
@@ -23968,6 +23971,7 @@ function renderUserBtn() {
     var meta = platformMeta(activeAccountProvider);
     btn.classList.add('logged-in');
     btn.classList.remove('logged-out');
+    btn.classList.remove('qq','kugou'); btn.classList.add(activeAccountProvider);
     btn.title = dualAccountMode ? '账号信息 · 已启用双平台展示' : ((st.nickname || meta.label) + ' · 账号信息');
     btn.innerHTML = '<img id="user-avatar" src="' + providerAvatarSrc(activeAccountProvider, st) + '">' +
                     '<span>' + escHtml(st.nickname || meta.label) + '</span>' +
