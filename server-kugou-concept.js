@@ -38,7 +38,7 @@ function kugouCookieObject() { return _parseCookieString ? _parseCookieString(ku
 function kugouCookieUserId(obj) { obj = obj || kugouCookieObject(); return String(obj.userid || obj.userId || obj.user_id || obj.KG_UID || obj.kugou_userid || '').trim(); }
 function kugouCookieToken(obj) { obj = obj || kugouCookieObject(); return String(obj.token || obj.Token || obj.kugou_token || obj.KG_TOKEN || obj.musicToken || '').trim(); }
 function kugouDeviceId(obj) { obj = obj || kugouCookieObject(); return String(obj.KUGOU_API_GUID || obj.guid || '').trim(); }
-function decodeKugouCookieValue(value) { try { return Buffer.from(String(value), 'base64').toString('utf8'); } catch(e) {} try { return decodeURIComponent(String(value)); } catch(e) {} return String(value); }
+function decodeKugouCookieValue(value) { var s = String(value); var raw = s; try { raw = decodeURIComponent(s); } catch(e) { raw = s; } try { var b = Buffer.from(s, 'base64').toString('utf8'); if (b.length > 0 && /[\x20-\x7e\u4e00-\u9fff]/.test(b)) return b; } catch(e) {} return raw; }
 function kugouCookieNickname(obj, userId) { obj = obj || kugouCookieObject(); for (const k of ['nickname','nickName','nick','username','userName','kugou_nickname','m_name','name']) { const v = obj[k]; if (v) { const d = decodeKugouCookieValue(v); if (d) return d; } } return userId ? ('酷狗概念版 ' + userId) : ''; }
 function kugouCookieAvatar(obj) { obj = obj || kugouCookieObject(); for (const k of ['avatar','head_img','user_pic','image','img']) { const v = obj[k]; if (v) { const d = decodeKugouCookieValue(v); if (d) return d; } } return ''; }
 function normalizeKugouCookieInput(cookieText) { var obj = _parseCookieString ? _parseCookieString(cookieText || '') : {}; if (!obj.userid && (obj.userId || obj.user_id || obj.KG_UID || obj.kugou_userid)) obj.userid = obj.userId || obj.user_id || obj.KG_UID || obj.kugou_userid; if (!obj.token && (obj.Token || obj.kugou_token || obj.KG_TOKEN || obj.musicToken)) obj.token = obj.Token || obj.kugou_token || obj.KG_TOKEN || obj.musicToken; return (_normalizeCookieHeader ? _normalizeCookieHeader(JSON.stringify(Object.keys(obj).map(function(k){return k+'='+obj[k]}).join('; '))) : _rawCookieFallback ? _rawCookieFallback(cookieText) : cookieText) || cookieText; }
@@ -146,8 +146,12 @@ async function handleKugouQrCheck(key) {
     var text = await _requestText(url, { headers: reqHeaders2 });
     var body = JSON.parse(text);
     if (body && body.data && body.data.status === 4) {
-      var nextCookie = Object.assign({}, kugouCookieObject(), body.data);
-      kugouCookie = Object.keys(nextCookie).map(function(k){return k+'='+(nextCookie[k]||'')}).join('; ');
+      var obj = kugouCookieObject();
+      obj.token = body.data.token || body.data.Token || '';
+      obj.userid = body.data.userid || body.data.userId || '';
+      obj.nickname = body.data.nickname || '';
+      obj.avatar = body.data.avatar || body.data.head_img || '';
+      kugouCookie = Object.keys(obj).map(function(k){return k+'='+(obj[k]||'')}).join('; ');
       try { var f = process.env.KUGOU_LITE_COOKIE_FILE||path.join(__dirname,'.kugou-cookie-concept'); fs.writeFileSync(f, kugouCookie); } catch(e) {}
       ensureKugouDeviceCookie(); var info = getKugouLoginInfo();
       return {ok:true, status:4, message:'登录成功', loggedIn:true, loginInfo:info};
