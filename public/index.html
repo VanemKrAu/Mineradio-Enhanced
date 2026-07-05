@@ -24243,7 +24243,9 @@ async function openKugouLiteWebLogin() {
   try {
     var k = await apiJson('/api/kugou-lite/login/qr/key');
     if (!k || !k.ok || !k.key) throw new Error('获取 QR key 失败');
-    if (qrImg && k.qrImage) qrImg.src = k.qrImage;
+    if (qrImg && k.qrImage) { qrImg.src = k.qrImage; qrImg.style.display = 'block'; }
+    var card = document.getElementById('qq-web-login-card');
+    if (card) card.style.display = 'none';
     if (qrStatus) qrStatus.textContent = '请使用酷狗概念版 App 扫码';
     var pollKey = k.key;
     qrPollTimer = setInterval(async function() {
