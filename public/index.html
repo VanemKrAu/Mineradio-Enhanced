@@ -22537,15 +22537,25 @@ function applyWallpaper(wp) {
                 showToast("壁纸已应用（视频）：" + wp.name);
               } else {
                 wallpaperPickerData.currentMedia = { type: "image", src: res.dataUrl, name: wp.name, folder: wp.folderPath };
-                console.log('[WP] setting bg image, dataUrl len:', res.dataUrl.length);
-                setCustomBackgroundImage(res.dataUrl);
+                // Convert base64 data URL to blob URL (CSS can't handle 4MB data URLs)
+                var blobUrl = res.dataUrl;
+                try {
+                  var arr = res.dataUrl.split(',');
+                  if (arr.length === 2) {
+                    var mime = (arr[0].match(/data:([^;]+)/) || [])[1] || 'image/png';
+                    var binary = atob(arr[1]);
+                    var bytes = new Uint8Array(binary.length);
+                    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    var blob = new Blob([bytes], {type: mime});
+                    blobUrl = URL.createObjectURL(blob);
+                    console.log('[WP] blob url:', blobUrl);
+                  }
+                } catch(e) { console.warn('[WP] blob conversion failed:', e.message); }
+                setCustomBackgroundImage(blobUrl);
                 console.log('[WP] bg set done, fx.backgroundImage truthy:', !!fx.backgroundImage);
-                // show DOM state
                 var bgEl = document.getElementById('custom-bg');
                 var vidEl = document.getElementById('custom-bg-video');
-                console.log('[WP] custom-bg --bg-image:', bgEl ? bgEl.style.getPropertyValue('--custom-bg-image').substring(0,60) : 'no el');
-                console.log('[WP] video display:', vidEl ? vidEl.style.display : 'no el');
-                console.log('[WP] video src:', vidEl ? vidEl.getAttribute('src') : 'no el');
+                console.log('[WP] custom-bg --bg-image:', bgEl ? bgEl.style.getPropertyValue('--custom-bg-image').substring(0,80) : 'no el');
                 document.body.classList.remove('custom-background-video');
                 showToast("壁纸已应用（纹理）：" + wp.name);
               }
