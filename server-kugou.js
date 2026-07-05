@@ -427,6 +427,20 @@ async function getKugouLoginInfoFresh() {
     return Object.assign({}, info, kugouVipProbeCache.info || {});
   }
   kugouVipProbeCache = { userId: info.userId, checkedAt: Date.now(), info: {} };
+  // Fetch user profile (nickname + avatar) from Kugou API
+  try {
+    var obj = kugouCookieObject();
+    var ts = String(Math.floor(Date.now() / 1000));
+    var p = { appid: KUGOU_APPID, clientver: KUGOU_CLIENTVER, mid: kugouCookieMid(), userid: info.userId, token: kugouCookieToken(obj), ts: ts };
+    p.signature = kugouAndroidSignature(p);
+    var qs = Object.keys(p).map(function(k) { return k + '=' + encodeURIComponent(p[k] || ''); }).join('&');
+    var userText = await _requestText(KUGOU_USER_SERVICE_URL + '/v2/user/info?' + qs, { headers: { 'User-Agent': KUGOU_ANDROID_UA } });
+    var userJson = JSON.parse(userText);
+    if (userJson && userJson.status === 1 && userJson.data) {
+      kugouVipProbeCache.info.nickname = userJson.data.nickname || userJson.data.user_name || '';
+      kugouVipProbeCache.info.avatar = userJson.data.avatar || userJson.data.head_img || userJson.data.img || '';
+    }
+  } catch(e) { console.warn('[Kugou] user info fetch failed:', e.message); }
   try {
     const playlistsResult = await handleKugouUserPlaylists();
     const pls = (playlistsResult && playlistsResult.playlists) || [];
