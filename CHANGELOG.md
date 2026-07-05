@@ -1,5 +1,21 @@
 # 更新日志
 
+## [1.1.1-3] - 2025-07-06
+
+### 修复
+
+- **大纹理背景不显示** — `setCustomBackgroundImage` 改用 `blob:` URL 替代超大 base64 data URL，解决 4MB+ 纹理在 CSS 变量中静默失败的问题
+- **视频壁纸切换不回图片** — `<video>` 元素在非视频模式下强制 `display:none`，不再遮挡新设置的图片背景
+- **静态文件浏览器缓存** — `serveStatic` 添加 `Cache-Control: no-cache`，确保前端代码更新后立即生效
+- **壁纸扫描初始化** — 修复 `wallpaperPickerData.wallpapers` 和 `roots` 在启动时未填充的问题
+- **酷狗概念版登录 API** — 修复 `type/plat` 参数和请求头，改用 v2 端点；修复昵称/头像乱码
+
+### 新增
+
+- `normalizeCustomBackgroundImage` 支持 `blob:` URL
+- `readWallpaperFile` 支持 `.mp4`/`.webm` MIME 类型
+- 账号信息弹窗芯片新增酷狗蓝色主题样式
+
 ## [1.1.1-2] - 2025-07-06
 
 ### 新增
