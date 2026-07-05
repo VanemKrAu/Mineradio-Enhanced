@@ -22535,6 +22535,17 @@ function applyWallpaper(wp) {
               } else {
                 wallpaperPickerData.currentMedia = { type: "image", src: res.dataUrl, name: wp.name, folder: wp.folderPath };
                 setCustomBackgroundImage(res.dataUrl);
+                // force background refresh
+                var bg = document.getElementById('custom-bg');
+                if (bg) {
+                  var imgUrl = 'url("' + String(res.dataUrl).replace(/\\/g, '\\\\').replace(/"/g, '%22') + '")';
+                  bg.style.setProperty('--custom-bg-image', imgUrl);
+                  bg.style.setProperty('--custom-bg-image-opacity', '1');
+                  document.body.classList.add('custom-background-override');
+                  document.body.classList.remove('custom-background-video');
+                  var vid = document.getElementById('custom-bg-video');
+                  if (vid) { vid.pause(); vid.style.display = 'none'; }
+                }
                 showToast("壁纸已应用（纹理）：" + wp.name);
               }
             } else { showToast("读取失败"); }
