@@ -24463,7 +24463,7 @@ function openProviderLogin(provider) {
 }
 async function logoutActiveAccount() {
   if (activeAccountProvider === 'kugou') {
-    try { await apiJson('/api/kugou/logout'); } catch (e) {}
+    try { await apiJson('/api/kugou-lite/logout'); } catch (e) {}
     try {
       if (window.desktopWindow && typeof window.desktopWindow.clearKugouMusicLogin === 'function') {
         await window.desktopWindow.clearKugouMusicLogin();

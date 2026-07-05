@@ -4208,6 +4208,9 @@ const server = http.createServer(async (req, res) => {
   if (pn === '/api/kugou/logout') {
     kg.saveCookie(''); sendJSON(res, { ok:true, provider:'kugou', loggedIn:false }); return;
   }
+  if (pn === '/api/kugou-lite/logout') {
+    kgLite.saveKugouCookie(''); sendJSON(res, { ok:true, provider:'kugou', loggedIn:false }); return;
+  }
   if (pn === '/api/kugou/user/playlists') {
     try { sendJSON(res, await kg.handlePlaylists()); } catch(e) { sendJSON(res, { provider:'kugou', loggedIn:false, playlists:[], error:e.message }); }
     return;
