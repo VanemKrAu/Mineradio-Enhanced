@@ -461,9 +461,15 @@ function extractWallpaperScene(folderPath) {
   if (fs.existsSync(scenePath)) {
     try {
       result.scene = JSON.parse(fs.readFileSync(scenePath, 'utf8'));
+      // extract scene resolution for layer coordinate normalization
+      if (result.scene && result.scene.general && result.scene.general.orthogonalprojection) {
+        result.sceneWidth = result.scene.general.orthogonalprojection.width || 1920;
+        result.sceneHeight = result.scene.general.orthogonalprojection.height || 1080;
+      }
     } catch (_) {}
     result.layers = parseSceneJson(scenePath, cacheDir) || [];
   }
+  if (!result.sceneWidth) { result.sceneWidth = 1920; result.sceneHeight = 1080; }
 
   // if no layers parsed, fall back to flat image list
   if (result.layers.length === 0 && result.textures.length > 0) {

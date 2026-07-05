@@ -82,7 +82,7 @@
       return p;
     }
 
-    var quadVS = 'attribute vec2 a_pos;varying vec2 v_uv;void main(){gl_Position=vec4(a_pos,0.0,1.0);v_uv=a_pos*0.5+0.5;}';
+    var quadVS = 'attribute vec2 a_pos;varying vec2 v_uv;uniform vec2 u_offset;uniform vec2 u_scale;void main(){gl_Position=vec4(a_pos*u_scale+u_offset,0.0,1.0);v_uv=a_pos*0.5+0.5;}';
 
     var imageFS = 'precision mediump float;varying vec2 v_uv;uniform sampler2D u_tex;uniform float u_opacity;uniform vec3 u_tint;uniform vec2 u_canvasSize;void main(){vec2 ts=vec2(textureSize(u_tex,0));float ta=ts.x/max(ts.y,1.0);float ca=u_canvasSize.x/max(u_canvasSize.y,1.0);vec2 uv=v_uv;if(ca>ta){float s=ta/ca;uv=vec2((v_uv.x-0.5)/s+0.5,v_uv.y);}else{float s=ca/ta;uv=vec2(v_uv.x,(v_uv.y-0.5)/s+0.5);}uv=clamp(uv,0.0,1.0);vec4 col=texture2D(u_tex,uv);col.rgb*=u_tint;col.a*=u_opacity;gl_FragColor=col;}';
 
@@ -211,6 +211,8 @@
       var uTex = gl.getUniformLocation(progImage, 'u_tex');
       var uOp = gl.getUniformLocation(progImage, 'u_opacity');
       var uTint = gl.getUniformLocation(progImage, 'u_tint');
+      var uOff = gl.getUniformLocation(progImage, 'u_offset');
+      var uScl = gl.getUniformLocation(progImage, 'u_scale');
 
       gl.uniform2f(uCS, innerWidth, innerHeight);
       gl.enableVertexAttribArray(posLoc);
@@ -221,6 +223,15 @@
         if (!layer.visible) continue;
         var tex = sceneTextures[layer.imageFile];
         if (!tex) continue;
+
+        var sw = (sceneData && sceneData.sceneWidth) || innerWidth;
+        var sh = (sceneData && sceneData.sceneHeight) || innerHeight;
+        var ox = ((layer.origin||[0,0])[0] || 0) / sw * 2 - 1;
+        var oy = (1 - ((layer.origin||[0,0])[1] || 0) / sh) * 2 - 1;
+        var sx = ((layer.scale||[1,1])[0] || 1);
+        var sy = ((layer.scale||[1,1])[1] || 1);
+        gl.uniform2f(uOff, ox, oy);
+        gl.uniform2f(uScl, sx, sy);
 
         var blend = layer.blending || 'opaque';
         gl.enable(gl.BLEND);
