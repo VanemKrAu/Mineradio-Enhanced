@@ -20897,6 +20897,7 @@ function applyCustomBackground() {
     video.pause();
     video.removeAttribute('src');
     video.load();
+    video.style.display = 'none';
     if (customBgObjectUrl) { URL.revokeObjectURL(customBgObjectUrl); customBgObjectUrl = ''; }
     return;
   }
@@ -20910,6 +20911,7 @@ function applyCustomBackground() {
     video.muted = true;
     video.loop = true;
     video.playsInline = true;
+    video.style.display = '';
     var p = video.play();
     if (p && p.catch) p.catch(function(){});
   }
