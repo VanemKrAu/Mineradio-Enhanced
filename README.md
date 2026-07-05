@@ -19,6 +19,7 @@
 - **5 种混合模式**：opaque / additive / translucent / multiply / screen
 - **RePKG 纹理提取**：自动解包 `scene.pkg` 获取高清纹理 + 视频文件
 - 兼容 Steam Workshop 821 个壁纸（533 个场景 + 288 个视频）
+- PKG 纹理解析和场景文件格式参考 [win-wallpaper-engine](https://github.com/VanemKrAu/win-wallpaper-engine)
 
 ### 🎛 SMTC 系统媒体控件支持
 
