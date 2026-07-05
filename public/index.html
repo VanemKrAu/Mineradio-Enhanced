@@ -23971,7 +23971,8 @@ function renderUserBtn() {
     var meta = platformMeta(activeAccountProvider);
     btn.classList.add('logged-in');
     btn.classList.remove('logged-out');
-    btn.classList.remove('qq','kugou'); btn.classList.add(activeAccountProvider);
+    btn.classList.remove('qq'); btn.classList.remove('kugou'); btn.classList.add(activeAccountProvider);
+    btn.style.cssText += ';border-color:rgba(30,144,255,.48)!important;background:rgba(30,144,255,.06)!important;box-shadow:0 0 0 1px rgba(30,144,255,.08),0 14px 42px rgba(30,144,255,.18)!important';
     btn.title = dualAccountMode ? '账号信息 · 已启用双平台展示' : ((st.nickname || meta.label) + ' · 账号信息');
     btn.innerHTML = '<img id="user-avatar" src="' + providerAvatarSrc(activeAccountProvider, st) + '">' +
                     '<span>' + escHtml(st.nickname || meta.label) + '</span>' +
