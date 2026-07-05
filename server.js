@@ -4168,16 +4168,28 @@ const server = http.createServer(async (req, res) => {
 
 
   // ---------- 酷狗概念版 ----------
-  if (pn === '/api/kugou/login/status' || pn === '/api/kugou-lite/login/status') {
+  if (pn === '/api/kugou/login/status') {
     try { sendJSON(res, await kg.getLoginInfoFresh()); } catch(e) { sendJSON(res, { provider:'kugou', loggedIn:false, error:e.message }, 500); }
     return;
   }
-  if (pn === '/api/kugou/login/qr/key' || pn === '/api/kugou-lite/login/qr/key') {
+  if (pn === '/api/kugou-lite/login/status') {
+    try { sendJSON(res, kgLite.getKugouLoginInfo()); } catch(e) { sendJSON(res, { provider:'kugou', loggedIn:false, error:e.message }, 500); }
+    return;
+  }
+  if (pn === '/api/kugou/login/qr/key') {
     try { sendJSON(res, await kg.handleQrKey()); } catch(e) { sendJSON(res, { ok:false, error:e.message }); }
     return;
   }
-  if (pn === '/api/kugou/login/qr/check' || pn === '/api/kugou-lite/login/qr/check') {
+  if (pn === '/api/kugou-lite/login/qr/key') {
+    try { sendJSON(res, await kgLite.handleKugouQrKey()); } catch(e) { sendJSON(res, { ok:false, error:e.message }); }
+    return;
+  }
+  if (pn === '/api/kugou/login/qr/check') {
     try { sendJSON(res, await kg.handleQrCheck(url.searchParams.get('key')||'')); } catch(e) { sendJSON(res, { ok:false, error:e.message }); }
+    return;
+  }
+  if (pn === '/api/kugou-lite/login/qr/check') {
+    try { sendJSON(res, await kgLite.handleKugouQrCheck(url.searchParams.get('key')||'')); } catch(e) { sendJSON(res, { ok:false, error:e.message }); }
     return;
   }
   if (pn === '/api/kugou/login/cookie') {
