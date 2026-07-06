@@ -22467,17 +22467,11 @@ async function refreshWallpapers() {
 }
 function renderWallpaperGrid() {
   var filtered = wallpaperPickerData.wallpapers;
-  // 按修改时间倒序排序（最新下载的在前）
-  if (filtered.length) {
-    filtered = filtered.slice().sort(function(a, b) {
-      return (b.modifiedAt || 0) - (a.modifiedAt || 0);
-    });
-  }
   var statusEl = document.getElementById('wp-status');
   var gridEl = document.getElementById('wp-grid');
   if (!statusEl || !gridEl) return;
   if (wpRatingFilter !== 'all') {
-    filtered = wallpaperPickerData.wallpapers.filter(function(wp){
+    filtered = filtered.filter(function(wp){
       if (!wp.rating) return wpRatingFilter === 'Everyone';
       return wp.rating === wpRatingFilter;
     });
@@ -22487,6 +22481,10 @@ function renderWallpaperGrid() {
       return (wp.name || '').toLowerCase().indexOf(wpSearchText) >= 0;
     });
   }
+  // 按修改时间倒序排序（最新下载的在前）
+  filtered = filtered.slice().sort(function(a, b) {
+    return (b.modifiedAt || 0) - (a.modifiedAt || 0);
+  });
   statusEl.textContent = '共 ' + filtered.length + ' 个壁纸' + (wpRatingFilter !== 'all' ? '（已按分级筛选）' : '') + '，点击即可设为播放器背景。';
   gridEl.innerHTML = '';
   filtered.forEach(function(wp) {
