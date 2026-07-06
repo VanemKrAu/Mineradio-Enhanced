@@ -24291,10 +24291,15 @@ async function openKugouWebLogin() {
   try {
     var result = await api.openKugouMusicLogin();
     if (!result || !result.ok) throw new Error((result && result.message) || "酷狗登录未完成");
+    var loginBody = { cookie: result.cookie };
+    if (result.userInfo && (result.userInfo.nickname || result.userInfo.avatar)) {
+      loginBody.nickname = result.userInfo.nickname || '';
+      loginBody.avatar = result.userInfo.avatar || '';
+    }
     var info = await apiJson("/api/kugou/login/cookie", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ cookie: result.cookie })
+      body: JSON.stringify(loginBody)
     });
     if (!info || !info.ok) throw new Error((info && info.message) || "酷狗 cookie 无效");
     kugouLoginStatus = info.loginInfo || getKugouLoginDefaults();

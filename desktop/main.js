@@ -1207,7 +1207,26 @@ async function openKugouMusicLoginWindow(owner) {
     var checkCookies = async function() {
       try {
         var cookie = await readKugouLoginCookieHeader(cookieSession);
-        if (kugouCookieHasLogin(cookie)) finish({ ok: true, cookie: cookie });
+        if (kugouCookieHasLogin(cookie)) {
+          // Extract user info from the DOM before closing
+          var userInfo = {};
+          try {
+            var results = await loginWindow.webContents.executeJavaScript(
+              '(function(){' +
+              '  var name = "";' +
+              '  var el = document.querySelector(".user_name,.userName,.nickname,.nick_name");' +
+              '  if (el) name = el.textContent.trim();' +
+              '  if (!name) { var spans = document.querySelectorAll("span,div,a"); for (var i=0;i<spans.length;i++) { var t=spans[i].textContent.trim(); if(t.length>=2&&t.length<=24&&/[\\u4e00-\\u9fff]/.test(t)){name=t;break;} } }'+
+              '  var avatar = "";' +
+              '  var img = document.querySelector(".user_avatar img,.avatar img,.user_photo img,img.avatar,img.user_photo");' +
+              '  if (img) avatar = img.src;' +
+              '  return JSON.stringify({nickname:name,avatar:avatar});' +
+              '})();'
+            );
+            try { userInfo = JSON.parse(results || '{}'); } catch(_) {}
+          } catch(_) {}
+          finish({ ok: true, cookie: cookie, userInfo: userInfo });
+        }
       } catch(e) { console.warn('Kugou login cookie check failed:', e.message); }
     };
     loginWindow.webContents.setWindowOpenHandler(function(_a) { return { action: 'deny' }; });

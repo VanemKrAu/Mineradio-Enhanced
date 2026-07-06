@@ -4194,6 +4194,9 @@ const server = http.createServer(async (req, res) => {
       const raw = body.cookie||body.data||body.text||'';
       const c = kg.normalizeCookie(raw);
       if (!c) { sendJSON(res, { ok:false, error:'EMPTY_COOKIE' }, 400); return; }
+      // Append nickname/avatar from DOM extraction if provided
+      if (body.nickname) c = c + '; nickname=' + body.nickname;
+      if (body.avatar) c = c + '; avatar=' + body.avatar;
       kg.saveCookie(c);
       const info = await kg.getLoginInfoFresh();
       if (!info.loggedIn) { kg.saveCookie(''); sendJSON(res, { ok:false, error:'COOKIE_INVALID' }, 400); return; }
