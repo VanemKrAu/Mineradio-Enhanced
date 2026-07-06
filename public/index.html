@@ -23057,7 +23057,10 @@ function toggleFxPanel(force) {
   el.classList.remove('show', 'closing');
   document.body.classList.add('fx-panel-open');
   clearCenteredViewOffsets();
-  setPeek(el, true, 'fx');
+  el.classList.add('show');
+  fxPanelPinned = true;
+  var fab = document.getElementById('fx-fab');
+  if (fab) fab.classList.add('active');
 }
 function resetFx() {
   var savedCam = fx.cam;
