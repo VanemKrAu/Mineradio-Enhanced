@@ -26178,7 +26178,13 @@ window.addEventListener('mousemove', function(e){
   updateUserCapsuleAutoHideFromPointer(ex, ey);
   updateFxFabAutoHideFromPointer(ex, ey);
   updateFullscreenDiyPeekFromPointer(ex, ey);
-  if (document.body.classList.contains('splash-active')) {
+  if (document.body.classList.contains('fx-panel-open') || emptyHomeActive) {
+    if (!emptyHomeActive) {
+      setFocusZone(null, true);
+      updateShelfHoverCueFromPointer(null);
+      updateShelfCardHoverSelection(null);
+    }
+  } else if (document.body.classList.contains('splash-active')) {
     updateShelfHoverCueFromPointer(null);
     updateShelfCardHoverSelection(null);
     setFocusZone(null);
