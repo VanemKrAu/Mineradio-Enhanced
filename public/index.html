@@ -17735,7 +17735,7 @@ function mergeSongSearchResults(neteaseSongs, qqSongs, limit, q) {
 async function fetchMusicSearchResults(q, mode) {
   if (mode === 'kugou') {
     var kgOnly = await apiJson('/api/kugou/search?keywords=' + encodeURIComponent(q) + '&limit=12');
-    showToast('酷狗搜索暂不可用'); return [];
+    return (kgOnly && kgOnly.songs || []).map(function(s){s.provider='kugou'; return s;}).slice(0, 18);
   }
   if (mode === 'qq') {
     var qqOnly = await apiJson('/api/qq/search?keywords=' + encodeURIComponent(q) + '&limit=12');
