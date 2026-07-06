@@ -22430,9 +22430,9 @@ async function refreshWallpapers() {
   // v2: 清除旧缓存（上一次扫描的分级信息可能不正确）
   if (wallpaperPickerData.wallpapers && wallpaperPickerData.wallpapers.length) {
     var cacheVer = localStorage.getItem('mineradio-wp-cache-ver');
-    if (cacheVer !== '2') {
+    if (cacheVer !== '3') {
       wallpaperPickerData.wallpapers = [];
-      localStorage.setItem('mineradio-wp-cache-ver', '2');
+      localStorage.setItem('mineradio-wp-cache-ver', '3');
     } else { renderWallpaperGrid(); return; }
   }
   statusEl.textContent = '扫描中...';
@@ -22497,17 +22497,20 @@ function renderWallpaperGrid() {
       return (wp.name || '').toLowerCase().indexOf(wpSearchText) >= 0;
     });
   }
-  // 按修改时间倒序排序（最新在前），时间相同按文件夹名倒序
+  // 按文件创建时间倒序排序（最新下载的在前），相同时间按文件夹名倒序（workshop ID 越大越新）
   filtered = filtered.slice().sort(function(a, b) {
-    var ta = a.modifiedAt || 0, tb = b.modifiedAt || 0;
-    if (ta !== tb) return tb - ta;
-    var na = String(a.originalName || a.folderPath || '');
-    var nb = String(b.originalName || b.folderPath || '');
+    // 优先用创建时间（下载时间）
+    var ca = a.birthtimeMs || a.modifiedAt || 0;
+    var cb = b.birthtimeMs || b.modifiedAt || 0;
+    if (ca !== cb) return cb - ca;
+    // 时间相同按原名/文件夹名倒序（Steam Workshop ID 递增）
+    var na = String(a.originalName || '').toLowerCase();
+    var nb = String(b.originalName || '').toLowerCase();
     if (na > nb) return -1;
     if (na < nb) return 1;
     return 0;
   });
-  console.log('[WP] sorted, first 3:', filtered.slice(0,3).map(function(w){return w.name+' @'+w.modifiedAt}));
+  console.log('[WP] sorted, first 3:', filtered.slice(0,3).map(function(w){return w.name+' @birth='+w.birthtimeMs+' mod='+w.modifiedAt}));
   statusEl.textContent = '共 ' + filtered.length + ' 个壁纸' + (wpRatingFilter !== 'all' ? '（已按分级筛选）' : '') + '，点击即可设为播放器背景。';
   gridEl.innerHTML = '';
   filtered.forEach(function(wp) {

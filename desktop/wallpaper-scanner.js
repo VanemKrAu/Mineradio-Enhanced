@@ -87,6 +87,7 @@ function scanLibrary(rootPath) {
       hasGifPkg: hasGifPkg,
       wallpaperType: meta.type || 'unknown',
       modifiedAt: stat.mtimeMs,
+      birthtimeMs: stat.birthtimeMs || stat.mtimeMs,
       size: getFolderSize(folderPath),
     });
   }
