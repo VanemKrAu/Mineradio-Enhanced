@@ -22472,19 +22472,17 @@ function renderWallpaperGrid() {
   if (!statusEl || !gridEl) return;
   if (wpRatingFilter !== 'all') {
     filtered = filtered.filter(function(wp){
-      var r = String(wp.rating || '').trim() || 'Everyone';
-      if (r.toLowerCase() !== wpRatingFilter.toLowerCase()) {
-        // 成人壁纸始终只在 Mature 筛选时显示
-        if (r.toLowerCase() === 'mature') {
-          return wpRatingFilter.toLowerCase() === 'mature';
-        }
-        // 轻度不适壁纸在 Questionable 或 Mature 筛选时显示
-        if (r.toLowerCase() === 'questionable') {
-          return wpRatingFilter.toLowerCase() === 'questionable' || wpRatingFilter.toLowerCase() === 'mature';
-        }
-        return false;
-      }
-      return true;
+      if (wpRatingFilter === 'all') return true;
+      var r = String(wp.rating || '').trim();
+      // 没有分级的壁纸按全年龄处理
+      if (!r) r = 'Everyone';
+      var rl = r.toLowerCase(), fl = wpRatingFilter.toLowerCase();
+      if (rl === fl) return true;
+      // 分级严格递增：Mature 筛选时不包含其他分组
+      if (fl === 'everyone') return false;  // 全年龄筛选只显示全年龄
+      if (fl === 'questionable') return rl === 'everyone';  // 可疑显示全年龄+可疑
+      if (fl === 'mature') return rl === 'questionable' || rl === 'everyone';  // 成人显示全部
+      return false;
     });
   }
   if (wpSearchText) {
