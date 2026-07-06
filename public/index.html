@@ -23096,6 +23096,15 @@ function toggleFxPanel(force) {
   var fab = document.getElementById('fx-fab');
   if (fab) fab.classList.add('active');
 }
+// 点击面板外部空白处关闭 FX 面板
+document.addEventListener('click', function(e) {
+  var fxPanel = document.getElementById('fx-panel');
+  if (!fxPanel) return;
+  var isOpen = fxPanel.classList.contains('show') || fxPanel.classList.contains('peek');
+  if (!isOpen) return;
+  if (e.target.closest('#fx-panel') || e.target.closest('#fx-fab') || e.target.closest('#fx-fab-hide-btn')) return;
+  toggleFxPanel(false);
+});
 function resetFx() {
   var savedCam = fx.cam;
   var savedShelf = fx.shelf;
