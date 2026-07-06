@@ -1,5 +1,24 @@
 # 更新日志
 
+## [1.1.1-7] - 2025-07-07
+
+### 新增
+
+- **KRC 歌词解密** — 酷狗歌词二进制格式（XOR + zlib inflate）自动识别并转为标准 LRC 时间戳格式
+- **主页歌单架静止** — 主页时歌单 3D 动态镜头/晃动全部冻结，播放页面才活动
+- **每日一言主页** — 主页显示热评/时间/日期，支持导入背景图片和自定义热评内容
+- **图片裁切上传** — 主页背景图片支持裁剪（缩放/拖拽/保存），自动保持宽高比
+
+### 修复
+
+- **FX 面板穿透** — 歌单架 3D 动画在面板打开时完全静止（parallax/cine shake/card bob/free camera/gesture 五层门控）
+- **FX 面板 auto-peek 穿透** — setPeek 打开面板时同步管理 fx-panel-open body 类，两种打开方式统一
+- **管理热评弹窗不可见** — 补全 .playlist-select-mask 和 .playlist-select-dialog CSS
+- **导入图片弹窗不可见** — 同一 CSS 类缺失导致裁切界面无显示
+- **图片裁切消失** — 修复 e._mx/e._my 跨事件对象 NaN bug，改用闭包变量 lastMX/lastMY
+- **酷狗歌词前端接口** — r.lyric → r.lrc || r.lyric，补传 duration 参数
+- **设置面板点击穿透** — pointer-events: none 扩展到 #playlist-panel * 和 #pl-list *
+
 ## [1.1.1-6] - 2025-07-06
 
 ### 删除
