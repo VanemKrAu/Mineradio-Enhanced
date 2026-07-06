@@ -407,33 +407,30 @@ function decodeKugouLyricContent(raw) {
 async function handleKugouLyric(hash, duration) {
   if (!hash) return { lrc: '', tlyric: '' };
   try {
-    const ts = String(Math.floor(Date.now() / 1000));
-    const params = { platid: '2', appid: KUGOU_APPID, clientver: KUGOU_CLIENTVER, mid: KUGOU_DEFAULT_MID, ts, hash, keyword: hash, pagesize: '5', page: '1' };
-    params.signature = kugouAndroidSignature(params);
-    const qs = Object.keys(params).map(k => k + '=' + encodeURIComponent(params[k])).join('&');
-    const text = await _requestText('https://lyrics.kugou.com/search?' + qs, { headers: { 'User-Agent': KUGOU_ANDROID_UA } });
-    const json = JSON.parse(text);
-    const candidates = kugouSafeGet(json, ['data', 'info'], []) || kugouSafeGet(json, ['data', 'list'], []);
+    // Search for lyric ID
+    var searchUrl = 'https://krcs.kugou.com/search?ver=1&man=yes&client=pc&keyword=&duration=' + (duration||0) + '&hash=' + hash;
+    var searchText = await _requestText(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    var searchJson = JSON.parse(searchText || '{}');
+    var candidates = (searchJson && searchJson.candidates) || [];
     if (!candidates.length) return { lrc: '', tlyric: '' };
-    const dur = Number(duration) || 0;
-    let best = candidates[0];
+    var best = candidates[0];
+    var dur = Number(duration) || 0;
     if (dur > 0) {
-      for (const c of candidates) {
-        const cd = Math.abs((Number(c.duration || c.timelength || 0) / 1000) - dur);
-        const bd = Math.abs((Number(best.duration || best.timelength || 0) / 1000) - dur);
-        if (cd < bd) best = c;
+      for (var i = 0; i < candidates.length; i++) {
+        var cd = Math.abs((Number(candidates[i].duration || 0) / 1000) - dur);
+        var bd = Math.abs((Number(best.duration || 0) / 1000) - dur);
+        if (cd < bd) best = candidates[i];
       }
     }
-    const id = best.id || best.song_id || '';
-    const accesskey = best.accesskey || best.access_key || '';
+    var id = best.id || '';
+    var accesskey = best.accesskey || '';
     if (!id || !accesskey) return { lrc: '', tlyric: '' };
-    const dlParams = { platid: '2', appid: KUGOU_APPID, clientver: KUGOU_CLIENTVER, mid: KUGOU_DEFAULT_MID, ts: String(Math.floor(Date.now() / 1000)), id, accesskey };
-    dlParams.signature = kugouAndroidSignature(dlParams);
-    const dlQs = Object.keys(dlParams).map(k => k + '=' + encodeURIComponent(dlParams[k])).join('&');
-    const dlText = await _requestText('https://lyrics.kugou.com/download?' + dlQs, { headers: { 'User-Agent': KUGOU_ANDROID_UA } });
-    const dlJson = JSON.parse(dlText);
-    const content = decodeKugouLyricContent(kugouSafeGet(dlJson, ['data', 'content'], '') || kugouSafeGet(dlJson, ['data', 'lrctxt'], ''));
-    const tcontent = decodeKugouLyricContent(kugouSafeGet(dlJson, ['data', 'tcontent'], '') || kugouSafeGet(dlJson, ['data', 'tlrctxt'], ''));
+    // Download lyric
+    var dlUrl = 'https://krcs.kugou.com/download?ver=1&client=pc&id=' + id + '&accesskey=' + accesskey;
+    var dlText = await _requestText(dlUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    var dlJson = JSON.parse(dlText || '{}');
+    var content = decodeKugouLyricContent(dlJson.content || dlJson.data || '');
+    var tcontent = decodeKugouLyricContent(dlJson.tcontent || dlJson.tdata || '');
     return { lrc: content, tlyric: tcontent };
   } catch (e) { console.warn('[Kugou] lyric failed:', e.message); return { lrc: '', tlyric: '' }; }
 }
