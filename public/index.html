@@ -17735,6 +17735,7 @@ function mergeSongSearchResults(neteaseSongs, qqSongs, limit, q) {
 async function fetchMusicSearchResults(q, mode) {
   if (mode === 'kugou') {
     var kgOnly = await apiJson('/api/kugou/search?keywords=' + encodeURIComponent(q) + '&limit=12');
+    console.log('[UI] kgOnly:', kgOnly ? kgOnly.songs ? kgOnly.songs.length : 'no songs key' : 'null');
     return (kgOnly && kgOnly.songs || []).map(function(s){s.provider='kugou'; return s;}).slice(0, 18);
   }
   if (mode === 'qq') {
@@ -17755,6 +17756,7 @@ async function fetchMusicSearchResults(q, mode) {
   return mergeSongSearchResults(neteaseSongs, qqSongs, 18, q);
 }
 function renderSongSearchResults(songs) {
+  console.log('[UI] renderSongSearchResults:', (songs||[]).length, 'songs');
   playlist = songs || [];
   $results.innerHTML = playlist.map(function(s, i){
     var vipTag = (s.fee === 1) ? '<span class="tag-vip">VIP</span>' : '';
