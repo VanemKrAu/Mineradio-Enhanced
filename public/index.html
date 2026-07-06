@@ -22427,7 +22427,14 @@ async function refreshWallpapers() {
       return;
     }
   }
-  if (wallpaperPickerData.wallpapers && wallpaperPickerData.wallpapers.length) { renderWallpaperGrid(); return; }
+  // v2: 清除旧缓存（上一次扫描的分级信息可能不正确）
+  if (wallpaperPickerData.wallpapers && wallpaperPickerData.wallpapers.length) {
+    var cacheVer = localStorage.getItem('mineradio-wp-cache-ver');
+    if (cacheVer !== '2') {
+      wallpaperPickerData.wallpapers = [];
+      localStorage.setItem('mineradio-wp-cache-ver', '2');
+    } else { renderWallpaperGrid(); return; }
+  }
   statusEl.textContent = '扫描中...';
   gridEl.innerHTML = '';
   if (!api || typeof api.scanWallpapers !== 'function') { statusEl.textContent = '扫描失败：桌面 API 不可用'; return; }
