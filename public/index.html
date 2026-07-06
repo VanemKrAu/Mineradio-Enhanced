@@ -23048,6 +23048,8 @@ function toggleFxPanel(force) {
     el.classList.remove('show', 'peek');
     el.classList.toggle('closing', currentlyOpen);
     document.body.classList.remove('fx-panel-open');
+    var cc = document.getElementById('canvas-container');
+    if (cc) cc.style.pointerEvents = '';
     fxManualCloseAt = Date.now();
     setTimeout(function(){ el.classList.remove('closing'); }, 280);
     var fab = document.getElementById('fx-fab');
@@ -23056,6 +23058,8 @@ function toggleFxPanel(force) {
   }
   el.classList.remove('show', 'closing');
   document.body.classList.add('fx-panel-open');
+  var cc = document.getElementById('canvas-container');
+  if (cc) cc.style.pointerEvents = 'none';
   clearCenteredViewOffsets();
   el.classList.add('show');
   fxPanelPinned = true;
