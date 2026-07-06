@@ -251,6 +251,8 @@ body.simple-mode .mini-queue-popover{width:min(380px,calc(100vw - 32px))}
 .daily-review-actions button:hover{background:rgba(255,255,255,.12);color:#fff}
 .daily-review-empty{color:rgba(255,255,255,.58);font-size:13px;line-height:1.6}
 .daily-review-crop-dialog{width:min(560px,calc(100vw - 28px));align-items:center}
+.playlist-select-mask{position:fixed;inset:0;z-index:1400;display:flex;align-items:center;justify-content:center;background:rgba(3,5,9,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.playlist-select-dialog{background:var(--glass-bg);border:1px solid rgba(255,255,255,.10);border-radius:20px;padding:22px 24px;box-shadow:var(--glass-shadow);display:flex;flex-direction:column;gap:16px;max-height:80vh;overflow:auto}
 .daily-review-crop-canvas{display:block;width:min(360px,76vw);aspect-ratio:3/4;border-radius:18px;background:#050608;cursor:grab;touch-action:none;box-shadow:0 20px 60px rgba(0,0,0,.48)}
 .daily-review-crop-canvas.dragging{cursor:grabbing}
 .daily-review-crop-controls{width:min(360px,76vw);display:flex;align-items:center;gap:12px;margin-top:14px;color:rgba(255,255,255,.62);font-size:11px}
@@ -2072,7 +2074,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   </button>
 </div>
 
-<button id="fx-fab" title="视觉控制台">
+<button id="fx-fab" type="button" onclick="toggleFxPanel()" title="视觉控制台">
   <svg width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M4 7h8"/><path d="M16 7h4"/><circle cx="14" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></svg>
 </button>
 <button id="fx-fab-hide-btn" type="button" onclick="toggleFxFabAutoHide(event)" title="自动隐藏视觉控制台">‹</button>
@@ -3471,6 +3473,7 @@ var controlsShelfSuppressUntil = 0;
 var cursorHideTimer = null;
 var CURSOR_HIDE_DELAY = 2500;
 var fxPanelPinned = false;
+var fxManualCloseAt = 0;
 var playlistPanelPinned = readBooleanPreference(PLAYLIST_PANEL_PIN_STORE_KEY, false);
 var userCapsuleAutoHide = readBooleanPreference(USER_CAPSULE_AUTO_HIDE_STORE_KEY, false);
 var fxFabAutoHide = readBooleanPreference(FX_FAB_AUTO_HIDE_STORE_KEY, false);
@@ -23041,10 +23044,11 @@ function toggleFxPanel(force) {
   var currentlyOpen = el.classList.contains('show') || el.classList.contains('peek');
   if (peekTimers && peekTimers.fx) { clearTimeout(peekTimers.fx); peekTimers.fx = null; }
   fxPanelPinned = false;
-  if (force === false) {
+  if (force === false || (force === undefined && currentlyOpen)) {
     el.classList.remove('show', 'peek');
     el.classList.toggle('closing', currentlyOpen);
     document.body.classList.remove('fx-panel-open');
+    fxManualCloseAt = Date.now();
     setTimeout(function(){ el.classList.remove('closing'); }, 280);
     var fab = document.getElementById('fx-fab');
     if (fab) fab.classList.remove('active');
@@ -23052,6 +23056,7 @@ function toggleFxPanel(force) {
   }
   el.classList.remove('show', 'closing');
   document.body.classList.add('fx-panel-open');
+  clearCenteredViewOffsets();
   setPeek(el, true, 'fx');
 }
 function resetFx() {
@@ -26217,14 +26222,15 @@ window.addEventListener('mousemove', function(e){
   var inFxFab = ex >= fabRect.left - 18 && ex <= fabRect.right + 18 && ey >= fabRect.top - 18 && ey <= fabRect.bottom + 18;
   var inFxBridge = fpOn && ex >= Math.min(fpRect.left, fabRect.left) - 18 && ex <= W && ey >= fpRect.bottom - 10 && ey <= fabRect.bottom + 18;
   if (!diyPlayerMode) inFxPanel = inFxFab = inFxBridge = false;
-  if (inFxFab || inFxPanel || inFxBridge) setPeek(fp, true, 'fx');
+  if (fxManualCloseAt && Date.now() - fxManualCloseAt < 800) { /* cooldown */ }
+  else if (!emptyHomeActive && (inFxFab || inFxPanel || inFxBridge)) setPeek(fp, true, 'fx');
   else if (fpOn) setPeek(fp, false, 'fx');
   // 歌单/队列 DOM 面板只在左侧明确停留时出现，避免和右侧 3D 架抢焦点
   var ppOn = pp.classList.contains('peek');
   var ppRect = pp.getBoundingClientRect();
   var inQueueTrigger = isPlaylistEdgeTrigger(ex, ey, H);
   var inQueuePanel = ppOn && ex >= ppRect.left - 18 && ex <= ppRect.right + 24 && ey >= ppRect.top - 22 && ey <= ppRect.bottom + 22;
-  if (inQueueTrigger || inQueuePanel) setPeek(pp, true, 'pl');
+  if (!emptyHomeActive && (inQueueTrigger || inQueuePanel)) setPeek(pp, true, 'pl');
   else if (shouldClosePlaylistPanelFromPointer(ppOn, ex, ppRect)) setPeek(pp, false, 'pl');
 
   // v8: 镜头跟拍触发判断
@@ -27364,23 +27370,33 @@ function openDailyReviewCrop(src) {
     mask.addEventListener('click', function(e){ if(e.target===mask||e.target.dataset.cropClose)closeDailyReviewCrop(); });
     var canvas = document.getElementById('daily-review-crop-canvas');
     var ctx = canvas.getContext('2d');
-    var zoom = 1, offsetX = 0, offsetY = 0, dragging = false;
+    var zoom = 1, offsetX = 0, offsetY = 0, dragging = false, lastMX = 0, lastMY = 0;
     var w = canvas.width, h = canvas.height;
     function redraw() {
+      var scale = Math.max(w / img.naturalWidth, h / img.naturalHeight) * zoom;
+      var drawW = img.naturalWidth * scale;
+      var drawH = img.naturalHeight * scale;
+      var maxOffX = Math.max(0, (drawW - w) / 2);
+      var maxOffY = Math.max(0, (drawH - h) / 2);
+      offsetX = Math.max(-maxOffX, Math.min(maxOffX, offsetX));
+      offsetY = Math.max(-maxOffY, Math.min(maxOffY, offsetY));
       ctx.clearRect(0, 0, w, h);
-      ctx.drawImage(img, (w-w*zoom)/2+offsetX, (h-h*zoom)/2+offsetY, w*zoom, h*zoom);
+      ctx.drawImage(img, (w - drawW) / 2 + offsetX, (h - drawH) / 2 + offsetY, drawW, drawH);
     }
     redraw();
     var zoomSlider = document.getElementById('daily-review-crop-zoom');
     zoomSlider.addEventListener('input', function(){ zoom = Number(zoomSlider.value); redraw(); });
-    canvas.addEventListener('mousedown', function(e){ dragging=true; canvas.classList.add('dragging'); e._mx=e.clientX;e._my=e.clientY; });
-    window.addEventListener('mousemove', function(e){ if(!dragging||!canvas)return; offsetX+=e.clientX-e._mx; offsetY+=e.clientY-e._my; e._mx=e.clientX;e._my=e.clientY; redraw(); });
+    canvas.addEventListener('mousedown', function(e){ dragging=true; canvas.classList.add('dragging'); lastMX=e.clientX;lastMY=e.clientY; });
+    window.addEventListener('mousemove', function(e){ if(!dragging||!canvas)return; offsetX+=e.clientX-lastMX; offsetY+=e.clientY-lastMY; lastMX=e.clientX;lastMY=e.clientY; redraw(); });
     window.addEventListener('mouseup', function(){ dragging=false; if(canvas)canvas.classList.remove('dragging'); });
     var saveBtn = document.getElementById('daily-review-crop-save');
     saveBtn.addEventListener('click', function(){
+      var scale = Math.max(w / img.naturalWidth, h / img.naturalHeight) * zoom;
+      var drawW = img.naturalWidth * scale;
+      var drawH = img.naturalHeight * scale;
       var out = document.createElement('canvas'); out.width=720;out.height=960;
       var oc = out.getContext('2d');
-      oc.drawImage(img, (w-w*zoom)/2+offsetX, (h-h*zoom)/2+offsetY, w*zoom, h*zoom);
+      oc.drawImage(img, (w - drawW) / 2 + offsetX, (h - drawH) / 2 + offsetY, drawW, drawH);
       var dataUrl = out.toDataURL('image/jpeg', 0.85);
       try { localStorage.setItem(DAILY_REVIEW_IMAGE_KEY, dataUrl); } catch(_) {}
       closeDailyReviewCrop();
