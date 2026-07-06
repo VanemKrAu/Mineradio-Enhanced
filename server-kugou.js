@@ -354,31 +354,15 @@ async function handleKugouSearch(keywords, limit) {
   var kw = String(keywords || '').trim();
   if (!kw) return [];
   try {
-    var ts = String(Math.floor(Date.now() / 1000));
-    var obj = kugouCookieObject();
-    var p = { appid: KUGOU_APPID, clientver: KUGOU_CLIENTVER, dfid: kugouCookieDfid() || '-', mid: kugouCookieMid(), uuid: obj.KUGOU_API_GUID || '-', clienttime: ts, keyword: kw, page: 1, pagesize: size, platform: 'AndroidFilter' };
-    if (kugouCookieToken(obj)) { p.token = kugouCookieToken(obj); p.userid = kugouCookieUserId(obj); }
-    p.signature = kugouAndroidSignature(p);
-    var qs = Object.keys(p).map(function(k) { return k + '=' + encodeURIComponent(p[k] || ''); }).join('&');
-    var headers = { 'User-Agent': KUGOU_ANDROID_UA, 'x-router': 'complexsearch.kugou.com' };
-    var text = await _requestText('https://complexsearch.kugou.com/v6/search/complex?' + qs, { headers: headers });
-    text = String(text || '').replace(/^<!--KG_TAG_RES_START-->/, '').replace(/<!--KG_TAG_RES_END-->$/, '');
+    var qs = 'keyword=' + encodeURIComponent(kw) + '&page=1&pagesize=' + size + '&platform=WebFilter';
+    var text = await _requestText('http://songsearch.kugou.com/song_search_v2?' + qs, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     var body = JSON.parse(text || '{}');
-    var lists = [];
-    if (body && body.data && Array.isArray(body.data.lists)) {
-      for (var i = 0; i < body.data.lists.length; i++) {
-        if (body.data.lists[i].type === 'song' && Array.isArray(body.data.lists[i].lists)) {
-          lists = body.data.lists[i].lists; break;
-        }
-      }
-    }
+    var lists = (body && body.data && body.data.lists) || [];
     return lists.map(function(s) {
-      return {
-        name: s.SongName || s.songname || '', artist: s.SingerName || s.singername || '',
-        id: s.Hash || s.hash || '', hash: s.Hash || s.hash || '',
-        album: s.AlbumName || s.album_name || '', duration: Number(s.Duration || s.duration || 0),
-        provider: 'kugou', source: 'kugou'
-      };
+      var name = s.SongName || s.songname || s.Song||'';
+      var artist = s.SingerName || s.singername || s.Singer||'';
+      var hash = s.HQFileHash || s.SQFileHash || s.FileHash || s.hash || '';
+      return { name: name, artist: artist, id: hash, hash: hash, album: s.AlbumName || s.album_name || '', duration: Number(s.HQDuration || s.SQDuration || s.duration || 0), provider: 'kugou', source: 'kugou' };
     }).filter(function(s) { return s.name; });
   } catch(e) { console.warn('[Kugou] search failed:', e.message); return []; }
 }

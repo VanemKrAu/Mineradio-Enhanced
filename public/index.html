@@ -17379,7 +17379,7 @@ function updateSearchModeTabs() {
 function setSearchMode(mode) {
   mode = (mode === 'podcast' || mode === 'netease' || mode === 'qq' || mode === 'kugou') ? mode : 'song';
   if (searchMode === mode) return;
-  if (mode === 'kugou' && !kugouLoginStatus.loggedIn) { showToast('请先登录酷狗音乐'); return; }
+  if (mode === 'kugou') { searchMode = mode; updateSearchModeTabs(); clearSearchResults(); if(q)doSearch(q);else renderSearchHistory(); return; }
   searchMode = mode;
   updateSearchModeTabs();
   clearSearchResults();
