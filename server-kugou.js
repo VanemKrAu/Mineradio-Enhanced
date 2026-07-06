@@ -353,6 +353,7 @@ async function handleKugouPlaylistTracks(id) {
 async function handleKugouSearch(keywords, limit) {
   var size = Math.min(Math.max(Number(limit) || 10, 1), 60);
   var kw = String(keywords || '').trim();
+  console.log('[KugouSearch] keywords:', kw, 'size:', size);
   if (!kw) return [];
   try {
     var qs = 'keyword=' + encodeURIComponent(kw) + '&page=1&pagesize=' + size + '&platform=WebFilter';

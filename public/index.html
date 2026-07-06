@@ -17377,7 +17377,7 @@ function updateSearchModeTabs() {
   requestAnimationFrame(updateSearchPillGlassDisplacementMap);
 }
 function setSearchMode(mode) {
-  mode = (mode === 'podcast' || mode === 'netease' || mode === 'qq' || mode === 'kugou') ? mode : 'song';
+  console.log('[UI] setSearchMode:', mode); mode = (mode === 'podcast' || mode === 'netease' || mode === 'qq' || mode === 'kugou') ? mode : 'song';
   if (searchMode === mode) return;
   if (mode === 'kugou') { searchMode = mode; updateSearchModeTabs(); clearSearchResults(); if(q)doSearch(q);else renderSearchHistory(); return; }
   searchMode = mode;
