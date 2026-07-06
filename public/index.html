@@ -26016,6 +26016,10 @@ function setPeek(el, on, key) {
       }, 180);
     }
     if (key === 'fx') {
+      document.body.classList.add('fx-panel-open');
+      clearCenteredViewOffsets();
+      var canvasContainer = document.getElementById('canvas-container');
+      if (canvasContainer) { canvasContainer.style.pointerEvents = 'none'; canvasContainer.style.opacity = '0'; canvasContainer.style.visibility = 'hidden'; }
       var fabOn = document.getElementById('fx-fab');
       if (fabOn) fabOn.classList.add('active');
     }
@@ -26026,6 +26030,11 @@ function setPeek(el, on, key) {
       if (key === 'fx') {
         var fabOff = document.getElementById('fx-fab');
         if (fabOff && !el.classList.contains('show')) fabOff.classList.remove('active');
+        if (!el.classList.contains('show')) {
+          document.body.classList.remove('fx-panel-open');
+          var canvasContainer = document.getElementById('canvas-container');
+          if (canvasContainer) { canvasContainer.style.pointerEvents = ''; canvasContainer.style.opacity = ''; canvasContainer.style.visibility = ''; }
+        }
       }
       peekTimers[key] = null;
     }, PEEK_HIDE_DELAY);
