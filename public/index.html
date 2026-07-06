@@ -23049,7 +23049,7 @@ function toggleFxPanel(force) {
     el.classList.toggle('closing', currentlyOpen);
     document.body.classList.remove('fx-panel-open');
     var cc = document.getElementById('canvas-container');
-    if (cc) { cc.style.pointerEvents = ''; cc.style.opacity = ''; cc.style.visibility = ''; }
+    if (cc) cc.style.pointerEvents = '';
     fxManualCloseAt = Date.now();
     setTimeout(function(){ el.classList.remove('closing'); }, 280);
     var fab = document.getElementById('fx-fab');
@@ -23059,7 +23059,7 @@ function toggleFxPanel(force) {
   el.classList.remove('show', 'closing');
   document.body.classList.add('fx-panel-open');
   var cc = document.getElementById('canvas-container');
-  if (cc) { cc.style.pointerEvents = 'none'; cc.style.opacity = '0'; cc.style.visibility = 'hidden'; }
+  if (cc) cc.style.pointerEvents = 'none';
   clearCenteredViewOffsets();
   el.classList.add('show');
   fxPanelPinned = true;
@@ -26019,7 +26019,7 @@ function setPeek(el, on, key) {
       document.body.classList.add('fx-panel-open');
       clearCenteredViewOffsets();
       var canvasContainer = document.getElementById('canvas-container');
-      if (canvasContainer) { canvasContainer.style.pointerEvents = 'none'; canvasContainer.style.opacity = '0'; canvasContainer.style.visibility = 'hidden'; }
+      if (canvasContainer) canvasContainer.style.pointerEvents = 'none';
       var fabOn = document.getElementById('fx-fab');
       if (fabOn) fabOn.classList.add('active');
     }
@@ -26033,7 +26033,7 @@ function setPeek(el, on, key) {
         if (!el.classList.contains('show')) {
           document.body.classList.remove('fx-panel-open');
           var canvasContainer = document.getElementById('canvas-container');
-          if (canvasContainer) { canvasContainer.style.pointerEvents = ''; canvasContainer.style.opacity = ''; canvasContainer.style.visibility = ''; }
+          if (canvasContainer) canvasContainer.style.pointerEvents = '';
         }
       }
       peekTimers[key] = null;
