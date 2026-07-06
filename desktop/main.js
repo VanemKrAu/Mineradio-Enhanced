@@ -1482,6 +1482,13 @@ ipcMain.handle('mineradio-wallpaper-read-file', async (_event, filePath) => {
     if (!filePath || typeof filePath !== 'string') return { ok: false, error: 'INVALID_PATH' };
     var ext = path.extname(filePath).toLowerCase();
     var mime = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm' }[ext] || 'image/jpeg';
+    var stat = fs.statSync(filePath);
+    // 大文件(>10MB)用 HTTP 代理 URL 返回，避免 IPC base64 崩溃
+    // 返回字段仍为 dataUrl，前端无需改动（video src 同时支持 http URL）
+    if (stat.size > 10 * 1024 * 1024) {
+      var serveUrl = 'http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/wallpaper/serve?path=' + encodeURIComponent(filePath);
+      return { ok: true, dataUrl: serveUrl, size: stat.size };
+    }
     var buf = fs.readFileSync(filePath);
     return { ok: true, dataUrl: 'data:' + mime + ';base64,' + buf.toString('base64') };
   } catch (e) {

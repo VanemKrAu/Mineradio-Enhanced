@@ -4255,6 +4255,32 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---------- 壁纸本地代理 (支持 Range) ----------
+  if (pn === '/api/wallpaper/serve') {
+    try {
+      const target = path.resolve(String(url.searchParams.get('path') || ''));
+      const stat = fs.statSync(target);
+      if (!stat.isFile()) { res.writeHead(404); res.end(); return; }
+      const ext = path.extname(target).toLowerCase();
+      const mime = { '.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.gif':'image/gif','.webp':'image/webp','.mp4':'video/mp4','.webm':'video/webm' }[ext] || 'application/octet-stream';
+      const total = stat.size;
+      let start = 0, end = total - 1, status = 200;
+      const range = req.headers.range || '';
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (match) {
+        start = match[1] ? Math.max(0, Number(match[1])) : 0;
+        end = match[2] ? Math.min(end, Number(match[2])) : end;
+        status = 206;
+      }
+      const headers = { 'Content-Type': mime, 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' };
+      headers['Content-Length'] = String(end - start + 1);
+      if (status === 206) headers['Content-Range'] = 'bytes ' + start + '-' + end + '/' + total;
+      res.writeHead(status, headers);
+      fs.createReadStream(target, { start, end }).pipe(res);
+    } catch (e) { res.writeHead(500); res.end(); }
+    return;
+  }
+
   // ---------- 静态资源 ----------
   if (pn === '/favicon.ico') {
     serveStatic(res, path.join(__dirname, 'build', 'icon.ico'));
