@@ -14,6 +14,8 @@
   <canvas id="gl"></canvas>
   <video id="bgv" loop muted playsinline></video>
   <canvas id="overlay"></canvas>
+  <div id="pkg-toast" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.82);color:#fff;font:14px sans-serif;padding:12px 24px;border-radius:10px;pointer-events:none;opacity:0;transition:opacity .2s;z-index:999"></div>
+  <div id="pkg-edit-info" style="position:fixed;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:rgba(255,255,255,.8);font:12px sans-serif;padding:6px 14px;border-radius:8px;pointer-events:none;opacity:0;transition:opacity .2s;z-index:998">编辑模式</div>
   <script>
     'use strict';
     // ═══════════════════════════════════════════
@@ -105,6 +107,18 @@
     var sceneTextures = {};
     var sceneActive = false;
     var sceneLayers = [];
+    var sceneFolderPath = '';
+    var pkgEditMode = false;
+    var pkgToastTimer = 0;
+
+    function showPkgToast(msg, duration) {
+      var el = document.getElementById('pkg-toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.style.opacity = '1';
+      if (pkgToastTimer) clearTimeout(pkgToastTimer);
+      pkgToastTimer = setTimeout(function() { el.style.opacity = '0'; }, duration || 1500);
+    }
 
     // ── Texture loader ────────────────────────
     function loadTexture(url) {
@@ -132,8 +146,23 @@
     async function loadScene(scene) {
       if (!scene || !scene.ok) return false;
       sceneData = scene;
-      sceneLayers = scene.layers || [];
+      sceneLayers = (scene.layers || []).map(function(l) {
+        return Object.assign({}, l, { hidden: false });
+      });
       sceneTextures = {};
+
+      // 从 localStorage 恢复用户编辑状态
+      var savedHidden = [];
+      try {
+        var saved = JSON.parse(localStorage.getItem('mineradio-wp-layers-' + (scene.folderPath || '')) || '{}');
+        savedHidden = saved.hidden || [];
+        if (saved.folderPath) sceneFolderPath = saved.folderPath;
+      } catch(_) {}
+      if (scene.folderPath) sceneFolderPath = scene.folderPath;
+
+      for (var i = 0; i < sceneLayers.length; i++) {
+        if (savedHidden.indexOf(sceneLayers[i].name) >= 0) sceneLayers[i].hidden = true;
+      }
 
       // Load textures
       var promises = [];
@@ -221,6 +250,7 @@
       for (var i = 0; i < sceneLayers.length; i++) {
         var layer = sceneLayers[i];
         if (!layer.visible) continue;
+        if (layer.hidden) continue;
         var tex = sceneTextures[layer.imageFile];
         if (!tex) continue;
 
@@ -357,6 +387,75 @@
       octx.fillRect(0, 0, innerWidth, innerHeight);
       octx.restore();
     }
+
+    // ── PKG 纹理编辑 ─────────────────────────
+    function savePkgLayerState() {
+      if (!sceneFolderPath) return;
+      var hidden = [];
+      for (var i = 0; i < sceneLayers.length; i++) {
+        if (sceneLayers[i].hidden) hidden.push(sceneLayers[i].name);
+      }
+      try {
+        localStorage.setItem('mineradio-wp-layers-' + sceneFolderPath, JSON.stringify({ hidden: hidden, folderPath: sceneFolderPath }));
+      } catch(_) {}
+    }
+
+    function deletePkgLayer() {
+      // 从最上层开始删除（逆序遍历）
+      for (var i = sceneLayers.length - 1; i >= 0; i--) {
+        if (sceneLayers[i].hidden) continue;
+        if (!sceneLayers[i].imageFile && !sceneLayers[i].videoFile) continue;
+        sceneLayers[i].hidden = true;
+        showPkgToast('已隐藏图层: ' + (sceneLayers[i].name || '#' + i), 1200);
+        savePkgLayerState();
+        return;
+      }
+      showPkgToast('没有可删除的图层', 1200);
+    }
+
+    function addPkgLayer() {
+      // 恢复最近隐藏的图层（逆序，从下到上恢复）
+      for (var i = 0; i < sceneLayers.length; i++) {
+        if (sceneLayers[i].hidden) {
+          sceneLayers[i].hidden = false;
+          showPkgToast('已恢复图层: ' + (sceneLayers[i].name || '#' + i), 1200);
+          savePkgLayerState();
+          return;
+        }
+      }
+      showPkgToast('没有可恢复的图层', 1200);
+    }
+
+    function togglePkgEditMode() {
+      pkgEditMode = !pkgEditMode;
+      var info = document.getElementById('pkg-edit-info');
+      if (info) info.style.opacity = pkgEditMode ? '1' : '0';
+      if (!pkgEditMode) {
+        // 退出编辑模式时保存
+        savePkgLayerState();
+        showPkgToast('编辑已保存', 1000);
+        // 更新可见层数
+        var visible = 0;
+        for (var i = 0; i < sceneLayers.length; i++) {
+          if (!sceneLayers[i].hidden && (sceneLayers[i].imageFile || sceneLayers[i].videoFile)) visible++;
+        }
+        if (info) info.textContent = '已保存 (' + visible + ' 层可见)';
+        setTimeout(function() { if (info) info.style.opacity = '0'; }, 1500);
+      } else {
+        var v = 0;
+        for (var j = 0; j < sceneLayers.length; j++) {
+          if (!sceneLayers[j].hidden && (sceneLayers[j].imageFile || sceneLayers[j].videoFile)) v++;
+        }
+        if (info) info.textContent = '编辑模式 (W退出/Q恢复/E删除) · ' + v + ' 层可见';
+      }
+    }
+
+    window.addEventListener('keydown', function(e) {
+      if (e.key === 'w' || e.key === 'W') { e.preventDefault(); togglePkgEditMode(); }
+      if (!pkgEditMode) return;
+      if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); addPkgLayer(); }
+      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); deletePkgLayer(); }
+    });
 
     // ── Main loop ─────────────────────────────
     function render(nowMs) {

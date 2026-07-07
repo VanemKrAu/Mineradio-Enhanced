@@ -1119,6 +1119,7 @@ function loadWallpaperScene(folderPath) {
   try {
     const scene = wallpaperScanner.extractWallpaperScene(folderPath);
     if (scene && scene.ok) {
+      scene.folderPath = folderPath;  // 供 wallpaper.html 持久化编辑状态
       // convert paths to file:// URLs
       if (scene.textures) {
         for (let i = 0; i < scene.textures.length; i++) {
