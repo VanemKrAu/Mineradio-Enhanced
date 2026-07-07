@@ -15123,6 +15123,12 @@ document.addEventListener('keyup', function(e){
 }, true);
 document.addEventListener('keydown', function(e){
   if (isTypingTarget(e.target)) return;
+  // PKG 壁纸纹理编辑快捷键 (W/E/Q) — 转发到壁纸窗口
+  if (document.body.classList.contains('wallpaper-loaded') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    if (e.code === 'KeyW') { e.preventDefault(); sendWallpaperCmd('toggleEdit'); return; }
+    if (e.code === 'KeyE') { e.preventDefault(); sendWallpaperCmd('delete'); return; }
+    if (e.code === 'KeyQ') { e.preventDefault(); sendWallpaperCmd('add'); return; }
+  }
   markRenderInteraction('keyboard', 700);
   if (e.code === 'KeyK') {
     e.preventDefault();
@@ -27162,11 +27168,17 @@ function pushWallpaperState(force) {
   desktopOverlayPushState.lastWallpaperKey = key;
   api.updateWallpaperMode(payload).catch(function(e){ console.warn('wallpaper update failed:', e); });
 }
+function sendWallpaperCmd(cmd) {
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.wallpaperCmd !== 'function') return;
+  api.wallpaperCmd(cmd).catch(function(e){ console.warn('wallpaper cmd failed:', e); });
+}
 function applyWallpaperModeState(force) {
   var api = getDesktopWindowApi();
   if (!api) return;
   normalizeDevelopmentLockedFxState();
   var payload = wallpaperPayload();
+  document.body.classList.toggle('wallpaper-loaded', !!payload.enabled);
   if (typeof api.setWallpaperMode === 'function') {
     api.setWallpaperMode(!!payload.enabled, payload).catch(function(e){ console.warn('wallpaper state failed:', e); });
   }

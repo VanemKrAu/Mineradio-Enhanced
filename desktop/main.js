@@ -1581,6 +1581,20 @@ ipcMain.handle('mineradio-wallpaper-load-scene', async (_event, folderPath) => {
     }
   });
 
+ipcMain.handle('mineradio-wallpaper-cmd', async (_event, cmd) => {
+    try {
+      if (wallpaperWindow && !wallpaperWindow.isDestroyed()) {
+        if (cmd === 'toggleEdit') wallpaperWindow.webContents.send('mineradio-wallpaper-cmd', 'toggleEdit');
+        if (cmd === 'add') wallpaperWindow.webContents.send('mineradio-wallpaper-cmd', 'add');
+        if (cmd === 'delete') wallpaperWindow.webContents.send('mineradio-wallpaper-cmd', 'delete');
+        return { ok: true };
+      }
+      return { ok: false, error: 'NO_WALLPAPER_WINDOW' };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
 
 ipcMain.handle('mineradio-wallpaper-update', async (_event, payload) => {
   try {

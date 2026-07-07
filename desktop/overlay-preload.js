@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('desktopOverlay', {
   onLyricsState: (callback) => bind('mineradio-desktop-lyrics-state', callback),
   onWallpaperState: (callback) => bind('mineradio-wallpaper-state', callback),
   onWallpaperScene: (callback) => bind('mineradio-wallpaper-scene', callback),
+  onWallpaperCmd: (callback) => bind('mineradio-wallpaper-cmd', callback),
   setLyricsDrag: (dragging) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-dragging', !!dragging),
   setLyricsPointerCapture: (active) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-pointer-capture', !!active),
   setLyricsHotBounds: (bounds) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-hot-bounds', bounds || {}),

@@ -450,12 +450,13 @@
       }
     }
 
-    window.addEventListener('keydown', function(e) {
-      if (e.key === 'w' || e.key === 'W') { e.preventDefault(); togglePkgEditMode(); }
-      if (!pkgEditMode) return;
-      if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); addPkgLayer(); }
-      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); deletePkgLayer(); }
-    });
+    if (window.desktopOverlay && window.desktopOverlay.onWallpaperCmd) {
+      window.desktopOverlay.onWallpaperCmd(function(cmd) {
+        if (cmd === 'toggleEdit') togglePkgEditMode();
+        if (cmd === 'add') addPkgLayer();
+        if (cmd === 'delete') deletePkgLayer();
+      });
+    }
 
     // ── Main loop ─────────────────────────────
     function render(nowMs) {
@@ -488,6 +489,11 @@
     window.addEventListener('message', function(e) {
       if (e.data && e.data.type === 'mineradio-wallpaper-scene') {
         loadScene(e.data.scene);
+      }
+      if (e.data && e.data.type === 'mineradio-wallpaper-cmd') {
+        if (e.data.cmd === 'toggleEdit') togglePkgEditMode();
+        if (e.data.cmd === 'add') addPkgLayer();
+        if (e.data.cmd === 'delete') deletePkgLayer();
       }
     });
 
