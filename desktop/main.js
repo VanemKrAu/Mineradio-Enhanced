@@ -1574,6 +1574,10 @@ ipcMain.handle('mineradio-wallpaper-set-enabled', async (_event, enabled, payloa
 
 ipcMain.handle('mineradio-wallpaper-load-scene', async (_event, folderPath) => {
     try {
+      // 确保壁纸窗口存在
+      if (!wallpaperWindow || wallpaperWindow.isDestroyed()) {
+        createWallpaperWindow({ folderPath: folderPath });
+      }
       loadWallpaperScene(folderPath);
       return { ok: true };
     } catch (e) {

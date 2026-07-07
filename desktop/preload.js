@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   setWallpaperMode: (enabled, payload) => ipcRenderer.invoke('mineradio-wallpaper-set-enabled', !!enabled, payload || {}),
   updateWallpaperMode: (payload) => ipcRenderer.invoke('mineradio-wallpaper-update', payload || {}),
   wallpaperCmd: (cmd) => ipcRenderer.invoke('mineradio-wallpaper-cmd', cmd),
+  loadWallpaperScene: (folderPath) => ipcRenderer.invoke('mineradio-wallpaper-load-scene', folderPath),
   scanWallpapers: (rootPaths) => ipcRenderer.invoke('mineradio-wallpaper-scan', rootPaths || []),
   chooseWallpaperRoot: () => ipcRenderer.invoke('mineradio-wallpaper-choose-root'),
   readWallpaperFile: (filePath) => ipcRenderer.invoke('mineradio-wallpaper-read-file', filePath),

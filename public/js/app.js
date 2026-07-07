@@ -19829,6 +19829,7 @@ function applyWallpaper(wp) {
       if (res && res.ok && res.dataUrl) {
         wallpaperPickerData.currentMedia = { type: "video", src: res.dataUrl, name: wp.name, mime: "video/mp4", folder: wp.folderPath };
         setCustomBackgroundMedia({ type: "video", src: res.dataUrl, name: wp.name, mime: "video/mp4" });
+        loadWallpaperSceneIfPkg(wp);
         showToast("壁纸已应用（视频）：" + wp.name);
       } else { tryPkg(); }
     }).catch(function(){ tryPkg(); });
@@ -19848,6 +19849,7 @@ function applyWallpaper(wp) {
             if (vidRes && vidRes.ok && vidRes.dataUrl) {
               wallpaperPickerData.currentMedia = { type: "video", src: vidRes.dataUrl, name: wp.name, mime: "video/mp4", folder: wp.folderPath };
               setCustomBackgroundMedia({ type: "video", src: vidRes.dataUrl, name: wp.name, mime: "video/mp4" });
+              loadWallpaperSceneIfPkg(wp);
               showToast("壁纸已应用（PKG视频）：" + wp.name);
             } else { tryPkgTex(); }
           }).catch(function(){ tryPkgTex(); });
@@ -19868,6 +19870,7 @@ function applyWallpaper(wp) {
               if (isVideo) {
                 wallpaperPickerData.currentMedia = { type: "video", src: res.dataUrl, name: wp.name, mime: "video/mp4", folder: wp.folderPath };
                 setCustomBackgroundMedia({ type: "video", src: res.dataUrl, name: wp.name, mime: "video/mp4" });
+                loadWallpaperSceneIfPkg(wp);
                 showToast("壁纸已应用（视频）：" + wp.name);
               } else {
                 // Convert data URL to blob URL (CSS can't handle 4MB data URLs)
@@ -19894,6 +19897,16 @@ function applyWallpaper(wp) {
   function noSource() {
     showToast("该壁纸无 MP4 视频且无可提取纹理，无法应用");
   }
+}
+function loadWallpaperSceneIfPkg(wp) {
+  if (!wp || !wp.folderPath || !wp.hasPkg) return;
+  var api = window.desktopWindow;
+  if (!api || typeof api.loadWallpaperScene !== 'function') return;
+  console.log('[WP] loading PKG scene:', wp.folderPath);
+  // 启动壁纸窗口渲染PKG多层场景
+  api.loadWallpaperScene(wp.folderPath).catch(function(e) {
+    console.warn('[WP] loadWallpaperScene failed:', e);
+  });
 }
 function restoreWallpaper() {
   try {
