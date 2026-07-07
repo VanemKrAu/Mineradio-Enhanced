@@ -12372,7 +12372,7 @@ document.addEventListener('keyup', function(e){
 document.addEventListener('keydown', function(e){
   if (isTypingTarget(e.target)) return;
   // PKG 壁纸纹理编辑快捷键 (W/E/Q) — 转发到壁纸窗口
-  if (document.body.classList.contains('wallpaper-loaded') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+  if (!e.ctrlKey && !e.altKey && !e.metaKey) {
     if (e.code === 'KeyW') { e.preventDefault(); sendWallpaperCmd('toggleEdit'); return; }
     if (e.code === 'KeyE') { e.preventDefault(); sendWallpaperCmd('delete'); return; }
     if (e.code === 'KeyQ') { e.preventDefault(); sendWallpaperCmd('add'); return; }
