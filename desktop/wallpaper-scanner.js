@@ -472,21 +472,16 @@ function extractWallpaperScene(folderPath) {
   }
   if (!result.sceneWidth) { result.sceneWidth = 1920; result.sceneHeight = 1080; }
 
-  // if no layers parsed, create one layer per texture (sorted by size descending)
+  // if no layers parsed, create one layer per texture in original order
   if (result.layers.length === 0 && result.textures.length > 0) {
-    // sort by file size descending so largest (background) is first
-    result.textures.sort(function(a, b) {
-      try { return fs.statSync(b.path).size - fs.statSync(a.path).size; }
-      catch(_) { return 0; }
-    });
     for (var ti = 0; ti < result.textures.length; ti++) {
       var tex = result.textures[ti];
       result.layers.push({
         name: tex.name,
         type: 'image',
         visible: true,
-        opacity: ti === 0 ? 1 : 1,
-        blending: ti === 0 ? 'opaque' : 'translucent',
+        opacity: 1,
+        blending: 'opaque',
         origin: [0.5, 0.5],
         scale: [1, 1],
         angles: [0, 0, 0],
