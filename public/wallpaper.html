@@ -153,6 +153,11 @@
       });
       sceneTextures = {};
 
+      console.log('[WP] loadScene: layers=' + sceneLayers.length + ' textures=' + ((scene.textures||[]).length) + ' videos=' + ((scene.videos||[]).length));
+      for (var li = 0; li < sceneLayers.length; li++) {
+        console.log('[WP] layer ' + li + ': name=' + sceneLayers[li].name + ' imageFile=' + sceneLayers[li].imageFile + ' visible=' + sceneLayers[li].visible + ' opacity=' + sceneLayers[li].opacity);
+      }
+
       // 从 localStorage 恢复用户编辑状态
       var savedHidden = [];
       try {
@@ -183,6 +188,7 @@
         })(layer.imageFile, texEntry.url);
       }
       await Promise.all(promises);
+      console.log('[WP] textures loaded: ' + Object.keys(sceneTextures).length + ' keys: ' + Object.keys(sceneTextures).join(', '));
 
       // ── Video priority: if scene has video files, use them directly ──
       var hasVideo = false;
