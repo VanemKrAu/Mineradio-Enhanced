@@ -19899,6 +19899,7 @@ function applyWallpaper(wp) {
   }
 }
 function loadWallpaperSceneIfPkg(wp) {
+  console.log('[WP] loadWallpaperSceneIfPkg called, wp:', wp ? (wp.name + ' hasPkg=' + wp.hasPkg + ' folder=' + wp.folderPath) : 'null');
   if (!wp || !wp.folderPath || !wp.hasPkg) return;
   var api = window.desktopWindow;
   if (!api || typeof api.loadWallpaperScene !== 'function') return;
