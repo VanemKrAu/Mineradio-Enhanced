@@ -12373,9 +12373,9 @@ document.addEventListener('keydown', function(e){
   if (isTypingTarget(e.target)) return;
   // PKG 壁纸纹理编辑快捷键 (W/E/Q) — 转发到壁纸窗口
   if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-    if (e.code === 'KeyW') { e.preventDefault(); sendWallpaperCmd('toggleEdit'); return; }
-    if (e.code === 'KeyE') { e.preventDefault(); sendWallpaperCmd('delete'); return; }
-    if (e.code === 'KeyQ') { e.preventDefault(); sendWallpaperCmd('add'); return; }
+    if (e.code === 'KeyW') { console.log('[WP] W key pressed, sending toggleEdit'); e.preventDefault(); sendWallpaperCmd('toggleEdit'); return; }
+    if (e.code === 'KeyE') { console.log('[WP] E key pressed, sending delete'); e.preventDefault(); sendWallpaperCmd('delete'); return; }
+    if (e.code === 'KeyQ') { console.log('[WP] Q key pressed, sending add'); e.preventDefault(); sendWallpaperCmd('add'); return; }
   }
   markRenderInteraction('keyboard', 700);
   if (e.code === 'KeyK') {
