@@ -25215,6 +25215,7 @@ try {
     gl.enableVertexAttribArray(pkgBg.posLoc);
     gl.vertexAttribPointer(pkgBg.posLoc, 2, gl.FLOAT, false, 0, 0);
     gl.enable(gl.BLEND);
+    var drawn = 0;
     for (var i = 0; i < pkgBg.layers.length; i++) {
       var layer = pkgBg.layers[i];
       if (!layer.visible || layer.hidden) continue;
@@ -25230,8 +25231,13 @@ try {
       gl.uniform2f(gl.getUniformLocation(pkgBg.prog, 'u_scl'), (layer.scale||[1,1])[0], (layer.scale||[1,1])[1]);
       gl.uniform3f(gl.getUniformLocation(pkgBg.prog, 'u_tint'), (layer.tint||[1,1,1])[0], (layer.tint||[1,1,1])[1], (layer.tint||[1,1,1])[2]);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      drawn++;
+    }
+    if (drawn === 0) {
+      gl.clearColor(0, 0.2, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    if (!pkgBg._loggedFirst) { console.log('[PKG] render: drew ' + drawn + ' layers, textures=' + Object.keys(pkgBg.textures).length); pkgBg._loggedFirst = true; }
   };
   
   // Hook into applyWallpaper
