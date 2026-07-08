@@ -1120,15 +1120,16 @@ function loadWallpaperScene(folderPath) {
     const scene = wallpaperScanner.extractWallpaperScene(folderPath);
     if (scene && scene.ok) {
       scene.folderPath = folderPath;  // 供 wallpaper.html 持久化编辑状态
-      // convert paths to file:// URLs
+      // convert paths to HTTP proxy URLs
+      var port = process.env.PORT || 3000;
       if (scene.textures) {
         for (let i = 0; i < scene.textures.length; i++) {
-          scene.textures[i].url = 'file:///' + scene.textures[i].path.replace(/\\/g, '/');
+          scene.textures[i].url = 'http://127.0.0.1:' + port + '/api/wallpaper/serve?path=' + encodeURIComponent(scene.textures[i].path);
         }
       }
       if (scene.videos) {
         for (let i = 0; i < scene.videos.length; i++) {
-          scene.videos[i].url = 'file:///' + scene.videos[i].path.replace(/\\/g, '/');
+          scene.videos[i].url = 'http://127.0.0.1:' + port + '/api/wallpaper/serve?path=' + encodeURIComponent(scene.videos[i].path);
         }
       }
       wallpaperWindow.webContents.send('mineradio-wallpaper-scene', scene);
@@ -1526,17 +1527,18 @@ ipcMain.handle('mineradio-wallpaper-extract-texture', async (_event, folderPath)
 ipcMain.handle('mineradio-wallpaper-extract-scene', async (_event, folderPath) => {
     try {
       var scene = wallpaperScanner.extractWallpaperScene(folderPath);
-      // convert absolute paths to file:// URLs for renderer
+      // convert absolute paths to HTTP proxy URLs (file:// blocked in browser)
+      var port = process.env.PORT || 3000;
       if (scene.ok && scene.textures) {
         for (var i = 0; i < scene.textures.length; i++) {
           var t = scene.textures[i];
-          t.url = 'file:///' + t.path.replace(/\\/g, '/');
+          t.url = 'http://127.0.0.1:' + port + '/api/wallpaper/serve?path=' + encodeURIComponent(t.path);
         }
       }
       if (scene.ok && scene.videos) {
         for (var j = 0; j < scene.videos.length; j++) {
           var v = scene.videos[j];
-          v.url = 'file:///' + v.path.replace(/\\/g, '/');
+          v.url = 'http://127.0.0.1:' + port + '/api/wallpaper/serve?path=' + encodeURIComponent(v.path);
         }
       }
       return scene;
