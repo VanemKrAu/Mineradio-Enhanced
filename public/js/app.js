@@ -19819,13 +19819,23 @@ function applyWallpaper(wp) {
   });
   closeWallpaperPicker();
   // 加载 PKG 多层场景到主窗口背景
-  if (wp.hasPkg && window.desktopWindow && typeof window.desktopWindow.extractWallpaperScene === 'function') {
-    showToast('正在加载壁纸场景...');
+  if (window.desktopWindow && typeof window.desktopWindow.extractWallpaperScene === 'function') {
+    showToast('正在解析壁纸场景...');
     window.desktopWindow.extractWallpaperScene(wp.folderPath).then(function(scene) {
-      if (scene && scene.ok) loadPkgBgScene(scene).then(function(ok) {
-        if (ok) showToast('壁纸场景已加载，按W编辑图层');
-      });
-    }).catch(function(){});
+      console.log('[PKG-BG] extractWallpaperScene result: ok=' + (scene&&scene.ok) + ' layers=' + ((scene&&scene.layers)||[]).length + ' textures=' + ((scene&&scene.textures)||[]).length);
+      if (scene && scene.ok && scene.layers && scene.layers.length > 0) {
+        loadPkgBgScene(scene).then(function(ok) {
+          if (ok) showToast('壁纸场景已加载 (' + scene.layers.length + '层)，按W编辑');
+        });
+      } else if (scene && scene.ok && scene.textures && scene.textures.length > 0) {
+        showToast('壁纸无图层定义，仅单层显示');
+      } else {
+        showToast('壁纸无可解析的图层');
+      }
+    }).catch(function(e){
+      console.warn('[PKG-BG] extractWallpaperScene failed:', e);
+      showToast('壁纸场景解析失败');
+    });
   }
   var api = window.desktopWindow;
   if (!api || typeof api.readWallpaperFile !== "function") { showToast("API 不可用"); return; }
@@ -25222,12 +25232,15 @@ async function loadPkgBgScene(scene) {
   } catch(_) {}
   // 加载纹理
   var promises = [];
+  var matched = 0, missing = 0;
   for (var i = 0; i < pkgBg.layers.length; i++) {
     var layer = pkgBg.layers[i];
-    if (!layer.imageFile) continue;
+    if (!layer.imageFile) { console.log('[PKG-BG] layer ' + i + ' (' + layer.name + ') no imageFile, skipping'); continue; }
     var texEntry = null;
     for (var j = 0; j < (scene.textures || []).length; j++) { if (scene.textures[j].name === layer.imageFile) { texEntry = scene.textures[j]; break; } }
-    if (!texEntry || !texEntry.url) continue;
+    if (!texEntry || !texEntry.url) { console.log('[PKG-BG] layer ' + i + ' (' + layer.name + ') imageFile=' + layer.imageFile + ' NO texture match or no url'); missing++; continue; }
+    console.log('[PKG-BG] layer ' + i + ' (' + layer.name + ') matched texture: ' + texEntry.name + ' url=' + texEntry.url.slice(0,80));
+    matched++;
     promises.push(loadPkgBgTexture(layer.imageFile, texEntry.url).catch(function(){}));
   }
   await Promise.all(promises);
