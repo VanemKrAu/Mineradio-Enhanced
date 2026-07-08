@@ -12373,9 +12373,8 @@ document.addEventListener('keydown', function(e){
   if (isTypingTarget(e.target)) return;
   // PKG 壁纸纹理编辑快捷键 (W/E/Q) — 转发到壁纸窗口
   if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-    if (e.code === 'KeyW') { e.preventDefault(); if (typeof pkgBgToggleEdit === 'function' && pkgBg.scene) { pkgBgToggleEdit(); } else { showToast('请先选择PKG壁纸'); } return; }
-    if (e.code === 'KeyE') { e.preventDefault(); if (typeof pkgBgDeleteLayer === 'function' && pkgBg.scene && pkgBg.editMode) { pkgBgDeleteLayer(); } else if (pkgBg.scene) { showToast('请先按W进入编辑模式'); } return; }
-    if (e.code === 'KeyQ') { e.preventDefault(); if (typeof pkgBgAddLayer === 'function' && pkgBg.scene && pkgBg.editMode) { pkgBgAddLayer(); } else if (pkgBg.scene) { showToast('请先按W进入编辑模式'); } return; }
+    if (e.code === 'KeyW') { e.preventDefault(); if (window.pkgBg && pkgBg.scene) { showToast('PKG场景已加载 (' + pkgBg.layers.length + ' 层)'); } else { showToast('请先选择PKG壁纸'); } return; }
+    if (e.code === 'KeyE' || e.code === 'KeyQ') { e.preventDefault(); if (window.pkgBg && pkgBg.scene) { showToast('编辑模式开发中'); } else { showToast('请先选择PKG壁纸'); } return; }
   }
   markRenderInteraction('keyboard', 700);
   if (e.code === 'KeyK') {
@@ -25146,3 +25145,76 @@ function animate() {
 }
 
 animate();
+
+try {
+(function() {
+  window.pkgBg = { scene: null, layers: [], textures: {}, gl: null, editMode: false, folderPath: '' };
+  
+  var c = document.getElementById('pkg-bg-canvas');
+  if (!c) { console.log('[PKG] no canvas'); return; }
+  
+  try { pkgBg.gl = c.getContext('webgl', {premultipliedAlpha:false,alpha:true}); } catch(_) {}
+  if (!pkgBg.gl) { console.log('[PKG] no WebGL'); return; }
+  console.log('[PKG] WebGL ready');
+  
+  var gl = pkgBg.gl;
+  var vsh = 'attribute vec2 a_pos;varying vec2 v_uv;void main(){gl_Position=vec4(a_pos,0.,1.);v_uv=a_pos*.5+.5;}';
+  var fsh = 'precision highp float;varying vec2 v_uv;uniform sampler2D u_tex;uniform vec2 u_c;uniform float u_op;uniform vec3 u_tint;uniform vec2 u_off;uniform vec2 u_scl;void main(){vec2 uv=(v_uv-u_off)/u_scl+.5;if(uv.x<0.||uv.x>1.||uv.y<0.||uv.y>1.)discard;vec4 col=texture2D(u_tex,uv);gl_FragColor=vec4(col.rgb*u_tint,col.a*u_op);}';
+  var vs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs, vsh); gl.compileShader(vs);
+  var fs = gl.createShader(gl.FRAGMENT_SHADER); gl.shaderSource(fs, fsh); gl.compileShader(fs);
+  pkgBg.prog = gl.createProgram(); gl.attachShader(pkgBg.prog, vs); gl.attachShader(pkgBg.prog, fs); gl.linkProgram(pkgBg.prog);
+  pkgBg.posLoc = gl.getAttribLocation(pkgBg.prog, 'a_pos');
+  pkgBg.quadBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, pkgBg.quadBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+  console.log('[PKG] Shaders compiled');
+  
+  pkgBg.loadScene = async function(scene) {
+    if (!scene || !scene.ok) return false;
+    pkgBg.scene = scene; pkgBg.layers = scene.layers || []; pkgBg.textures = {}; pkgBg.folderPath = scene.folderPath || '';
+    console.log('[PKG] Loading ' + pkgBg.layers.length + ' layers, ' + (scene.textures||[]).length + ' textures');
+    for (var i = 0; i < pkgBg.layers.length; i++) {
+      var layer = pkgBg.layers[i]; if (!layer.imageFile) continue;
+      var url = null;
+      for (var j = 0; j < (scene.textures||[]).length; j++) { if (scene.textures[j].name === layer.imageFile) { url = scene.textures[j].url; break; } }
+      if (!url) { console.log('[PKG] layer ' + i + ' NO url'); continue; }
+      console.log('[PKG] layer ' + i + ' loading: ' + url.slice(0,60));
+      // Load texture async
+      await new Promise(function(ok, fail) {
+        var img = new Image();
+        img.onload = function() {
+          var tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+          gl.bindTexture(gl.TEXTURE_2D, null);
+          pkgBg.textures[layer.imageFile] = tex;
+          console.log('[PKG] layer ' + i + ' texture LOADED');
+          ok();
+        };
+        img.onerror = function() { console.log('[PKG] layer ' + i + ' FAILED'); fail(); };
+        img.src = url;
+      });
+    }
+    console.log('[PKG] DONE: ' + Object.keys(pkgBg.textures).length + ' textures');
+    return true;
+  };
+  
+  // Hook into applyWallpaper
+  var origApplyWallpaper = window.applyWallpaper;
+  if (typeof origApplyWallpaper === 'function') {
+    window.applyWallpaper = function(wp) {
+      var result = origApplyWallpaper.apply(this, arguments);
+      if (wp && wp.folderPath && window.desktopWindow && window.desktopWindow.extractWallpaperScene) {
+        window.desktopWindow.extractWallpaperScene(wp.folderPath).then(function(s) {
+          if (s && s.ok) pkgBg.loadScene(s);
+        });
+      }
+      return result;
+    };
+  }
+  console.log('[PKG] Ready. Type: pkgBg, object');
+})();
+} catch(e) { console.error('[PKG] Init failed:', e); }
