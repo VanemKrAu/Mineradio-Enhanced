@@ -25143,7 +25143,6 @@ function animate() {
   }
 
   if (window.pkgBg && window.pkgBg.render) window.pkgBg.render();
-  if (window.pkgBg && window.pkgBg.render) window.pkgBg.render();
   renderer.render(scene, camera);
 }
 
@@ -25205,7 +25204,7 @@ try {
   };
   
   pkgBg.render = function() {
-    if (!pkgBg.scene || !pkgBg.gl || !pkgBg.prog) return;
+    if (!pkgBg.scene || !pkgBg.gl || !pkgBg.prog || !pkgBg.canvas) return;
     var c = pkgBg.canvas;
     if (c.width !== innerWidth || c.height !== innerHeight) { c.width = innerWidth; c.height = innerHeight; }
     gl.viewport(0, 0, c.width, c.height);
