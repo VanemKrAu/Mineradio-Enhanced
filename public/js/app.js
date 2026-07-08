@@ -25143,10 +25143,9 @@ function animate() {
   }
 
   if (window.pkgBg && window.pkgBg.render) window.pkgBg.render();
+  if (window.pkgBg && window.pkgBg.render) window.pkgBg.render();
   renderer.render(scene, camera);
 }
-
-animate();
 
 try {
 (function() {
@@ -25251,3 +25250,5 @@ try {
   console.log('[PKG] Ready. Type: pkgBg, object');
 })();
 } catch(e) { console.error('[PKG] Init failed:', e); }
+
+animate();
