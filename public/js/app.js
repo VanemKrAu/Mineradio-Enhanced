@@ -24890,7 +24890,8 @@ function animate() {
   if (isMainSceneCoveredBySplash()) {
     if (now - splashWarmRenderLast > 520) {
       splashWarmRenderLast = now;
-      renderer.render(scene, camera);
+      if (window.pkgBg && window.pkgBg.render) window.pkgBg.render();
+  renderer.render(scene, camera);
     }
     return;
   }
@@ -25141,6 +25142,7 @@ function animate() {
     if (thumbCoverEl) thumbCoverEl.style.transform = 'scale(' + s + ')';
   }
 
+  if (window.pkgBg && window.pkgBg.render) window.pkgBg.render();
   renderer.render(scene, camera);
 }
 
@@ -25200,6 +25202,37 @@ try {
     }
     console.log('[PKG] DONE: ' + Object.keys(pkgBg.textures).length + ' textures');
     return true;
+  };
+  
+  pkgBg.render = function() {
+    if (!pkgBg.scene || !pkgBg.gl || !pkgBg.prog) return;
+    var c = pkgBg.canvas;
+    if (c.width !== innerWidth || c.height !== innerHeight) { c.width = innerWidth; c.height = innerHeight; }
+    gl.viewport(0, 0, c.width, c.height);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(pkgBg.prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, pkgBg.quadBuf);
+    gl.uniform2f(gl.getUniformLocation(pkgBg.prog, 'u_c'), innerWidth, innerHeight);
+    gl.enableVertexAttribArray(pkgBg.posLoc);
+    gl.vertexAttribPointer(pkgBg.posLoc, 2, gl.FLOAT, false, 0, 0);
+    gl.enable(gl.BLEND);
+    for (var i = 0; i < pkgBg.layers.length; i++) {
+      var layer = pkgBg.layers[i];
+      if (!layer.visible || layer.hidden) continue;
+      var tex = pkgBg.textures[layer.imageFile];
+      if (!tex) continue;
+      var blend = (layer.blending || 'opaque').toLowerCase();
+      if (blend === 'additive') { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_ADD); }
+      else { gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.uniform1i(gl.getUniformLocation(pkgBg.prog, 'u_tex'), 0);
+      gl.uniform1f(gl.getUniformLocation(pkgBg.prog, 'u_op'), typeof layer.opacity==='number' ? layer.opacity : 1);
+      gl.uniform2f(gl.getUniformLocation(pkgBg.prog, 'u_off'), (layer.origin||[0.5,0.5])[0], (layer.origin||[0.5,0.5])[1]);
+      gl.uniform2f(gl.getUniformLocation(pkgBg.prog, 'u_scl'), (layer.scale||[1,1])[0], (layer.scale||[1,1])[1]);
+      gl.uniform3f(gl.getUniformLocation(pkgBg.prog, 'u_tint'), (layer.tint||[1,1,1])[0], (layer.tint||[1,1,1])[1], (layer.tint||[1,1,1])[2]);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   };
   
   // Hook into applyWallpaper
