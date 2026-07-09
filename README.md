@@ -85,6 +85,7 @@ npm run build:win
 - **复合层壁纸** — 使用了 Wallpaper Engine `composelayer`/`fullscreenlayer` 的壁纸（如 Blue Archive）存在缺失图层
 - **全屏切换** — 窗口和全屏之间切换时，部分壁纸可能出现图层轻微偏移
 - **特效/粒子/音频** — 光柱、下雨、粒子、BGM 等暂未实现
+- **酷狗音乐登录** — 依赖 kugou.com Cookie 解析，酷狗网站改版后可能失效。网易云/QQ 同理，均为第三方网站 Cookie 方案
 
 ## 版权说明
 
