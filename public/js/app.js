@@ -19794,6 +19794,35 @@ function renderWallpaperGrid() {
   console.log('[WP] sorted, first 3:', filtered.slice(0,3).map(function(w){return w.name+' @birth='+w.birthtimeMs+' mod='+w.modifiedAt}));
   statusEl.textContent = '共 ' + filtered.length + ' 个壁纸' + (wpRatingFilter !== 'all' ? '（已按分级筛选）' : '') + '，点击即可设为播放器背景。';
   gridEl.innerHTML = '';
+  // 第一个选项：不使用壁纸
+  var noWpCard = document.createElement('div');
+  noWpCard.className = 'wp-card';
+  if (!wallpaperPickerData.currentWallpaper || wallpaperPickerData.currentWallpaper === '__none__') noWpCard.classList.add('active');
+  var noWpImg = document.createElement('div');
+  noWpImg.style.cssText = 'width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);font-size:32px';
+  noWpImg.textContent = '🚫';
+  noWpCard.appendChild(noWpImg);
+  var noWpName = document.createElement('div');
+  noWpName.className = 'wp-card-name';
+  noWpName.textContent = '不使用壁纸';
+  noWpCard.appendChild(noWpName);
+  noWpCard.addEventListener('click', function(){
+    wallpaperPickerData.currentWallpaper = '__none__';
+    wallpaperPickerData.currentMedia = null;
+    try { localStorage.setItem('mineradio-wallpaper-current', ''); } catch(e) {}
+    var api = window.desktopWindow;
+    if (api && typeof api.clearWallpaper === 'function') api.clearWallpaper();
+    if (window.pkgBg) window.pkgBg.clear();
+    // 清除 CSS 背景
+    var bg = document.getElementById('custom-bg');
+    if (bg) { bg.style.setProperty('--custom-bg-image','none'); bg.style.setProperty('--custom-bg-image-opacity','0'); bg.style.setProperty('--custom-bg-video-opacity','0'); }
+    var vid = document.getElementById('custom-bg-video');
+    if (vid) { vid.pause(); vid.removeAttribute('src'); }
+    document.body.classList.remove('custom-background-override','custom-background-video');
+    closeWallpaperPicker();
+    showToast('已清除壁纸');
+  });
+  gridEl.appendChild(noWpCard);
   filtered.forEach(function(wp) {
     var card = document.createElement('div');
     card.className = 'wp-card';
@@ -25380,13 +25409,12 @@ try {
   pkgBg.saveEdits = function() {
     var k = pkgBg._key(); if (!k) return;
     var a = []; for (var i = 0; i < pkgBg.layers.length; i++) { var l = pkgBg.layers[i]; a.push({ f:l.imageFile, v:l.visible, h:!!l.hidden, o:l.opacity }); }
-    try { localStorage.setItem(k, JSON.stringify(a)); console.log('[SAVE]', k, a.length); } catch(e) {}
+    try { localStorage.setItem(k, JSON.stringify(a)); } catch(e) {}
   };
   pkgBg.loadEdits = function() {
     var k = pkgBg._key(); if (!k) return;
     var r; try { r = localStorage.getItem(k); } catch(e) {}
     if (!r) return;
-    console.log('[LOAD]', k, 'found');
     var a; try { a = JSON.parse(r); } catch(e) { return; }
     if (!Array.isArray(a) || !a.length) return;
     for (var i = 0; i < a.length && i < pkgBg.layers.length; i++) {
