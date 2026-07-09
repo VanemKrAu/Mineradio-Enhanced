@@ -12376,12 +12376,15 @@ document.addEventListener('keydown', function(e){
     var bg = window.pkgBg;
     // W — 进入/退出 PKG 纹理编辑模式
     if (e.code === 'KeyW') {
-      e.preventDefault();
-      if (!bg || !bg.scene) { showToast('请先选择PKG壁纸'); return; }
-      bg.editMode = !bg.editMode;
-      bg.editMode ? showToast('编辑模式 ON — Q 添加纹理, E 删除顶层纹理')
-                  : (bg.saveEdits(), showToast('编辑模式 OFF，改动已保存'));
-      return;
+      // 自由镜头激活时不拦截 W，交给下面的 freeCamera 处理
+      if (freeCamera && freeCamera.active) { markRenderInteraction('keyboard', 700); }
+      else if (bg && bg.scene) {
+        e.preventDefault();
+        bg.editMode = !bg.editMode;
+        if (bg.editMode) { showToast('编辑模式 ON — Q 添加纹理, E 删除顶层纹理'); }
+        else { bg.saveEdits(); showToast('编辑模式 OFF，改动已保存'); }
+        return;
+      } else { showToast('请先选择PKG壁纸'); return; }
     }
     if (bg && bg.editMode) {
       if (e.code === 'KeyQ') {
@@ -19765,17 +19768,9 @@ function renderWallpaperGrid() {
   if (!statusEl || !gridEl) return;
   if (wpRatingFilter !== 'all') {
     filtered = filtered.filter(function(wp){
-      if (wpRatingFilter === 'all') return true;
       var r = String(wp.rating || '').trim();
-      // 没有分级的壁纸按全年龄处理
       if (!r) r = 'Everyone';
-      var rl = r.toLowerCase(), fl = wpRatingFilter.toLowerCase();
-      if (rl === fl) return true;
-      // 分级严格递增：Mature 筛选时不包含其他分组
-      if (fl === 'everyone') return false;  // 全年龄筛选只显示全年龄
-      if (fl === 'questionable') return rl === 'everyone';  // 可疑显示全年龄+可疑
-      if (fl === 'mature') return rl === 'questionable' || rl === 'everyone';  // 成人显示全部
-      return false;
+      return r.toLowerCase() === wpRatingFilter.toLowerCase();
     });
   }
   if (wpSearchText) {
@@ -19961,6 +19956,10 @@ function restoreWallpaper() {
             }
           } catch(e) {}
           setCustomBackgroundImage(bgSrc);
+        }
+        // 如果是 PKG 壁纸，也加载多层场景
+        if (typeof window.pkgBg !== 'undefined' && window.pkgBg && api.extractWallpaperScene) {
+          api.extractWallpaperScene(saved).then(function(s) { if (s && s.ok) window.pkgBg.loadScene(s); }).catch(function(){});
         }
       }).catch(function(){});
     }).catch(function(){});
@@ -25249,7 +25248,8 @@ try {
       });
     }
     console.log('[PKG] DONE: ' + Object.keys(pkgBg.textures).length + ' textures');
-    pkgBg.loadEdits();
+    var bg = document.getElementById('custom-bg');
+    if (bg) bg.style.setProperty('--custom-bg-image-opacity', '0');
     if (typeof THREE !== 'undefined' && typeof window.scene !== 'undefined' && window.scene) {
       if (!pkgBg._bgTexture) pkgBg._bgTexture = new THREE.CanvasTexture(c);
       pkgBg._bgTexture.needsUpdate = true;
@@ -25346,94 +25346,49 @@ try {
       drawn++;
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    if (!pkgBg._loggedFirst) { console.log('[PKG] render: drew ' + drawn + ' layers'); pkgBg._loggedFirst = true; }
+    if (!pkgBg._loggedFirst) {
+      var totalLayers = pkgBg.layers.length;
+      var visibleCount = 0;
+      for (var vi = 0; vi < totalLayers; vi++) {
+        if (pkgBg.layers[vi].visible !== false && !pkgBg.layers[vi].hidden) visibleCount++;
+      }
+      console.log('[PKG] render: drew ' + drawn + ' layers, textures=' + Object.keys(pkgBg.textures).length + ', visible=' + visibleCount + '/' + totalLayers);
+      if (totalLayers > 1 && typeof showToast === 'function') {
+        showToast('PKG壁纸 ' + totalLayers + ' 层 — 按 W 进入编辑模式');
+      }
+      pkgBg._loggedFirst = true;
+    }
     if (pkgBg._bgTexture) pkgBg._bgTexture.needsUpdate = true;
   };
 
-  // ===== 编辑持久化 =====
-  pkgBg._storageKey = function() {
+  pkgBg._key = function() {
     if (!pkgBg.folderPath) return '';
-    return 'pkg-edits-' + btoa(pkgBg.folderPath).replace(/[\/=+]/g,'_');
+    var m = pkgBg.folderPath.match(/([0-9]+)[^0-9]*$/);
+    return m ? 'pkgedit_' + m[1] : '';
   };
-
   pkgBg.saveEdits = function() {
-    var key = pkgBg._storageKey();
-    if (!key) return;
-    var data = { layers: [] };
-    for (var i = 0; i < pkgBg.layers.length; i++) {
-      var l = pkgBg.layers[i];
-      data.layers.push({ imageFile:l.imageFile, visible:l.visible, hidden:l.hidden, opacity:l.opacity, blending:l.blending, origin:l.origin, scale:l.scale, tint:l.tint });
-    }
-    try { localStorage.setItem(key, JSON.stringify(data)); } catch(e) {}
+    var k = pkgBg._key(); if (!k) return;
+    var a = []; for (var i = 0; i < pkgBg.layers.length; i++) { var l = pkgBg.layers[i]; a.push({ f:l.imageFile, v:l.visible, h:!!l.hidden, o:l.opacity }); }
+    try { localStorage.setItem(k, JSON.stringify(a)); console.log('[SAVE]', k, a.length); } catch(e) {}
   };
-
   pkgBg.loadEdits = function() {
-    var key = pkgBg._storageKey();
-    if (!key) return;
-    var raw; try { raw = localStorage.getItem(key); } catch(e) {}
-    if (!raw) return;
-    var data; try { data = JSON.parse(raw); } catch(e) {}
-    if (!data || !data.layers) return;
-    // 先更新已有的匹配层
-    for (var i = 0; i < pkgBg.layers.length; i++) {
-      var l = pkgBg.layers[i];
-      for (var j = 0; j < data.layers.length; j++) {
-        if (data.layers[j].imageFile === l.imageFile) {
-          var s = data.layers[j];
-          l.visible = s.visible;
-          if (s.hidden !== undefined) l.hidden = s.hidden;
-          if (s.opacity !== undefined) l.opacity = s.opacity;
-          if (s.blending) l.blending = s.blending;
-          if (s.origin) l.origin = s.origin;
-          if (s.scale) l.scale = s.scale;
-          if (s.tint) l.tint = s.tint;
-          break;
-        }
+    var k = pkgBg._key(); if (!k) return;
+    var r; try { r = localStorage.getItem(k); } catch(e) {}
+    if (!r) return;
+    console.log('[LOAD]', k, 'found');
+    var a; try { a = JSON.parse(r); } catch(e) { return; }
+    if (!Array.isArray(a) || !a.length) return;
+    for (var i = 0; i < a.length && i < pkgBg.layers.length; i++) {
+      if (a[i].f === pkgBg.layers[i].imageFile) {
+        pkgBg.layers[i].visible = a[i].v;
+        if (a[i].h !== undefined) pkgBg.layers[i].hidden = a[i].h;
+        if (a[i].o !== undefined) pkgBg.layers[i].opacity = a[i].o;
       }
     }
-    // 添加保存中有但场景中没有的层（用户通过 Q 键添加的）
-    var curNames = {};
-    for (var k = 0; k < pkgBg.layers.length; k++) curNames[pkgBg.layers[k].imageFile] = true;
-    for (var m = 0; m < data.layers.length; m++) {
-      var sd = data.layers[m];
-      if (!curNames[sd.imageFile]) {
-        // 这个层不在原始场景中，恢复它
-        var newLayer = {
-          imageFile: sd.imageFile, visible: sd.visible, opacity: sd.opacity || 1,
-          blending: sd.blending || 'opaque', origin: sd.origin || [0.5,0.5],
-          scale: sd.scale || [1,1], tint: sd.tint || [1,1,1], hidden: sd.hidden
-        };
-        pkgBg.layers.push(newLayer);
-        // 异步加载该纹理
-        if (!pkgBg.textures[sd.imageFile] && pkgBg.scene && pkgBg.scene.textures) {
-          for (var n = 0; n < pkgBg.scene.textures.length; n++) {
-            if (pkgBg.scene.textures[n].name === sd.imageFile) {
-              (function(texUrl, texName, layer) {
-                var img = new Image();
-                img.onload = function() {
-                  var t = pkgBg.gl.createTexture();
-                  pkgBg.gl.bindTexture(pkgBg.gl.TEXTURE_2D, t);
-                  pkgBg.gl.texParameteri(pkgBg.gl.TEXTURE_2D, pkgBg.gl.TEXTURE_WRAP_S, pkgBg.gl.CLAMP_TO_EDGE);
-                  pkgBg.gl.texParameteri(pkgBg.gl.TEXTURE_2D, pkgBg.gl.TEXTURE_WRAP_T, pkgBg.gl.CLAMP_TO_EDGE);
-                  pkgBg.gl.texParameteri(pkgBg.gl.TEXTURE_2D, pkgBg.gl.TEXTURE_MIN_FILTER, pkgBg.gl.LINEAR);
-                  pkgBg.gl.texParameteri(pkgBg.gl.TEXTURE_2D, pkgBg.gl.TEXTURE_MAG_FILTER, pkgBg.gl.LINEAR);
-                  pkgBg.gl.texImage2D(pkgBg.gl.TEXTURE_2D, 0, pkgBg.gl.RGBA, pkgBg.gl.RGBA, pkgBg.gl.UNSIGNED_BYTE, img);
-                  pkgBg.gl.bindTexture(pkgBg.gl.TEXTURE_2D, null);
-                  pkgBg.textures[sd.imageFile] = t;
-                  layer._texW = img.naturalWidth || img.width;
-                  layer._texH = img.naturalHeight || img.height;
-                };
-                img.src = texUrl;
-              })(pkgBg.scene.textures[n].url, sd.imageFile, newLayer);
-              break;
-            }
-          }
-        }
-      }
-    }
+    // 存档层数少於场景 → 多出的层设为隐藏（之前被 E 键删除的）
+    for (var j = a.length; j < pkgBg.layers.length; j++) pkgBg.layers[j].hidden = true;
   };
 
-  // Hook into applyWallpaper
   var origApplyWallpaper = window.applyWallpaper;
   if (typeof origApplyWallpaper === 'function') {
     window.applyWallpaper = function(wp) {
