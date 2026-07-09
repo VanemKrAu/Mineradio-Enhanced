@@ -79,6 +79,13 @@ npm run build:win
 
 产物位于 `dist/Mineradio+-*-Setup.exe`。
 
+## 已知问题
+
+- **Puppet 骨骼壁纸** — 含完整骨架系统（>5 bones）的壁纸（如麻匪系列）角色碎片层位置不正确，无法完整拼出人物
+- **复合层壁纸** — 使用了 Wallpaper Engine `composelayer`/`fullscreenlayer` 的壁纸（如 Blue Archive）存在缺失图层
+- **全屏切换** — 窗口和全屏之间切换时，部分壁纸可能出现图层轻微偏移
+- **特效/粒子/音频** — 光柱、下雨、粒子、BGM 等暂未实现
+
 ## 版权说明
 
 - 本项目基于 [Mineradio](https://github.com/XxHuberrr/Mineradio)（GPL-3.0）修改
