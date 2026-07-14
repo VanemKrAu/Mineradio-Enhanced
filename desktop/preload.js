@@ -50,8 +50,10 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   extractWallpaperTexture: (folderPath) => ipcRenderer.invoke('mineradio-wallpaper-extract-texture', folderPath),
   extractWallpaperScene: (folderPath) => ipcRenderer.invoke('mineradio-wallpaper-extract-scene', folderPath),
   autoDetectWallpapers: () => ipcRenderer.invoke('mineradio-wallpaper-auto-detect'),
-  getMinimizeToTray: () => ipcRenderer.invoke('mineradio-get-minimize-to-tray'),
-  setMinimizeToTray: (enabled) => ipcRenderer.invoke('mineradio-set-minimize-to-tray', !!enabled),
+  getTraySettings: () => ipcRenderer.invoke('mineradio-tray-get-settings'),
+  setCloseToTray: (enabled) => ipcRenderer.invoke('mineradio-tray-set-close-to-tray', !!enabled),
+  setStartupLaunch: (enabled) => ipcRenderer.invoke('mineradio-tray-set-startup-launch', !!enabled),
+  updateTrayPlayback: (state) => ipcRenderer.invoke('mineradio-tray-update-playback', state || {}),
   onStateChange: (callback) => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('desktop-window-state', listener);

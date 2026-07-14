@@ -25,6 +25,10 @@ let windowFullscreenActive = false;
 let mainWindowStateTimer = null;
 let tray = null;
 let _quitting = false;
+let trayRightClickGuardUntil = 0;
+let trayPlaybackState = { title: '', artist: '', playing: false, volume: 100 };
+let closeToTrayEnabled = true;
+const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell.json';
 const registeredGlobalHotkeys = new Map();
 
 const WINDOWED_ASPECT = 16 / 9;
@@ -1152,34 +1156,116 @@ function closeWallpaperWindow() {
 
 
 // -- 托盘设置 --
-function readSettings() {
+function readDesktopShellSettings() {
   try {
-    const f = path.join(app.getPath('userData'), 'settings.json');
-    if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf8'));
-  } catch(e) {}
-  return {};
+    const file = path.join(app.getPath("userData"), DESKTOP_SHELL_SETTINGS_FILE);
+    if (!fs.existsSync(file)) return {};
+    return JSON.parse(fs.readFileSync(file, "utf8")) || {};
+  } catch { return {}; }
 }
-function saveSettings(s) {
-  const f = path.join(app.getPath('userData'), 'settings.json');
-  try { fs.writeFileSync(f, JSON.stringify(s, null, 2)); } catch(e) {}
+function writeDesktopShellSettings(patch) {
+  const file = path.join(app.getPath("userData"), DESKTOP_SHELL_SETTINGS_FILE);
+  const next = { ...readDesktopShellSettings(), ...(patch || {}) };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(next, null, 2), "utf8");
+  return next;
+}
+function isStartupEnabled() {
+  try { return process.platform === "win32" ? !!app.getLoginItemSettings().openAtLogin : false; }
+  catch { return false; }
+}
+function setStartupEnabled(on) {
+  if (process.platform !== "win32") return { ok: false, reason: "platform" };
+  try { app.setLoginItemSettings({ openAtLogin: !!on }); return { ok: true }; }
+  catch (e) { return { ok: false, reason: e.message }; }
+}
+function hideMainWindowToTray() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  try { mainWindow.webContents.send("mineradio-tray-command", { command: "persist-session" }); } catch (_) {}
+  mainWindow.setSkipTaskbar(true);
+  mainWindow.hide();
+  sendWindowState(mainWindow);
+  return true;
+}
+function refreshTrayMenu() {
+  if (!tray) return;
+  const songLabel = trayPlaybackState.title
+    ? trayPlaybackState.title + (trayPlaybackState.artist ? " - " + trayPlaybackState.artist : "")
+    : "暂无正在播放的歌曲";
+  const sendTrayCommand = (command, value) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("mineradio-tray-command", { command, value });
+    }
+  };
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: songLabel.slice(0, 80), enabled: false },
+    { type: "separator" },
+    { label: trayPlaybackState.playing ? "暂停" : "播放", click: () => sendTrayCommand("toggle-play") },
+    { label: "上一曲", click: () => sendTrayCommand("previous") },
+    { label: "下一曲", click: () => sendTrayCommand("next") },
+    {
+      label: "音量 " + Math.max(0, Math.min(100, Number(trayPlaybackState.volume) || 0)) + "%",
+      submenu: [
+        { label: "音量 +10%", click: () => sendTrayCommand("volume", 10) },
+        { label: "音量 -10%", click: () => sendTrayCommand("volume", -10) },
+        { label: "静音 / 恢复", click: () => sendTrayCommand("mute") },
+      ],
+    },
+    { type: "separator" },
+    { label: "显示 " + APP_NAME, click: () => focusMainWindow() },
+    { label: "隐藏到托盘", click: () => hideMainWindowToTray() },
+    {
+      label: "关闭按钮隐藏到托盘",
+      type: "checkbox",
+      checked: closeToTrayEnabled,
+      click: (item) => {
+        closeToTrayEnabled = !!item.checked;
+        writeDesktopShellSettings({ closeToTray: closeToTrayEnabled });
+        refreshTrayMenu();
+      },
+    },
+    {
+      label: "开机自动启动",
+      type: "checkbox",
+      checked: isStartupEnabled(),
+      click: (item) => {
+        const result = setStartupEnabled(item.checked);
+        if (!result.ok) item.checked = false;
+        refreshTrayMenu();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "退出 " + APP_NAME,
+      click: () => {
+        if (Date.now() < trayRightClickGuardUntil) return;
+        _quitting = true;
+        app.quit();
+      },
+    },
+    { label: "取消", enabled: false },
+  ]));
 }
 function createTray() {
-  if (tray || _quitting) return;
-  const iconPath = path.join(__dirname, '..', 'build', 'icon.png');
-  tray = new Tray(nativeImage.createFromPath(iconPath));
-  tray.setToolTip('Mineradio+');
-  const contextMenu = Menu.buildFromTemplate([
-    { label: '显示窗口', click: () => focusMainWindow() },
-    { type: 'separator' },
-    { label: '退出', click: () => { _quitting = true; app.quit(); } }
-  ]);
-  tray.setContextMenu(contextMenu);
-  tray.on('click', () => focusMainWindow());
+  if (tray) return;
+  const iconPath = fs.existsSync(APP_ICON_ICO)
+    ? APP_ICON_ICO
+    : path.join(__dirname, "..", "build", "icon.png");
+  let icon = nativeImage.createFromPath(iconPath);
+  if (!icon.isEmpty()) icon = icon.resize({ width: 16, height: 16, quality: "best" });
+  tray = new Tray(icon.isEmpty() ? iconPath : icon);
+  tray.setToolTip(APP_NAME + "（单击显示窗口）");
+  tray.on("click", () => focusMainWindow());
+  tray.on("double-click", () => focusMainWindow());
+  tray.on("right-click", () => {
+    trayRightClickGuardUntil = Date.now() + 900;
+    if (tray) tray.popUpContextMenu();
+  });
+  refreshTrayMenu();
 }
 function destroyTray() {
   if (tray) { tray.destroy(); tray = null; }
 }
-
 function closeOverlayWindows() {
   closeDesktopLyricsWindow();
   closeWallpaperWindow();
@@ -1254,17 +1340,27 @@ async function clearKugouMusicLoginSession() {
 }
 
 
-ipcMain.handle('mineradio-get-minimize-to-tray', async () => {
-  try { return { ok: true, enabled: !!readSettings().minimizeToTray }; }
+ipcMain.handle('mineradio-tray-get-settings', async () => {
+  try { return { ok: true, closeToTray: closeToTrayEnabled, startup: isStartupEnabled() }; }
   catch(e) { return { ok: false, enabled: false }; }
 });
-ipcMain.handle('mineradio-set-minimize-to-tray', async (_event, enabled) => {
-  try {
-    var s = readSettings();
-    s.minimizeToTray = !!enabled;
-    saveSettings(s);
-    return { ok: true };
-  } catch(e) { return { ok: false, error: e.message }; }
+ipcMain.handle('mineradio-tray-set-close-to-tray', async (_event, enabled) => {
+  closeToTrayEnabled = !!enabled;
+  writeDesktopShellSettings({ closeToTray: closeToTrayEnabled });
+  return { ok: true };
+});
+ipcMain.handle('mineradio-tray-set-startup-launch', async (_event, enabled) => {
+  return setStartupEnabled(!!enabled);
+});
+ipcMain.handle('mineradio-tray-update-playback', async (_event, state) => {
+  if (state && typeof state === 'object') {
+    if (state.title !== undefined) trayPlaybackState.title = state.title || '';
+    if (state.artist !== undefined) trayPlaybackState.artist = state.artist || '';
+    if (state.playing !== undefined) trayPlaybackState.playing = !!state.playing;
+    if (state.volume !== undefined) trayPlaybackState.volume = Math.max(0, Math.min(100, Number(state.volume) || 0));
+  }
+  refreshTrayMenu();
+  return { ok: true };
 });
 
 ipcMain.handle('desktop-window-minimize', (event) => {
@@ -1704,10 +1800,9 @@ async function createWindow() {
   mainWindow.on('resize', () => scheduleWindowStateSend(mainWindow));
   mainWindow.on('close', (e) => {
     if (_quitting) return;
-    if (readSettings().minimizeToTray) {
+    if (closeToTrayEnabled) {
       e.preventDefault();
-      mainWindow.hide();
-      createTray();
+      hideMainWindowToTray();
       return;
     }
   });
@@ -1759,6 +1854,9 @@ if (!gotSingleInstanceLock) {
     });
     screen.on('display-added', () => scheduleWindowStateSend(mainWindow));
     screen.on('display-removed', () => scheduleWindowStateSend(mainWindow));
+    const savedShell = readDesktopShellSettings();
+    if (typeof savedShell.closeToTray === 'boolean') closeToTrayEnabled = savedShell.closeToTray;
+    createTray();
     await createWindow();
   });
 
@@ -1767,9 +1865,7 @@ if (!gotSingleInstanceLock) {
     else focusMainWindow();
   });
 
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-  });
+  app.on('window-all-closed', () => { if (_quitting || !closeToTrayEnabled) app.quit(); });
 
   app.on('before-quit', () => {
     destroyTray();

@@ -1,5 +1,55 @@
 # 更新日志
 
+## [1.1.1-9] - 2025-07-14
+
+### 新增
+
+- **歌词动画系统** — 8 种歌词动画模式（流光/心象/云阶/浮名/群唱/倾诉/莫奈），含独立调参面板（17 个滑块 + 2 个 toggle），基于 `vendor/lyric-viz` React 渲染引擎
+- **歌词翻译显示** — 从 API 获取 `tlyric`/`tlrc`/`trans` 翻译数据，时间戳近邻匹配合并，3D 歌词画布支持多行渲染，翻译文本换行显示在原文下方
+- **歌词错位动感** — 歌词粒子的呼吸/漂浮/摆动效果受 `lyricMotion` 开关控制，关闭后歌词静止
+- **多句歌词** — `stageLyricMaxLines()` 控制同时显示行数（1/2/3/4/6/8 行），画布高度扩展支持多行渲染
+- **FX 面板歌词 Tab** — 歌词增强（翻译/动感/多句）、歌词动画、歌词外观合并到独立折叠面板
+- **桌面歌词布局** — 桌面歌词行数（单行/舞台双行/三行/四行）+ 左/中/右对齐 segment
+- **桌面歌词位置预设** — 靠左/居中/靠右/复位一键切换
+- **播放器内歌词位置预设** — 左侧/居中/右侧/拖拽/重置，支持拖拽调整 3D 歌词位置
+- **沉浸自动全屏** — 进入沉浸模式时自动全屏，退出时恢复，开关持久化
+- **壁纸透明度滑块** — 解除 dev-locked，可调节桌面壁纸透明度（0.35–1.0）
+- **开机自动启动** — FX 面板新增开机启动开关，调用 Windows `setLoginItemSettings`
+- **声境预设** — 新增第 7 号视觉预设「声境」（TERRAIN），含 4 个外部脚本 + 510 行核心代码
+- **声境相机回正** — 声境预设回正视角为微俯正视（phi=0.15, radius=7.5）
+- **歌词动画模式专属调参** — 流光（词旋转/呼吸/间距）、浮名（镜头速度/辉光/大标题/停留）、云阶（引导线/错落 min/max）、倾诉（拆分/倾斜）、心象（字号/运动/辉光）、莫奈（聚焦/肖像）
+- **均衡器 EQ** — 6 频段 + 12 预设 + 前级增益 + Web Audio 信号链
+
+### 修复
+
+- **isWallpaperCoverFocusMode 未定义** — 添加 stub 函数，修复 animate 循环每帧崩溃
+- **initLyricAnimationControls 重命名遗漏** — 全局调用点同步更新为 bindLyricAnimationControls
+- **isMineradioFullscreenActive 未定义** — 改用当前版本的 fullscreen 检测变量
+- **声境预设持久化** — `readSavedPlaybackVisualPreset` 和 `readSavedLyricLayout` 的 clamp 上限从 6 改为 7
+- **声境预设显示** — `presetDisplayOrder` 加入索引 7
+- **声境启动相机** — `applyStartupStarfieldPreset` 直接设置 orbit 基线，不依赖 setPreset 的 changed 判断
+- **播放歌单闪回主页** — `loadPlaylistIntoQueueById` 的 `homeSuppressed` 改为 `true`
+- **歌词 toggle 不保存** — `lyricTranslation`/`lyricMotion`/`lyricMultiSentence` 加入 saveLyricLayout 触发列表
+- **歌词 toggle 不同步** — `updateFxInputs` 的逗号运算符语法错误修复为二维数组
+- **歌词动画与粒子歌词冲突** — `tickLyricsParticles` 和 `updateStageLyrics3D` 加入 `lyric-animation-stage-on` 守卫
+- **歌词动画 z-index 过高** — `#lyric-viz-stage-host` 从 z-index 24 降到 15
+- **lyric-animation.js 未加载** — index.html 添加 script 标签
+- **STAGE_LYRIC_MAX_LINES 硬编码为 1** — 改为 8，画布高度 384→768
+- **歌词运动 targetY 未赋值** — 补充 `mesh.position.y += (targetY - mesh.position.y) * 0.075`
+- **makeLyricMask 缺少 var** — `lines = []` 改为 `var lines = []`，修复严格模式 ReferenceError
+- **buildLyricMesh 吞掉换行** — `/\s+/g` 改为 `/[ \t]+/g` + 换行保留
+- **initAudio EQ 链路** — 恢复 `createEqChain(audioCtx)` + EQ 信号链
+- **全局 localStorage 未保护** — 顶层 `localStorage.getItem` 加 try-catch
+- **canvas-container null 崩溃** — 添加 fallback 到 document.body
+- **pl-list/file-input 事件绑定** — 添加 null 守卫
+- **运算符优先级** — hotkeyCaptureState 条件加括号明确意图
+- **startupLaunch IPC 缺失** — 新增 `mineradio-tray-set-startup-launch` 处理器 + preload 桥接
+
+### 变更
+
+- **FX 面板结构** — 歌词相关控件从顶层移入独立「歌词」折叠面板
+- **开发中错误捕获器** — 移除调试用全局 error handler
+
 ## [1.1.1-8] - 2025-07-09
 
 ### 新增
@@ -23,6 +73,22 @@
 - **非 PKG 壁纸切换** — 切换到视频/普通壁纸时清除 scene.background
 - **loadEdits 恢复调用** — 修复重开后编辑状态丢失
 - **_texW 未就绪保护** — 纹理尺寸未加载时跳过渲染，避免全屏 fallback
+
+### 修复 (hotfix)
+
+- **全屏壁纸图层偏移** — 加载时锁定参考屏幕宽高比（`_refAspect`），各图层宽高比修正量不再随全屏切换变化，层间相对位置锁定
+- **窗口四角圆角消失** — 合成 canvas 添加 `border-radius:34px`，全屏/最大化时归零，四圆角与窗口外壳对齐
+- **壁纸选择器高亮错误** — 打开壁纸库时始终高亮"不使用壁纸"；新增从 localStorage 恢复上次选中壁纸的逻辑，正确高亮当前使用的壁纸
+- **选择 PKG 壁纸后无编辑提示** — `loadWallpaperSceneIfPkg` 从空函数改为实际加载 PKG 场景，PKG 纹理（图片）路径补充该调用；`loadScene` 重置 `_loggedFirst`，每次选择 PKG 壁纸后弹出「按 W 进入编辑模式」提示
+- **编辑提示被后续 toast 覆盖** — 改为直接在「壁纸已应用」toast 内追加「— 按 W 进入编辑模式」，场景加载后更新同一行带图层数
+- **删除图层后重选不恢复** — E 键从 `pop()` 物理删除改为标记 `hidden=true`；`loadEdits` 按索引+imageFile 恢复，图层数稳定，删除状态跨会话保持
+- **自动保存** — Q 添加/E 隐藏/可见性变更后即时 `saveEdits()`，无需 W 退出编辑模式；W 仅切换编辑模式
+- **动画速度调节** — 设置 → 动态 → 画面基础 新增「动画速度」滑块（0.1x–3.0x），直接乘到所有相机 lerp 速率（回正/歌单架移入/镜头半径），帧率无关
+- **RePKG 大纹理支持** — 修改 RePKG 源码将 mipmap 上限从 250MB 提升至 1GB，修复 4K 壁纸提取失败
+- **窗口缩放拉伸修复** — resize 时动态更新 _refAspect
+- **重置图层按钮** — 壁纸库顶部新增「重置图层」按钮，带二次确认，清除当前壁纸的编辑记录恢复初始图层状态
+- **Q 键添加图层修复** — 隐藏层的纹理不计入已使用，Q 键可重新添加；图片加载完成后自动渲染
+- **还原点更新** — 还原点文件同步至当前版本
 
 ## [1.1.1-7] - 2025-07-07
 

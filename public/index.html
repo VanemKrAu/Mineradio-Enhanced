@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+  <script>if (typeof global === 'undefined') window.global = globalThis;</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mineradio+</title>
@@ -14,7 +15,7 @@
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<canvas id="pkg-bg-canvas" style="position:fixed;inset:0;z-index:0;pointer-events:none"></canvas>
+<canvas id="pkg-bg-canvas" style="position:fixed;inset:0;z-index:0;pointer-events:none;border-radius:34px"></canvas>
 <div id="desktop-window-shell">
 <div id="desktop-titlebar" aria-label="window controls">
   <div class="desktop-drag-region">
@@ -246,7 +247,57 @@
   <div class="fx-slider"><label>背景透明度</label><input id="fx-bgopacity" type="range" min="0" max="1" step="0.01"><output></output></div>
   <div class="fx-slider"><label>控制台玻璃色差</label><input id="fx-glassaberration" type="range" min="0" max="140" step="1"><output></output></div>
 
+  
+  
+  
+    <div class="fx-seg" id="default-view-seg">
+    <button data-default-view="auto">自动视角</button>
+    <button data-default-view="front">歌词正面</button>
+    <button data-default-view="shelf">歌单侧栏</button>
+    <button data-default-view="cinema">电影远景</button>
+  </div>
+  <div class="fx-seg" id="playlist-filter-seg">
+    <button data-playlist-filter="all">全部歌单</button>
+    <button data-playlist-filter="local">本地</button>
+    <button data-playlist-filter="lx">落雪</button>
+    <button data-playlist-filter="custom">我的</button>
+  </div>
+
+<div class="fx-fold" id="fx-audio-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-audio-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>均衡器</strong><small>预设 / 频段 / 夜间</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-audioEq" onclick="toggleAudioEq()"><span>启用均衡器</span><span class="dot"></span></div>
+      </div>
+      <div class="fx-section-label">音效预设</div>
+      <div class="fx-seg audio-preset-seg" id="audio-preset-seg">
+        <button data-audio-preset="flat">原声</button>
+        <button data-audio-preset="bass">低音</button>
+        <button data-audio-preset="vocal">人声</button>
+        <button data-audio-preset="bright">明亮</button>
+        <button data-audio-preset="night">夜间</button>
+        <button data-audio-preset="cinema">电影</button>
+        <button data-audio-preset="chill">声境 Chill</button>
+        <button data-audio-preset="live">声境 Live</button>
+        <button data-audio-preset="heartbeat">心动声境</button>
+        <button data-audio-preset="lofi">Lo-fi</button>
+        <button data-audio-preset="airscape">Air</button>
+        <button data-audio-preset="focus">Focus</button>
+      </div>
+      <div class="fx-slider"><label>前级增益</label><input id="audio-preamp" type="range" min="-12" max="6" step="0.5"><output></output></div>
+      <div class="eq-band-grid" id="audio-eq-grid"></div>
+    </div>
+  </div>
+  <div class="fx-fold" id="terrain-ground-eq-fold" style="display:none">
+    <div class="fx-fold-head" onclick="document.getElementById('terrain-ground-eq-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>声境EQ调节</strong><small>8 频段 · 起伏 / 密度</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body" id="terrain-ground-eq-body"></div>
+  </div>
   <div class="fx-section-label">主控</div>
+  <div class="fx-slider"><label>动画速度</label><input id="fx-animspeed" type="range" min="0.1" max="3.0" step="0.01"><output></output></div>
   <div class="fx-slider"><label>律动强度</label><input id="fx-intensity" type="range" min="0.2" max="1.6" step="0.01"><output></output></div>
   <div class="fx-slider"><label>立体感</label><input id="fx-depth" type="range" min="0.2" max="1.8" step="0.01"><output></output></div>
   <div class="fx-slider"><label>封面清晰度</label><input id="fx-coverres" type="range" min="0.75" max="1.55" step="0.01"><output></output></div>
@@ -255,9 +306,79 @@
 
   <div class="fx-fold" id="fx-lyric-fold">
     <div class="fx-fold-head" onclick="document.getElementById('fx-lyric-fold').classList.toggle('open')">
-      <span class="fx-fold-title"><strong>歌词外观</strong><small>颜色 / 来源 / 位置</small></span><span class="arrow">▶</span>
+      <span class="fx-fold-title"><strong>歌词</strong><small>增强 / 动画 / 外观</small></span><span class="arrow">▶</span>
     </div>
     <div class="fx-fold-body">
+      <div class="fx-section-label">歌词增强</div>
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-lyricTranslation" onclick="toggleFx('lyricTranslation')" title="显示歌词翻译行"><span>歌词翻译</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-lyricMotion" onclick="toggleFx('lyricMotion')" title="歌词文字的错位、漂浮和节拍摆动"><span>歌词错位动感</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-lyricMultiSentence" onclick="toggleFx('lyricMultiSentence')" title="同时显示当前句和后续两句"><span>多句歌词</span><span class="dot"></span></div>
+      </div>
+      <div class="fx-slider"><label>歌词时间微调</label><input id="fx-lyrictimeoffset" type="range" min="-3" max="3" step="0.05"><output></output></div>
+      <div class="fx-slider"><label>桌面歌词左右</label><input id="fx-desktoplyricsx" type="range" min="0.02" max="0.98" step="0.01"><output></output></div>
+      <div class="fx-section-label">舞台歌词行数</div>
+      <div class="fx-seg" id="stage-lyrics-rows-seg">
+        <button data-stage-lyrics-rows="1">1行</button>
+        <button data-stage-lyrics-rows="2">2行</button>
+        <button data-stage-lyrics-rows="3">3行</button>
+        <button data-stage-lyrics-rows="4">4行</button>
+        <button data-stage-lyrics-rows="6">6行</button>
+        <button data-stage-lyrics-rows="8">8行</button>
+      </div>
+      <div class="fx-section-label">歌词动画</div>
+      <div class="lyric-anim-mode-grid" id="lyric-anim-mode-grid">
+        <button type="button" data-lyric-anim-mode="off">关闭</button>
+        <button type="button" data-lyric-anim-mode="classic">流光</button>
+        <button type="button" data-lyric-anim-mode="cadenza">心象</button>
+        <button type="button" data-lyric-anim-mode="partita">云阶</button>
+        <button type="button" data-lyric-anim-mode="fume">浮名</button>
+        <button type="button" data-lyric-anim-mode="cappella">群唱</button>
+        <button type="button" data-lyric-anim-mode="tilt">倾诉</button>
+        <button type="button" data-lyric-anim-mode="monet">莫奈</button>
+      </div>
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-lyricAnimationStatic" onclick="toggleLyricAnimStatic()"><span>轻量动画背景</span><span class="dot"></span></div>
+      </div>
+      <div class="fx-section-label">动画强度</div>
+      <div class="fx-seg" id="lyric-anim-intensity-seg">
+        <button data-lyric-anim-intensity="calm">舒缓</button>
+        <button data-lyric-anim-intensity="normal">标准</button>
+        <button data-lyric-anim-intensity="chaotic">强烈</button>
+      </div>
+      <div class="fx-slider"><label>动画透明度</label><input id="fx-lyricanimopacity" type="range" min="0.2" max="1" step="0.01"><output></output></div>
+      <div class="lyric-anim-tuning-panel" id="lyric-anim-tuning-classic">
+        <div class="fx-slider"><label>词旋转</label><input id="fx-lyricanim-classic-rotate" type="range" min="0" max="1" step="1"><output></output></div>
+        <div class="fx-slider"><label>呼吸幅度</label><input id="fx-lyricanim-classic-breath" type="range" min="0" max="2" step="0.05"><output></output></div>
+        <div class="fx-slider"><label>词间距</label><input id="fx-lyricanim-classic-spacing" type="range" min="0" max="2" step="0.05"><output></output></div>
+      </div>
+      <div class="lyric-anim-tuning-panel" id="lyric-anim-tuning-fume">
+        <div class="fx-slider"><label>镜头速度</label><input id="fx-lyricanim-fume-speed" type="range" min="0.2" max="2" step="0.05"><output></output></div>
+        <div class="fx-slider"><label>辉光强度</label><input id="fx-lyricanim-fume-glow" type="range" min="0" max="2" step="0.05"><output></output></div>
+        <div class="fx-slider"><label>大标题比例</label><input id="fx-lyricanim-fume-hero" type="range" min="0.5" max="1.8" step="0.05"><output></output></div>
+        <div class="fx-slider"><label>文字停留</label><input id="fx-lyricanim-fume-hold" type="range" min="0" max="2" step="0.05"><output></output></div>
+      </div>
+      <div class="lyric-anim-tuning-panel" id="lyric-anim-tuning-partita">
+        <div class="fx-toggle" id="t-lyricAnimPartitaGuide" onclick="toggleLyricAnimPartitaGuide()"><span>显示引导线</span><span class="dot"></span></div>
+        <div class="fx-slider"><label>错落最小</label><input id="fx-lyricanim-partita-stagger-min" type="range" min="0" max="180" step="1"><output></output></div>
+        <div class="fx-slider"><label>错落最大</label><input id="fx-lyricanim-partita-stagger-max" type="range" min="0" max="180" step="1"><output></output></div>
+      </div>
+      <div class="lyric-anim-tuning-panel" id="lyric-anim-tuning-tilt">
+        <div class="fx-slider"><label>拆分概率</label><input id="fx-lyricanim-tilt-split" type="range" min="0" max="1" step="0.05"><output></output></div>
+        <div class="fx-slider"><label>倾斜风格</label><input id="fx-lyricanim-tilt-style" type="range" min="0" max="1" step="0.05"><output></output></div>
+      </div>
+      <div class="lyric-anim-tuning-panel" id="lyric-anim-tuning-cadenza">
+        <div class="fx-slider"><label>字号比例</label><input id="fx-lyricanim-cadenza-scale" type="range" min="0.6" max="1.8" step="0.02"><output></output></div>
+        <div class="fx-slider"><label>运动幅度</label><input id="fx-lyricanim-cadenza-motion" type="range" min="0" max="2" step="0.05"><output></output></div>
+        <div class="fx-slider"><label>辉光强度</label><input id="fx-lyricanim-cadenza-glow" type="range" min="0" max="2" step="0.05"><output></output></div>
+      </div>
+      <div class="lyric-anim-tuning-panel" id="lyric-anim-tuning-monet">
+        <div class="fx-slider"><label>聚焦比例</label><input id="fx-lyricanim-monet-focus" type="range" min="0.5" max="2" step="0.05"><output></output></div>
+        <div class="fx-slider"><label>肖像比例</label><input id="fx-lyricanim-monet-portrait" type="range" min="0.5" max="2" step="0.05"><output></output></div>
+      </div>
+      <div class="lyric-anim-tuning-panel" id="lyric-anim-tuning-cappella">
+        <div class="fx-toggle" id="t-lyricAnimCappellaEmo" onclick="toggleLyricAnimCappellaEmo()"><span>表情消息</span><span class="dot"></span></div>
+      </div>
       <div class="fx-section-label">歌词颜色</div>
       <div class="lyric-color-grid" id="lyric-color-grid"></div>
       <div class="lyric-color-row">
@@ -344,7 +465,38 @@
         <button data-desktop-lyrics-fps="120">120</button>
         <button data-desktop-lyrics-fps="0">无上限</button>
       </div>
-      <div class="fx-slider dev-locked"><label>壁纸透明度</label><input id="fx-wallpaperopacity" type="range" min="0.35" max="1" step="0.01" disabled><output></output></div>
+      <div class="fx-section-label">桌面歌词布局</div>
+      <div class="fx-seg" id="desktop-lyrics-rows-seg">
+        <button data-desktop-lyrics-rows="single">单行</button>
+        <button data-desktop-lyrics-rows="double">舞台双行</button>
+        <button data-desktop-lyrics-rows="triple">舞台三行</button>
+        <button data-desktop-lyrics-rows="quad">舞台四行</button>
+      </div>
+      <div class="fx-seg" id="desktop-lyrics-align-seg">
+        <button data-desktop-lyrics-align="left">左对齐</button>
+        <button data-desktop-lyrics-align="center">居中</button>
+        <button data-desktop-lyrics-align="right">右对齐</button>
+      </div>
+      <div class="fx-section-label">桌面歌词位置</div>
+      <div class="fx-seg" id="desktop-lyrics-position-preset-seg">
+        <button type="button" onclick="setDesktopLyricsPositionPreset('left')">靠左</button>
+        <button type="button" onclick="setDesktopLyricsPositionPreset('center')">居中</button>
+        <button type="button" onclick="setDesktopLyricsPositionPreset('right')">靠右</button>
+        <button type="button" onclick="setDesktopLyricsPositionPreset('reset')">复位</button>
+      </div>
+      <div class="fx-section-label">播放器内歌词位置</div>
+      <div class="fx-seg" id="lyric-layout-preset-seg">
+        <button type="button" data-lyric-layout-preset="left" onclick="setPlayerLyricPositionPreset('left')">左侧</button>
+        <button type="button" data-lyric-layout-preset="center" onclick="setPlayerLyricPositionPreset('center')">居中</button>
+        <button type="button" data-lyric-layout-preset="right" onclick="setPlayerLyricPositionPreset('right')">右侧</button>
+        <button type="button" data-lyric-layout-preset="drag" onclick="togglePlayerLyricDragMode()">拖拽</button>
+        <button type="button" onclick="resetPlayerLyricPosition()">重置</button>
+      </div>
+      <div class="fx-section-label">沉浸模式</div>
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-immersiveAutoFullscreen" onclick="toggleFx('immersiveAutoFullscreen')" title="开启全沉浸式时自动进入全屏"><span>沉浸自动全屏</span><span class="dot"></span></div>
+      </div>
+      <div class="fx-slider"><label>桌面壁纸透明</label><input id="fx-wallpaperopacity" type="range" min="0.35" max="1" step="0.01"><output></output></div>
     </div>
   </div>
 
@@ -418,6 +570,7 @@
       <div class="fx-toggle-grid">
         <div class="fx-toggle" id="t-liveBackgroundKeep" onclick="toggleFx('liveBackgroundKeep')" title="开启后后台或最小化时保持视觉渲染，不进入低占用暂停"><span>直播后台保持</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-minimizeToTray" onclick="toggleMinimizeToTray()" title="关闭窗口时最小化到系统托盘，不退出程序"><span>关闭后最小化到托盘</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-startupLaunch" onclick="toggleStartupLaunch()" title="登录 Windows 后自动启动 Mineradio"><span>开机自动启动</span><span class="dot"></span></div>
       </div>
       <div class="fx-slider"><label>粒子尺寸</label><input id="fx-point" type="range" min="0.5" max="2.2" step="0.01"><output></output></div>
       <div class="fx-slider"><label>流速</label><input id="fx-speed" type="range" min="0.2" max="2.5" step="0.01"><output></output></div>
@@ -845,6 +998,9 @@
 </div>
 
     <script src="js/app.js"></script>
+    <script src="lyric-animation.js"></script>
     <script src="js/pkg-bg.js"></script>
+
+  <div id="lyric-viz-stage-host" aria-hidden="true"></div>
 </body>
 </html>
