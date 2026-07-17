@@ -1937,3 +1937,32 @@ body.empty-home-active.lyric-animation-stage-on #lyric-viz-stage-host.active{dis
 #lyric-layout-preset-seg button.active{background:rgba(244,210,138,.20);border-color:rgba(244,210,138,.48);color:#fff}
 #desktop-lyrics-position-preset-seg{margin:8px 0 10px}
 #desktop-lyrics-position-preset-seg button.active{background:rgba(244,210,138,.20);border-color:rgba(244,210,138,.48);color:#fff}
+
+/* Wallpaper favorite button */
+.wp-fav-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 5;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.2s;
+}
+.wp-fav-btn:hover {
+  background: rgba(0,0,0,0.7);
+  transform: scale(1.15);
+}
+.wp-fav-btn.active {
+  color: #ffc107;
+  background: rgba(255,193,7,0.2);
+}

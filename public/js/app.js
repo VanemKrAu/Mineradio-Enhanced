@@ -707,20 +707,18 @@ function packagedDefaultLyricLayoutRaw() {
   return Object.assign({ desktopLyricsSchema: 'desktop-lyrics-v3' }, clonePackagedDefaultFxSnapshot());
 }
 var DEVELOPMENT_LOCKED_FX = {
-  wallpaperMode: true
 };
 function isDevelopmentLockedFx(key) {
   return !!DEVELOPMENT_LOCKED_FX[key];
 }
 function normalizeDevelopmentLockedFxState() {
   if (!fx) return;
-  fx.wallpaperMode = false;
 }
 function readSavedPlaybackVisualPreset() {
   try {
     var raw = JSON.parse(localStorage.getItem(LYRIC_LAYOUT_STORE_KEY) || '{}') || {};
     if (!Object.prototype.hasOwnProperty.call(raw, 'preset')) return fxDefaults.preset;
-    var savedPreset = clampRange(Number(raw.preset) || 0, 0, 7);
+    var savedPreset = clampRange(Number(raw.preset) || 0, 0, presetMeta.length - 1);
     if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) savedPreset = 5;
     return savedPreset;
   } catch (e) {
@@ -3502,7 +3500,7 @@ void main(){
   //  Layered music-particle wallpaper: aurora ribbons, depth sparks,
   //  and cover-colored audio flow.
   // ====================================================
-  else {
+  else if (uPreset < 5.5) {
     float bassGlow = smoothstep(0.07, 0.78, uBass) * 0.34 + uBeat * 0.014;
     float midGlow = smoothstep(0.07, 0.62, uMid) * 0.42;
     float highGlow = smoothstep(0.04, 0.46, uTreble) * 0.46;
@@ -3573,6 +3571,315 @@ void main(){
     }
   }
 
+  else if (uPreset < 7.5) {
+      float bassDrive = uBass * 1.70 * K;
+      float midDrive = uMid * 0.55 * K;
+      float trebDrive = uTreble * 0.38;
+      float beatPulse = uBeat * 0.45;
+      float energyQ = uEnergy * 0.30;
+  
+      // 地基参数: 底部更深更宽, 顶部向前倾斜
+      float depthRow = aUv.y;                         // 0(底部)=深水 → 1(顶部)=浪尖
+      float depthN = clamp(depthRow * 1.25, 0.0, 1.0);
+      float baseZ = mix(6.5, -3.8, depthRow);        // 底部远, 顶部近
+  
+      // 主波频率 — 7层谐波叠加 (模拟流体板块碰撞的复杂褶皱)
+      float waveX = aUv.x * 16.5 - t * 0.32;          // 缓慢推进
+      float w1 = sin(waveX * 0.72 + depthRow * 0.8) * 2.30;
+      float w2 = sin(waveX * 1.45 + 1.62) * 1.45;
+      float w3 = sin(waveX * 2.35 + 2.94) * 0.85;
+      float w4 = sin(waveX * 3.60 + 0.47) * 0.48;
+      float w5 = sin(waveX * 5.20 + 3.18) * 0.24;
+      float w6 = cos(waveX * 1.08 + depthRow * 1.5 + t * 0.12) * 0.65;
+      float w7 = sin(waveX * 0.55 + t * 0.06) * 0.38;
+  
+      // 噪声湍流 — 模拟流体动力学复杂性
+      float turb0 = snoise(vec3(aUv.x * 3.2, depthRow * 2.8, t * 0.38)) * 1.15;
+      float turb1 = snoise(vec3(aUv.x * 5.8, depthRow * 1.5, t * 0.52)) * 0.72;
+      float turb2 = snoise(vec3(aUv.x * 9.3, aRand * 4.5, t * 0.78)) * 0.38;
+  
+      // 组合主波 (模拟板块碰撞的立体褶皱)
+      float mainWave = w1 + w2 * 0.70 + w3 * 0.42 + w4 * 0.26 + w5 * 0.15 + w6 * 0.40 + w7 * 0.22;
+      float turbulence = turb0 + turb1 * 0.65 + turb2 * 0.38;
+      float displacement = mainWave + turbulence * 1.25;
+  
+      // 浪尖 — 前缘内卷 (气浪反冲向内倒卷)
+      float crestX = (aUv.x - 0.5 + t * 0.06) * 14.0;
+      float crest = pow(clamp(sin(crestX * 0.72 + 1.35), 0.0, 1.0), 3.2);
+      float overhang = sin(crestX * 0.72 + depthRow * 1.8) * 0.65;
+  
+      // 空化效应: 水流剧烈摩擦 → 幽蓝+荧光绿冷光
+      float cavitation = snoise(vec3(aUv.x * 7.5, depthRow * 4.2, t * 1.25)) * 0.5 + 0.5;
+      float cavGlow = cavitation * midDrive * 0.60;
+  
+      // 碎浪喷雾: 边缘炸裂
+      float spray = snoise(vec3(aUv.x * 12.0 + aRand * 3.0, depthRow * 6.0, t * 1.8)) * 0.5 + 0.5;
+      float sprayMask = smoothstep(0.42, 0.75, depthRow) * smoothstep(0.18, 0.55, crest + bassDrive * 0.15);
+      float sprayBurst = spray * sprayMask * bassDrive * 0.55;
+  
+      // 位置
+      float wallWidth = mix(10.2, 14.5, depthN * 0.6);
+      pos.x = (aUv.x - 0.5) * wallWidth + turb0 * 0.55 + turb2 * 0.22;
+      pos.y = (depthRow - 0.5) * 8.8 + displacement * 0.35 + overhang * 0.28 * crest;
+      pos.z = baseZ + displacement * (0.70 + bassDrive * 0.85) + crest * bassDrive * 0.78
+            + overhang * (0.50 + beatPulse * 0.35) + sprayBurst * 0.90 + cavGlow * 0.35;
+  
+      // 颜色: 深海蓝 → 透亮翡翠绿 → 浪尖白
+      vec3 deepSea = vec3(0.02, 0.08, 0.28);          // 深蓝
+      vec3 oceanMid = vec3(0.06, 0.22, 0.55);          // 中蓝
+      vec3 tealGlow = vec3(0.12, 0.55, 0.62);          // 翡翠绿
+      vec3 emerald = vec3(0.08, 0.72, 0.48);           // 荧光绿(空化)
+      vec3 foamWhite = vec3(0.88, 0.94, 1.0);          // 浪花白
+      vec3 mistGray = vec3(0.62, 0.68, 0.78);          // 水雾灰
+  
+      float depthColorMix = clamp(depthRow * 1.35, 0.0, 1.0);
+      vColor = mix(deepSea, oceanMid, depthColorMix);
+      vColor = mix(vColor, tealGlow, depthColorMix * 0.45 + cavitation * 0.25);
+      vColor = mix(vColor, emerald, cavGlow * 0.58);
+      vColor = mix(vColor, foamWhite, crest * bassDrive * 0.82 + beatPulse * 0.28);
+      vColor = mix(vColor, mistGray, sprayBurst * 0.50);
+  
+      // ★ 封面颜色适配
+      vColor = mix(vColor, coverColor, uHasCover * 0.38);
+  
+      // 透明度: 底部厚重, 浪尖高亮, 水雾区域更高亮
+      vAlpha = 0.42 + depthN * 0.12 + crest * bassDrive * 0.38 + sprayBurst * 0.32
+             + 0.10 * (1.0 - abs(depthRow - 0.45) * 1.8);
+  
+      maxRippleAmp = max(maxRippleAmp,
+        crest * bassDrive * 0.52 + beatPulse * 0.32 + sprayBurst * 0.28 + cavGlow * 0.18);
+    }
+  
+    // ═══════════════════════════════════════════════════════════
+    //  Preset 8: TORNADO — 超巨型龙卷风
+    //  倒置圆锥漏斗, 不对称螺旋扭曲, 铁砧云母体, 环状褶皱,
+    //  丝缕甩纹, 底部环形基座爆炸, 流体雕塑感
+    // ═══════════════════════════════════════════════════════════
+    else if (uPreset < 8.5) {
+      float bassW = uBass * 1.15 * K;
+      float midW = uMid * 1.60 * K;
+      float trebW = uTreble * 0.65;
+      float beatW = uBeat * 0.35;
+  
+      // 高度系统: -5(云底/顶部) → +4(地面/底部)
+      float height = (aUv.y - 0.5) * 9.0;             // -4.5 ~ 4.5
+      float heightN = (height + 4.5) / 9.0;            // 0(云顶) → 1(地面)
+  
+      // 漏斗半径: 云底宽口 → 中段收紧 → 底部炸裂
+      float midNarrow = smoothstep(0.35, 0.55, heightN);  // 中段收束
+      float bottomFlare = smoothstep(0.82, 1.0, heightN); // 底部炸裂
+      float funnelR = mix(4.2, 0.72, midNarrow * 1.05);   // 云底宽口 → 中段0.72 (不能太细)
+      funnelR += bottomFlare * 3.8;                         // 底部炸开
+  
+      // 不对称螺旋: 不同高度层不同转速
+      float twistPerLevel = 4.2 + midW * 3.5;
+      float spinBase = t * (1.1 + midW * 2.2 + trebW * 1.4);
+      float angle = aUv.x * 2.0 * PI * twistPerLevel
+                  + spinBase / max(0.15, abs(height) * 0.28 + 0.25)
+                  + sin(height * 0.85 + t * 0.45) * 0.35;  // 螺旋扭曲
+  
+      // 湍流 — 多层噪声模拟环状褶皱 + 丝缕甩纹
+      float ringFold = snoise(vec3(aUv.x * 8.5, height * 0.55, t * 0.62)) * 0.32;
+      float ringFold2 = snoise(vec3(aUv.x * 15.0 + aRand, height * 0.38, t * 0.85)) * 0.18;
+      float surfaceRough = snoise(vec3(aUv.x * 4.5 + aRand * 2.0, height * 0.72, t * 0.38)) * 0.26;
+      float filament = snoise(vec3(aRand * 7.5, angle * 3.0, height * 0.45)) * 0.5 + 0.5;
+      float filamentStr = filament * (1.0 - midNarrow * 0.4) * 0.38;  // 丝缕在中段最明显
+  
+      // 碎屑喷射: 底部基座环形爆发
+      float debrisRing = snoise(vec3(aRand * 11.0, angle * 6.0, t * 0.75)) * 0.5 + 0.5;
+      float debrisKick = debrisRing * bottomFlare * bassW * 0.58;
+      float debrisOut = bottomFlare * (0.55 + debrisRing * 1.35);
+  
+      float r = funnelR * (1.0 + surfaceRough * 0.65 + ringFold * 0.42 + filamentStr * 0.35 + bassW * 0.12);
+      r += debrisOut * 0.55 + debrisKick;
+  
+      // 垂直扰动
+      float vertWobble = snoise(vec3(aRand * 5.5, t * 0.42, height * 0.32)) * 0.55;
+      float vertTurb = snoise(vec3(aRand * 3.0, angle * 2.5, t * 0.55)) * 0.32;
+  
+      pos.x = cos(angle) * r + filamentStr * 0.38 * cos(angle * 3.0 + t);
+      pos.y = height + vertWobble * 0.65 + vertTurb * 0.35;
+      pos.z = sin(angle) * r + filamentStr * 0.38 * sin(angle * 3.0 + t);
+  
+      // 颜色: 云顶暗灰褐 → 中段尘灰 → 底部碎屑土黄
+      vec3 cloudTop = vec3(0.18, 0.16, 0.13);       // 云母暗灰褐
+      vec3 midGray = vec3(0.32, 0.30, 0.25);         // 中段尘灰
+      vec3 debrisColor = vec3(0.48, 0.42, 0.32);     // 碎屑土黄
+      vec3 groundDust = vec3(0.38, 0.34, 0.22);      // 地表尘埃
+      float dustGlow = filament * 0.35 + debrisRing * 0.28;
+  
+      float colorMix = clamp(heightN * 1.1, 0.0, 1.0);
+      vColor = mix(cloudTop, midGray, colorMix);
+      vColor = mix(vColor, debrisColor, debrisRing * bottomFlare * 0.75);
+      vColor = mix(vColor, groundDust, bottomFlare * 0.55);
+      vColor = mix(vColor, vColor * 1.3, dustGlow * 0.32);  // 粉尘微亮
+  
+      // ★ 封面颜色适配
+      vColor = mix(vColor, coverColor, uHasCover * 0.32);
+  
+      // 透明度: 中段最致密, 云顶和碎屑边缘锐利
+      float midDensity = 1.0 - abs(heightN - 0.5) * 1.35;  // 中段最密
+      vAlpha = 0.55 + midDensity * 0.28 + bottomFlare * debrisRing * 0.32
+             + filamentStr * 0.15 + bassW * 0.10;
+  
+      maxRippleAmp = max(maxRippleAmp,
+        midW * 0.28 + debrisRing * bottomFlare * 0.22 + filamentStr * 0.16 + bassW * 0.08);
+    }
+  
+    // ═══════════════════════════════════════════════════════════
+    //  Preset 9: PLANET — 气态巨行星 + 星环 + 卫星碎石
+    //  多层大气条纹, 冰晶星环, 轨道碎石卫星, 极光晕
+    // ═══════════════════════════════════════════════════════════
+    else if (uPreset < 9.5) {
+      float bassP = uBass * 0.65 * K;
+      float midP = uMid * 0.55 * K;
+      float trebP = uTreble * 0.42;
+      float beatP = uBeat * 0.40;
+      float energyP = uEnergy * 0.32;
+  
+      // 行星球体坐标
+      float planetRadius = 1.65;
+      float ringInner = 2.2;
+      float ringOuter = 3.5;
+      float ringThick = 0.12;
+  
+      // UV → 球体投影 (正面)
+      vec2 sphereCoord = (aUv - vec2(0.5, 0.5)) * vec2(5.5, 5.5);
+      float sphereR = length(sphereCoord);
+      float spherePhi = atan(sphereCoord.y, sphereCoord.x);
+  
+      // 自转: 低频驱动
+      float rotation = t * (0.18 + bassP * 0.22 + midP * 0.10);
+      float planetRotAngle = spherePhi + rotation;
+  
+      // 大气条纹: 水平纬线带 (类木星/土星)
+      float latY = sphereCoord.y / planetRadius;
+      float latitude = clamp(latY, -1.0, 1.0);
+      float bandNoise = snoise(vec3(latitude * 6.5, planetRotAngle * 0.8, 0.0)) * 0.5 + 0.5;
+      float bandNoise2 = snoise(vec3(latitude * 12.0 + 2.5, planetRotAngle * 1.3, 1.0)) * 0.5 + 0.5;
+      float bandNoise3 = snoise(vec3(latitude * 3.8 + aRand * 2.0, planetRotAngle * 0.25, 2.0)) * 0.5 + 0.5;
+  
+      // 风暴漩涡 (大红斑类)
+      float stormX = 0.35;
+      float stormY = -0.22;
+      float stormDist = length(vec2(sphereCoord.x - stormX, sphereCoord.y - stormY));
+      float storm = 1.0 - smoothstep(0.18, 0.55, stormDist);
+      float stormEye = smoothstep(0.0, 0.09, stormDist) * storm;
+      float stormSpiral = sin(atan(sphereCoord.y - stormY, sphereCoord.x - stormX) * 6.0 + t * 0.45) * 0.18;
+  
+      // 粒子分类
+      float ringProb = step(0.45, aRand);              // 55% 星环
+      float moonProb = step(0.82, aRand);              // 18% 卫星碎石
+      float auraProb = step(0.95, aRand);              // 5% 极光晕
+      float innerGlow = 0.0;
+      float ringBright = 0.0;
+  
+      // ═══ 星环粒子 (aRand 0.45~0.82) ═══
+      if (ringProb > 0.5 && moonProb < 0.5) {
+        float ringAngle = spherePhi + rotation * 0.35 + hash11(aRand * 41.0) * 0.12;
+        float ringR = mix(ringInner, ringOuter, hash11(aRand * 79.0));
+        float ringTurb = snoise(vec3(ringAngle * 4.5, ringR * 3.0, t * 0.35)) * 0.15;
+        ringR += ringTurb;
+  
+        // 冰晶微光
+        float iceGlint = snoise(vec3(ringAngle * 16.0 + aRand * 3.0, ringR * 8.0, t * 0.65)) * 0.5 + 0.5;
+        ringBright = iceGlint * (1.0 - smoothstep(ringInner, ringOuter, ringR) * 0.5);
+  
+        pos.x = cos(ringAngle) * ringR;
+        pos.y = sin(ringAngle) * ringR * 0.18;         // 扁平星环面
+        pos.z = snoise(vec3(aRand * 5.5, ringAngle * 2.0, t * 0.28)) * ringThick * 3.0;
+  
+        // 星环颜色: 冰蓝 → 粉紫 → 金
+        float ringColorMix = (ringR - ringInner) / (ringOuter - ringInner);
+        vec3 ringIce = vec3(0.65, 0.78, 0.95);
+        vec3 ringGold = vec3(0.92, 0.78, 0.52);
+        vec3 ringDust = vec3(0.55, 0.42, 0.65);
+        vColor = mix(ringIce, ringGold, ringColorMix);
+        vColor = mix(vColor, ringDust, iceGlint * 0.35);
+        vColor = mix(vColor, vec3(1.0, 0.95, 0.85), ringBright * 0.55 + beatP * 0.12);
+  
+        vAlpha = 0.55 + ringBright * 0.32 + (1.0 - abs(ringR - ringInner - 0.6) / 1.5) * 0.15;
+        innerGlow = ringBright * 0.22;
+      }
+  
+      // ═══ 卫星碎石 (aRand 0.82~0.95) ═══
+      else if (moonProb > 0.5 && auraProb < 0.5) {
+        float moonSeed = hash11(aRand * 153.0);
+        float moonOrbit = mix(1.2, 4.8, moonSeed);
+        float moonAngle = planetRotAngle * (0.38 + moonSeed * 0.55) + moonSeed * 6.28;
+        float moonTurb = snoise(vec3(aRand * 6.5, t * 0.38, moonAngle * 0.5)) * 0.28;
+        float moonR = moonOrbit + moonTurb;
+  
+        pos.x = cos(moonAngle) * moonR + snoise(vec3(aRand * 4.0, t * 0.25, 1.0)) * 0.32;
+        pos.y = sin(moonAngle) * moonR * 0.42 + snoise(vec3(aRand * 5.5, t * 0.18, 3.0)) * 0.28;
+        pos.z = snoise(vec3(aRand * 8.0, t * 0.32, moonAngle)) * 0.65;
+  
+        vec3 rockBase = mix(vec3(0.42, 0.35, 0.28), vec3(0.55, 0.48, 0.38), moonSeed);
+        vec3 rockHighlight = mix(rockBase, vec3(0.72, 0.65, 0.55), moonTurb * 0.5 + 0.5);
+        vColor = mix(rockHighlight, rockBase * 1.15, step(0.55, moonSeed)) * (0.8 + midP * 0.25);
+        vAlpha = 0.45 + (1.0 - clamp(abs(moonOrbit - 2.8) / 3.5, 0.0, 1.0)) * 0.25;
+      }
+  
+      // ═══ 行星球体主体 (aRand < 0.45) ═══
+      else if (ringProb < 0.5) {
+        // 球体投影
+        float zSphere = sqrt(max(0.0, planetRadius * planetRadius - sphereR * sphereR));
+        float litEdge = zSphere / planetRadius;         // 边缘暗, 中心亮
+  
+        pos.x = sphereCoord.x;
+        pos.y = sphereCoord.y;
+        pos.z = zSphere * 0.85 + snoise(vec3(aRand * 3.5, t * 0.15, 0.0)) * 0.15;
+  
+        // 气态条纹颜色: 暖色带 + 冷色带
+        float band1 = sin(latitude * 9.5 + bandNoise * 2.5) * 0.5 + 0.5;
+        float band2 = sin(latitude * 7.2 + 1.8 + bandNoise2 * 2.0) * 0.5 + 0.5;
+        float band3 = sin(latitude * 5.5 + 3.2 + bandNoise3 * 1.8) * 0.5 + 0.5;
+  
+        vec3 warmBand = vec3(0.85, 0.52, 0.28);        // 暖橙
+        vec3 coolBand = vec3(0.28, 0.45, 0.65);         // 冷蓝
+        vec3 midTone = vec3(0.62, 0.55, 0.38);          // 中色调
+        vec3 stormRed = vec3(0.92, 0.32, 0.18);         // 大红斑
+  
+        vColor = mix(coolBand, warmBand, band1 * 0.65 + band2 * 0.35);
+        vColor = mix(vColor, midTone, band3 * 0.40);
+        vColor = mix(vColor, stormRed, stormEye * 0.72);
+        vColor = mix(vColor, vColor * 1.2, stormSpiral * storm * 0.22);
+  
+        // 光照: 中心亮, 边缘暗
+        vColor *= 0.72 + litEdge * 0.48;
+  
+        // 大气 glow
+        innerGlow = litEdge * (0.28 + bassP * 0.15 + beatP * 0.10);
+  
+        vAlpha = 0.48 + litEdge * 0.35 + stormEye * 0.18;
+      }
+  
+      // ═══ 极光晕 (aRand > 0.95) ═══
+      else {
+        float auraH = mix(1.2, 2.8, hash11(aRand * 62.0));
+        float auraAngle = spherePhi + t * (0.08 + beatP * 0.12);
+        float auraR = planetRadius * 0.55 + snoise(vec3(aRand * 4.0, auraAngle, t * 0.22)) * 0.65;
+        pos.x = cos(auraAngle) * auraR;
+        pos.y = sin(auraAngle) * auraR * 0.45;
+        pos.z = auraH * (0.6 + midP * 0.45) + snoise(vec3(aRand * 6.0, t * 0.18, 2.0)) * 0.8;
+  
+        vColor = mix(vec3(0.35, 0.55, 0.95), vec3(0.65, 0.32, 0.88), hash11(aRand * 33.0));
+        vColor = mix(vColor, vec3(0.90, 0.85, 0.95), beatP * 0.18);
+        vAlpha = 0.22 + beatP * 0.18 + midP * 0.12;
+      }
+  
+      // ★ 封面颜色适配
+      vColor = mix(vColor, coverColor, uHasCover * 0.35);
+  
+      maxRippleAmp = max(maxRippleAmp,
+        innerGlow * 0.32 + beatP * 0.15 + bassP * 0.10 + ringBright * 0.20);
+    }
+    else {
+      vColor = defaultColor;
+      vAlpha = 1.0;
+      maxRippleAmp = 0.0;
+    }
+
   // ====================================================
   //  鼠标交互 (仅 SILK)
   // ====================================================
@@ -3636,10 +3943,16 @@ void main(){
   vColor = mix(vColor, tintedColor, clamp(uTintStrength, 0.0, 1.0) * (1.0 - blackParticleGuard));
 
   vBright = 0.82 + maxRippleAmp * 0.55 + uBass * 0.10 + edgeBoost * 0.30 + uEnergy * 0.05 + uBurstAmt * 0.40;
-  if (uPreset > 4.5) {
-    vBright = 0.94 + maxRippleAmp * 0.34 + uBass * 0.020 + uEnergy * 0.026 + uBurstAmt * 0.025;
+  if (uPreset > 8.5) {
+    vBright = 0.78 + maxRippleAmp*0.48 + uBass*0.035 + uEnergy*0.032 + uBurstAmt*0.035 + uBeat*0.10;
+  } else if (uPreset > 7.5) {
+    vBright = 0.72 + maxRippleAmp*0.42 + uMid*0.06 + uBass*0.025 + uEnergy*0.030 + uBurstAmt*0.030;
+  } else if (uPreset > 6.5) {
+    vBright = 0.88 + maxRippleAmp*0.55 + uBass*0.045 + uEnergy*0.028 + uBurstAmt*0.028 + uBeat*0.06;
+  } else if (uPreset > 4.5) {
+    vBright = 0.94 + maxRippleAmp*0.34 + uBass*0.020 + uEnergy*0.026 + uBurstAmt*0.025;
   } else if (uPreset > 3.5) {
-    vBright = 0.94 + maxRippleAmp * 0.64 + uBass * 0.08 + edgeBoost * 0.12 + uEnergy * 0.05 + uBeat * 0.16 + uBurstAmt * 0.16;
+    vBright = 0.94 + maxRippleAmp*0.64 + uBass*0.08 + edgeBoost*0.12 + uEnergy*0.05 + uBeat*0.16 + uBurstAmt*0.16;
   }
   vRipple = clamp(maxRippleAmp * 1.5, 0.0, 1.0);
 
@@ -3683,7 +3996,16 @@ void main(){
   float depthSize = 36.0 / max(0.5, -mvPos.z);
   float audioBoost = 1.0 + maxRippleAmp * 0.7 + edgeBoost * 0.55 + uBeat * 0.30 + uBurstAmt * 0.5;
   float sz = clamp(depthSize * audioBoost, 1.05, 4.95);
-  if (uPreset > 4.5) {
+  if (uPreset > 8.5) {
+    float planetDrive = uBass*0.045 + uMid*0.035 + uTreble*0.042 + uBurstAmt*0.050 + uBeat*0.08;
+    sz = clamp(depthSize * (0.88 + planetDrive), 0.9, 4.65);
+  } else if (uPreset > 7.5) {
+    float tornadoDrive = uMid*0.075 + uBass*0.045 + uTreble*0.035 + uBurstAmt*0.040 + uBeat*0.04;
+    sz = clamp(depthSize * (0.92 + tornadoDrive), 0.9, 5.10);
+  } else if (uPreset > 6.5) {
+    float waveDrive = uBass*0.090 + uMid*0.042 + uTreble*0.050 + uBurstAmt*0.070 + uBeat*0.08;
+    sz = clamp(depthSize * (0.95 + waveDrive), 0.95, 4.60);
+  } else if (uPreset > 4.5) {
     float flowDrive = uBass * 0.070 + uMid * 0.046 + uTreble * 0.060 + uBurstAmt * 0.090 + uBeat * 0.055;
     sz = clamp(depthSize * (1.05 + flowDrive), 1.00, 5.45);
   } else if (uPreset > 3.5) {
@@ -4900,7 +5222,7 @@ function readSavedLyricLayout() {
   try {
     var savedLayoutRaw = localStorage.getItem(LYRIC_LAYOUT_STORE_KEY);
     var raw = savedLayoutRaw ? (JSON.parse(savedLayoutRaw) || {}) : packagedDefaultLyricLayoutRaw();
-    var savedPreset = clampRange(Number(raw.preset) || 0, 0, 7);
+    var savedPreset = clampRange(Number(raw.preset) || 0, 0, presetMeta.length - 1);
     if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) {
       savedPreset = 5;
     }
@@ -5887,16 +6209,19 @@ var STAGE_LYRIC_MAX_LINES = 8;
 
 function makeLyricMask(text) {
   var canvas = document.createElement('canvas');
-  var W = 2048, H = 768;
+  var W = 2048;
+  var maxLines = STAGE_LYRIC_MAX_LINES;
+  // LX style: dynamic canvas height based on line count
+  var explicitBreak = String(text || '').indexOf('\n') >= 0;
+  var H = explicitBreak ? 1024 : Math.max(512, 420 + Math.max(0, maxLines - 3) * 112);
   canvas.width = W; canvas.height = H;
   var ctx = canvas.getContext('2d');
-  var maxWidth = W - 190;
-  var maxLines = STAGE_LYRIC_MAX_LINES;
-  var fontSize = 128;
+  var maxWidth = W - 260;  // LX: 260px margin (vs 190)
+  var fontSize = explicitBreak ? 112 : 128;
   text = String(text || '').replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim();
   var paragraphs = text.split('\n');
   var widest = 1;
-  for (; fontSize >= 42; fontSize -= 4) {
+  for (; fontSize >= 34; fontSize -= 4) {  // LX: min 34px (vs 42)
     ctx.font = lyricFontCss(fontSize);
     var lines = [];
       for (var pi = 0; pi < paragraphs.length; pi++) {
@@ -5950,7 +6275,7 @@ function makeLyricMask(text) {
 function makeLyricReadabilityTexture(mask) {
   var canvas = document.createElement('canvas');
   var W = mask && mask.width || 2048;
-  var H = mask && mask.height || 384;
+  var H = mask && mask.height || 768;
   var fontSize = mask && mask.fontSize || 128;
   var lines = mask && Array.isArray(mask.lines) && mask.lines.length ? mask.lines : [''];
   var lineHeight = mask && mask.lineHeight || fontSize * lyricLineHeightFactor();
@@ -6235,11 +6560,13 @@ function makeLyricShaderMaterial(mask, pal) {
   });
 }
 
-function buildLyricMesh(text) {
+function buildLyricMesh(text, opts) {
+  opts = opts || {};
+  var simpleMode = !!opts.simpleMode;
   text = String(text || '').replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim();
   var mask = makeLyricMask(text);
   var pal = stageLyrics.palette;
-  var worldW = 6.10;
+  var worldW = (mask.lineCount > 1) ? 5.82 : 6.10;
   var worldH = worldW * (mask.height / mask.width);
   var geo = new THREE.PlaneGeometry(worldW, worldH, 1, 1);
   var textWorldW = worldW * (mask.textWidth / mask.width);
@@ -6252,6 +6579,34 @@ function buildLyricMesh(text) {
   group.userData.state = 'in';
   group.userData.lastLyricProgress = -1;
   group.userData.floatSeed = Math.random() * 100;
+
+  // simpleMode: skip expensive sub-elements for non-current lines
+  if (simpleMode) {
+    // Create only the text mesh, skip sun/glow/sparks/readability
+    var mask = makeLyricMask(text);
+    var worldW2 = (mask.lineCount > 1) ? 5.82 : 6.10;
+    var worldH2 = worldW2 * (mask.height / mask.width);
+    var geo2 = new THREE.PlaneGeometry(worldW2, worldH2, 1, 1);
+    var textWorldW2 = worldW2 * (mask.textWidth / mask.width);
+    var textWorldH2 = worldH2 * ((mask.textHeight || mask.fontSize) / mask.height);
+    var group2 = new THREE.Group();
+    group2.renderOrder = 42;
+    group2.position.set((Math.random() - 0.5) * 0.08, 0.20, 1.46);
+    group2.scale.setScalar(0.96);
+    group2.userData.age = 0;
+    group2.userData.state = 'in';
+    group2.userData.lastLyricProgress = -1;
+    group2.userData.floatSeed = Math.random() * 100;
+    var textMat2 = makeLyricShaderMaterial(mask, stageLyrics.palette);
+    textMat2.uniforms.uOpacity.value = 0;
+    var textMesh2 = new THREE.Mesh(geo2, textMat2);
+    textMesh2.renderOrder = 43;
+    group2.add(textMesh2);
+    group2.userData.lyric = { textMat: textMat2 };
+    return group2;
+  }
+  // Skip expensive effects in simpleMode (multi-line non-current lines)
+  var skipEffects = simpleMode;
 
   var sunMat = new THREE.MeshBasicMaterial({
     map:getLyricSunBloomTexture(), transparent:true, opacity:0,
@@ -6750,6 +7105,31 @@ function tickLyricsParticles() {
     return;
   }
   if (!playing || !audio || !lyricsLines.length) {
+    // If lyric animation active, don't clear - show fallback text
+    if (document.body.classList.contains('lyric-animation-stage-on') || (typeof fx !== 'undefined' && fx && fx.lyricAnimationMode && fx.lyricAnimationMode !== 'off')) {
+      var fbText = typeof currentLyricFallbackText === 'function' ? currentLyricFallbackText() : '';
+      if (fbText) {
+        if (stageLyrics.current && stageLyrics.currentText !== fbText) {
+          stageLyrics.current.userData.state = 'out';
+          stageLyrics.current.userData.age = 0;
+          stageLyrics.outgoing.push(stageLyrics.current);
+        } else if (!stageLyrics.current) { }
+        if (!stageLyrics.current || stageLyrics.currentText !== fbText) {
+          stageLyrics.currentText = fbText;
+          stageLyrics.currentIdx = -2;
+          if (typeof showStageLine === 'function') showStageLine(fbText);
+        }
+        if (stageLyrics.current) {
+          var firstLine = lyricsLines[0];
+          var introEnd = firstLine && firstLine.t > 0 ? firstLine.t : Math.min((audio && audio.duration) || 4.8, 4.8);
+          var introLine = { t:0, text:fbText, duration:Math.max(0.8, introEnd), charCount:Math.max(1, fbText.length), fallback:true };
+          if (typeof getLyricLineProgress === 'function' && typeof updateLyricMeshProgress === 'function') {
+            updateLyricMeshProgress(stageLyrics.current, getLyricLineProgress(introLine, null, audio && audio.currentTime ? audio.currentTime : 0));
+          }
+        }
+        return;
+      }
+    }
     if (stageLyrics.current) {
       stageLyrics.current.userData.state = 'out';
       stageLyrics.current.userData.age = 0;
@@ -14328,9 +14708,21 @@ function preferredLyricSourceForSong(song) {
 }
 function applyPreferredLyricsForCurrent(silent) {
   var song = currentLyricSong();
-  if (preferredLyricSourceForSong(song) === 'custom' && applyCustomLyricState(song, true)) return;
+  if (preferredLyricSourceForSong(song) === 'custom' && applyCustomLyricState(song, true)) {
+    if (typeof LyricAnimation !== 'undefined' && LyricAnimation.onLyricsChanged) {
+      try { LyricAnimation.onLyricsChanged(lyricsLines || []); } catch(e) {}
+    }
+    return;
+  }
   applyOriginalLyricsState();
   if (!silent) updateCustomLyricControls();
+  if (typeof LyricAnimation !== 'undefined' && LyricAnimation.onLyricsChanged) {
+    try { LyricAnimation.onLyricsChanged(lyricsLines || []); } catch(e) {}
+  }
+  // Also re-push current mode on track change (no toast)
+  if (typeof LyricAnimation !== 'undefined' && LyricAnimation.setMode && typeof fx !== 'undefined' && fx && fx.lyricAnimationMode) {
+    try { LyricAnimation.setMode(fx.lyricAnimationMode); } catch(e) {}
+  }
 }
 function setLyricSourceMode(mode, silent) {
   var song = currentLyricSong();
@@ -16056,6 +16448,7 @@ function scheduleAudioResumePosition(media, seconds, token) {
 }
 
 async function playQueueAt(idx, opts) {
+  savePlaybackSession();
   opts = opts || {};
   if (idx < 0 || idx >= playQueue.length) return;
   markRenderInteraction('track-switch', 1500);
@@ -17865,7 +18258,10 @@ var presetMeta = [
   { name: '唱片', desc: '唱片 · 圆形封面' },
   { name: '星河', desc: '壁纸粒子 · 音乐律动' },
   { name: '安魂', desc: '骷髅·YUI7W', descHtml: '骷髅·<span class="pc-yui7w">YUI7W</span>' },
-  { name: '声境', desc: '3D 地形 · 音乐频段' },
+  { name: '海啮', desc: '巨浮 · 液态山脉' },
+  { name: '龙卷风', desc: '涡旋 · 流体雕塑' },
+  { name: '行星', desc: '星环 · 卫星环绕' },
+  { name: '声境', desc: '3D 地形 · 频谱律动' },
 ];
 var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 14c3-2 5-2 8 0s5 2 8 0M3 10c3-2 5-2 8 0s5 2 8 0M3 18c3-2 5-2 8 0s5 2 8 0"/></svg>',
@@ -17874,10 +18270,13 @@ var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/><path d="M8.8 8.8l6.4 6.4"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.4"/><path d="M16.5 5.2c2.1.9 3.4 2.4 4 4.5"/><path d="M18.8 3.2l1.5 4.8"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 15c2.2-4.4 4.4-4.4 6.6 0s4.4 4.4 6.6 0S20.6 10.6 23 15"/><path d="M3 9c2.2 2.2 4.4 2.2 6.6 0s4.4-2.2 6.6 0S20.6 11.2 23 9"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/></svg>',
-  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 18L8 12L13 16L18 8L21 12"/><path d="M3 18h18"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.2h4v6.2h4.2v3.8H14v7.6h-4v-7.6H5.8V9.4H10z"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 16c2-4 5-6 8-6s6 2 8 6" stroke-linecap="round"/><path d="M2 20c2-3 5-4 8-4s6 1 8 4" stroke-linecap="round" opacity=".6"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c-3 4-2 8 1 10s5 4 5 8" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="6"/><ellipse cx="12" cy="12" rx="9" ry="3" transform="rotate(-25 12 12)"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 20c3-4 5-4 8 0s5 4 8 0M2 12c3-4 5-4 8 0s5 4 8 0M2 4c3-4 5-4 8 0s5 4 8 0"/></svg>',
 ];
-var presetDisplayOrder = [0, 6, 5, 7, 4, 2, 1, 3];
+var presetDisplayOrder = [0, 7, 8, 9, 10, 6, 5, 4, 2, 1, 3];
 var lyricColorPresets = [
   { name:'雾蓝', color:'#a9b8c8' },
   { name:'银蓝', color:'#9db8cf' },
@@ -19006,7 +19405,7 @@ function refreshPresetGrid() {
 function triggerPresetParticleTransition(fromPreset, toPreset) {
   presetTransition.active = true;
   presetTransition.start = uniforms.uTime.value;
-  presetTransition.duration = toPreset === 5 ? 0.30 : 0.24;
+  presetTransition.duration = toPreset === 5 ? 0.30 : (toPreset >= 7 && toPreset <= 9 ? 0.28 : 0.24);
   presetTransition.from = fromPreset;
   presetTransition.to = toPreset;
   var newVisual = toPreset >= 4;
@@ -19061,9 +19460,12 @@ function setPreset(p, opts) {
     else if (p === 4) { orbit.userRadius = 6.5; orbit.userPhi = 0.04; orbit.userTheta = 0.0; orbit.baselineRadius = 6.5; orbit.baselinePhi = 0.04; }
     else if (p === 5) { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
     else if (p === 6) { orbit.userRadius = 7.4; orbit.userPhi = 0.10; orbit.userTheta = 0.18; orbit.baselineRadius = 7.4; orbit.baselinePhi = 0.10; }
-    else if (p === TERRAIN_PRESET_INDEX) { orbit.userRadius = 7.5; orbit.userPhi = 0.35; orbit.userTheta = 0.0; orbit.baselineRadius = 7.5; orbit.baselinePhi = 0.35; }
+    else if (p === 7) { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
+    else if (p === 8) { orbit.userRadius = 8.8; orbit.userPhi = -0.22; orbit.userTheta = -0.12; orbit.baselineRadius = 8.8; orbit.baselinePhi = -0.22; }
+    else if (p === 9) { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
+    else if (p === TERRAIN_PRESET_INDEX) { orbit.userRadius = 7.5; orbit.userPhi = 0.15; orbit.userTheta = 0.0; orbit.baselineRadius = 7.5; orbit.baselinePhi = 0.15; }
     else              { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
-    orbit.baselineTheta = (p === 6) ? 0.18 : 0.0;
+    orbit.baselineTheta = (p === 6) ? 0.18 : (p === 8 ? -0.12 : 0.0);
   }
   if (changed && !opts.silent) showToast('视觉预设: ' + presetMeta[p].name);
   var shouldCommitPlaybackPreset = !!opts.commitPlaybackPreset || !opts.noSave;
@@ -19077,7 +19479,7 @@ function setPreset(p, opts) {
 }
 
 function syncFxUniforms() {
-  uniforms.uPreset.value = fx.preset;
+  uniforms.uPreset.value = (fx.preset === TERRAIN_PRESET_INDEX) ? 3 : fx.preset;
   uniforms.uIntensity.value = fx.intensity;
   uniforms.uDepth.value = fx.depth;
   uniforms.uPointScale.value = fx.point;
@@ -20252,6 +20654,15 @@ async function refreshWallpapers() {
     console.warn('[WallpaperPicker] refresh failed:', e);
   }
 }
+
+// === Wallpaper favorites ===
+var WALLPAPER_FAV_KEY = 'mineradio-favorite-wallpapers-v1';
+var wallpaperFavList = [];
+function loadWallpaperFavs() { try { var r = localStorage.getItem(WALLPAPER_FAV_KEY); wallpaperFavList = r ? JSON.parse(r) : []; if (!Array.isArray(wallpaperFavList)) wallpaperFavList = []; } catch(e) { wallpaperFavList = []; } }
+function saveWallpaperFavs() { try { localStorage.setItem(WALLPAPER_FAV_KEY, JSON.stringify(wallpaperFavList)); } catch(e) {} }
+function isWpFav(fp) { return wallpaperFavList.indexOf(fp) !== -1; }
+function toggleWpFav(fp) { var idx = wallpaperFavList.indexOf(fp); if (idx === -1) { wallpaperFavList.push(fp); saveWallpaperFavs(); return true; } else { wallpaperFavList.splice(idx, 1); saveWallpaperFavs(); return false; } }
+loadWallpaperFavs();
 function renderWallpaperGrid() {
   var filtered = wallpaperPickerData.wallpapers;
   // 恢复上次选中的壁纸
@@ -20286,10 +20697,14 @@ function renderWallpaperGrid() {
   // 按文件创建时间倒序排序（最新下载的在前），相同时间按文件夹名倒序（workshop ID 越大越新）
   filtered = filtered.slice().sort(function(a, b) {
     // 优先用创建时间（下载时间）
+    // Fav first
+    var aF = isWpFav(a.folderPath || '');
+    var bF = isWpFav(b.folderPath || '');
+    if (aF && !bF) return -1;
+    if (!aF && bF) return 1;
     var ca = a.birthtimeMs || a.modifiedAt || 0;
     var cb = b.birthtimeMs || b.modifiedAt || 0;
     if (ca !== cb) return cb - ca;
-    // 时间相同按原名/文件夹名倒序（Steam Workshop ID 递增）
     var na = String(a.originalName || '').toLowerCase();
     var nb = String(b.originalName || '').toLowerCase();
     if (na > nb) return -1;
@@ -20350,11 +20765,57 @@ function renderWallpaperGrid() {
     if (rating) tags.push(rating);
     sub.textContent = tags.join(' · ');
     name.appendChild(sub);
+    var fvBtn = document.createElement('button');
+    fvBtn.className = 'wp-fav-btn';
+    var fvFp = wp.folderPath || '';
+    var fv = isWpFav(fvFp);
+    fvBtn.innerHTML = fv ? '\u2605' : '\u2606';
+    fvBtn.title = fv ? '\u53d6\u6d88\u6536\u85cf' : '\u6536\u85cf';
+    fvBtn.style.cssText = 'position:absolute;top:4px;right:4px;z-index:5;width:24px;height:24px;border:none;border-radius:50%;background:rgba(0,0,0,0.5);color:' + (fv ? '#ffc107' : '#fff') + ';font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;';
+    fvBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var nf = toggleWpFav(fvFp);
+      this.innerHTML = nf ? '\u2605' : '\u2606';
+      this.style.color = nf ? '#ffc107' : '#fff';
+      this.title = nf ? '\u53d6\u6d88\u6536\u85cf' : '\u6536\u85cf';
+      renderWallpaperGrid();
+    });
+    card.style.position = 'relative';
+    card.appendChild(fvBtn);
     card.appendChild(img);
     card.appendChild(name);
     card.addEventListener('click', function(){ console.log('[WP] card clicked:', wp.name); applyWallpaper(wp); });
     gridEl.appendChild(card);
   });
+}
+
+function ensureWpScrollBtn() {
+  var g = document.getElementById('wp-grid');
+  if (!g) return;
+  var b = document.getElementById('wp-scroll-top');
+  if (!b) {
+    b = document.createElement('button');
+    b.id = 'wp-scroll-top';
+    b.textContent = '\u2191';
+    b.title = '\u56de\u5230\u9876\u90e8';
+    b.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;width:40px;height:40px;border:none;border-radius:50%;background:rgba(91,141,239,0.85);color:#fff;font-size:20px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,0.3);';
+    b.onmouseenter = function() { this.style.background = 'rgba(91,141,239,1)'; this.style.transform = 'scale(1.1)'; };
+    b.onmouseleave = function() { this.style.background = 'rgba(91,141,239,0.85)'; this.style.transform = 'scale(1)'; };
+    b.onclick = function() { if (g.scrollTo) g.scrollTo({ top: 0, behavior: 'smooth' }); else g.scrollTop = 0; };
+    document.body.appendChild(b);
+    g.addEventListener('scroll', function() { b.style.display = g.scrollTop > 200 ? 'flex' : 'none'; });
+    b.style.display = g.scrollTop > 200 ? 'flex' : 'none';
+  }
+}
+// Create scroll button once, show on wallpaper grid scroll
+// The button is created when ensureWpScrollBtn is called (by setTimeout on page load)
+// Show scroll button when wallpaper picker opens
+if (typeof openWallpaperPicker === 'function') {
+  var _origOWP = openWallpaperPicker;
+  openWallpaperPicker = function() {
+    _origOWP.apply(this, arguments);
+    setTimeout(ensureWpScrollBtn, 300);
+  };
 }
 function loadPreviewImage(img, filePath) {
   var api = window.desktopWindow;
@@ -25527,7 +25988,7 @@ function sampleRenderPerf(now, dt) {
 // === 声境 Terrain Preset ===
 //  声境 — 3D 音乐地形层 (sonic-topography 算法移植)
 // ============================================================
-var TERRAIN_PRESET_INDEX = 7;
+var TERRAIN_PRESET_INDEX = 10;
 var TERRAIN_ROTATION_SPEED = 0.15;
 var terrainLayer = null;
 var terrainAudio = null;
@@ -26051,7 +26512,7 @@ function initTrayCommands() {
       case 'next': nextTrack(); break;
       case 'volume': adjustVolumeByKeyboard((data.value || 0) / 100); break;
       case 'mute': { var vr = document.getElementById('volume-range'); if (vr) vr.value = 0; } break;
-      case 'persist-session': break;
+      case 'persist-session': savePlaybackSession(); break;
     }
   });
 }
@@ -26493,7 +26954,11 @@ function animate() {
   applySkullCameraPose(dt);
 
     // Lyric Animation tick
-    if (typeof LyricAnimation !== 'undefined' && LyricAnimation.tick) LyricAnimation.tick();
+    if (typeof LyricAnimation !== 'undefined' && LyricAnimation.tick) {
+    LyricAnimation.tick();
+    // Mode and lyrics are synced on track change (applyPreferredLyricsForCurrent)
+    // and on UI interaction (setLyricAnimationMode). No per-frame push needed.
+  }
 
     // Terrain: sync rotation and update (wrapped to prevent render loop crash)
     try {
@@ -26772,5 +27237,177 @@ try {
   console.log('[PKG] Ready. Type: pkgBg, object');
 })();
 } catch(e) { console.error('[PKG] Init failed:', e); }
+
+
+// ============================================================
+//  LX 风格多句歌词（安全注入）
+// ============================================================
+setTimeout(function() {
+  try {
+    if (typeof stageLyrics === 'undefined' || typeof tickLyricsParticles !== 'function') return;
+    
+    stageLyrics.fullLines = [];
+    stageLyrics.outgoingFullLines = [];
+    stageLyrics.fullLinesIdx = -1;
+    
+    function _clrFL() {
+      for (var i = 0; i < stageLyrics.fullLines.length; i++) { if (typeof disposeLyricMesh === 'function') disposeLyricMesh(stageLyrics.fullLines[i]); }
+      stageLyrics.fullLines = [];
+      for (var j = 0; j < stageLyrics.outgoingFullLines.length; j++) { if (typeof disposeLyricMesh === 'function') disposeLyricMesh(stageLyrics.outgoingFullLines[j]); }
+      stageLyrics.outgoingFullLines = [];
+      stageLyrics.fullLinesIdx = -1;
+    }
+    
+    function _showFL() {
+      if (!stageLyrics.group) return;
+      var ni = stageLyrics.currentIdx;
+      if (ni < 0) { _clrFL(); return; }
+      if (stageLyrics.fullLinesIdx === ni && stageLyrics.fullLines.length === 5) return;
+      var rs = 0.95;
+      if (stageLyrics.fullLines.length && typeof gsap !== 'undefined') {
+        for (var oi = 0; oi < stageLyrics.fullLines.length; oi++) {
+          var om = stageLyrics.fullLines[oi];
+          if (!om || !om.userData) continue;
+          var od = om.userData.lyric; var oy = om.userData.baseY || 0;
+          if (od) od._sliding = true;
+          gsap.to(om.position, { y: oy + rs, duration: 0.85, ease: 'cubic-bezier(0.16,1,0.3,1)',
+            onComplete: (function(m) { return function() { if (typeof disposeLyricMesh === 'function') disposeLyricMesh(m); var idx = stageLyrics.outgoingFullLines.indexOf(m); if (idx >= 0) stageLyrics.outgoingFullLines.splice(idx, 1); }; })(om)
+          });
+          if (od && od.textMat) gsap.to(od.textMat.uniforms.uOpacity, { value: 0, duration: 0.65, ease: 'power2.out' });
+          stageLyrics.outgoingFullLines.push(om);
+        }
+      } else if (stageLyrics.fullLines.length) {
+        for (var di = 0; di < stageLyrics.fullLines.length; di++) { if (typeof disposeLyricMesh === 'function') disposeLyricMesh(stageLyrics.fullLines[di]); }
+      }
+      stageLyrics.fullLines = [];
+      var yo = [2*rs, rs, 0, -rs, -2*rs]; var zo = [-1.2, -0.6, 0, -0.6, -1.2];
+      var oL = [0.78, 0.9, 1.0, 0.9, 0.78]; var sL = [0.64, 0.8, 1.0, 0.8, 0.64];
+      var lns = (typeof lyricsLines !== 'undefined') ? lyricsLines : [];
+      for (var li = -2; li <= 2; li++) {
+        var nli = ni + li; var txt = '';
+        if (nli >= 0 && nli < lns.length) txt = (lns[nli] || {}).text || '';
+        if (!txt) continue;
+        if (typeof buildLyricMesh !== 'function') continue;
+        var mesh = buildLyricMesh(txt, { simpleMode: li !== 0 });
+        var ai = li + 2;
+        mesh.position.y += yo[ai]; mesh.position.z += zo[ai];
+        mesh.userData.baseY = mesh.position.y; mesh.userData.baseZ = mesh.position.z;
+        mesh.userData.fullLineOpacity = oL[ai]; mesh.userData.fullLineScale = sL[ai];
+        mesh.scale.setScalar(sL[ai]);
+        var d = mesh.userData.lyric;
+        if (d && d.textMat) { d.textMat.uniforms.uOpacity.value = oL[ai]; if (d.textMat.uniforms.uProgress) d.textMat.uniforms.uProgress.value = (li < 0) ? 1.0 : 0.0; }
+        stageLyrics.group.add(mesh);
+        stageLyrics.fullLines.push(mesh);
+        if (typeof gsap !== 'undefined' && d && d.textMat) {
+          var ty = mesh.userData.baseY;
+          mesh.position.y = ty - rs; if (d) d._sliding = true; if (d.textMat) d.textMat.uniforms.uOpacity.value = 0;
+          gsap.to(mesh.position, { y: ty, duration: 0.85, ease: 'cubic-bezier(0.16,1,0.3,1)', onComplete: function() { if (this) this._sliding = false; }.bind(d) });
+          gsap.to(d.textMat.uniforms.uOpacity, { value: oL[ai], duration: 0.75, ease: 'power3.out' });
+        }
+      }
+      stageLyrics.fullLinesIdx = ni;
+    }
+    
+    function _tickFL(dt) {
+      if (!stageLyrics.fullLines.length && !stageLyrics.outgoingFullLines.length) return;
+      var t = (typeof uniforms !== 'undefined' && uniforms.uTime) ? uniforms.uTime.value : 0;
+      var bi = (typeof uniforms !== 'undefined' && uniforms.uBass) ? uniforms.uBass.value : 0;
+      var bpi = (typeof uniforms !== 'undefined' && uniforms.uBeat) ? uniforms.uBeat.value : 0;
+      for (var i = 0; i < stageLyrics.fullLines.length; i++) {
+        var m = stageLyrics.fullLines[i]; if (!m || !m.userData || !m.userData.lyric) continue;
+        var dd = m.userData.lyric; var top = m.userData.fullLineOpacity || 0.5; var bs = m.userData.fullLineScale || 0.88;
+        var sd = m.userData.floatSeed || 0; var br = Math.sin(t * 0.92 + sd) * 0.030 + Math.sin(t * 0.41 + sd * 0.7) * 0.018;
+        if (!dd._sliding) {
+          if (dd.textMat) { var cu = dd.textMat.uniforms.uOpacity.value; dd.textMat.uniforms.uOpacity.value = cu + (top - cu) * 0.12; }
+          m.scale.setScalar(bs + br + bi * 0.02 + bpi * 0.008);
+          m.position.y += ((m.userData.baseY || 0) + Math.sin(t * 0.55 + sd) * 0.025 - m.position.y) * 0.05;
+        } else { m.scale.setScalar(bs + br); }
+        m.position.z += ((m.userData.baseZ || 0) - m.position.z) * 0.10;
+      }
+      for (var j = 0; j < stageLyrics.outgoingFullLines.length; j++) {
+        var om = stageLyrics.outgoingFullLines[j]; if (!om || !om.userData || !om.userData.lyric) continue;
+        var os = om.userData.fullLineScale || 0.88; var oSd = om.userData.floatSeed || 0;
+        var oBr = Math.sin(t * 0.92 + oSd) * 0.030 + Math.sin(t * 0.41 + oSd * 0.7) * 0.018;
+        om.scale.setScalar(os + oBr);
+      }
+    }
+    
+    // Patch tickLyricsParticles
+    var _otp = tickLyricsParticles;
+    tickLyricsParticles = function() {
+      _otp.apply(this, arguments);
+      if (typeof stageLyricMaxLines === 'function' && stageLyricMaxLines() > 1) _showFL();
+    };
+    // Patch updateStageLyrics3D
+    if (typeof updateStageLyrics3D === 'function') {
+      var _ou3 = updateStageLyrics3D;
+      updateStageLyrics3D = function(dt) {
+        _ou3.apply(this, arguments);
+        _tickFL(dt);
+      };
+    }
+    console.log('[ML] Multi-line lyrics OK');
+  } catch(e) { console.warn('[ML] Error:', e); }
+}, 500);
+
+
+// One-time lyric animation mode sync at startup
+(function _lyricAnimStartupSync() {
+  if (typeof LyricAnimation !== 'undefined' && typeof fx !== 'undefined' && fx && fx.lyricAnimationMode && fx.lyricAnimationMode !== 'off') {
+    if (typeof LyricAnimation.setMode === 'function') { try { LyricAnimation.setMode(fx.lyricAnimationMode); } catch(e) {} }
+    if (typeof lyricsLines !== 'undefined' && lyricsLines && lyricsLines.length > 0 && typeof LyricAnimation.onLyricsChanged === 'function') {
+      try { LyricAnimation.onLyricsChanged(lyricsLines); } catch(e) {}
+    }
+  }
+})();
+
+
+// ============================================================
+//  persist-session: 保存/恢复播放状态
+// ============================================================
+var SESSION_STORE_KEY = 'mineradio-session-v1';
+function savePlaybackSession() {
+  try {
+    var q = (typeof playQueue !== 'undefined' && playQueue) ? playQueue.map(function(s) {
+      return { id: s.id, provider: s.provider, name: s.name, artist: s.artist, hash: s.hash };
+    }) : [];
+    var ct = (audio && typeof audio.currentTime === 'number') ? audio.currentTime : 0;
+    var data = {
+      currentIdx: (typeof currentIdx !== 'undefined' && currentIdx >= 0) ? currentIdx : 0,
+      currentTime: ct,
+      queue: q,
+      playMode: (typeof playMode !== 'undefined') ? playMode : 'loop',
+      ts: Date.now()
+    };
+    localStorage.setItem(SESSION_STORE_KEY, JSON.stringify(data));
+  } catch(e) {}
+}
+function restorePlaybackSession() {
+  try {
+    var raw = localStorage.getItem(SESSION_STORE_KEY);
+    if (!raw) return;
+    var s = JSON.parse(raw);
+    if (!s || !s.queue || !s.queue.length) return;
+    if (Date.now() - (s.ts || 0) > 3600000) { localStorage.removeItem(SESSION_STORE_KEY); return; }
+    playQueue = s.queue;
+    if (typeof playMode !== 'undefined') playMode = s.playMode || 'loop';
+    if (typeof s.currentIdx === 'number' && s.currentIdx >= 0 && s.currentIdx < s.queue.length) {
+      currentIdx = s.currentIdx;
+    }
+    if (typeof renderQueuePanel === 'function') renderQueuePanel();
+    if (typeof showToast === 'function') {
+      var song = s.queue[s.currentIdx >= 0 ? s.currentIdx : 0];
+      showToast('\u5df2\u6062\u590d\u64ad\u653e\u961f\u5217' + (song ? ': ' + (song.name || song.title || '') : ''));
+    }
+  } catch(e) {}
+}
+// Auto-save on track change and before unload
+(function() {
+  var origPlayAt = typeof playQueueAt === 'function' ? playQueueAt : null;
+  if (origPlayAt) {
+    window.addEventListener('beforeunload', function() { savePlaybackSession(); });
+  }
+})();
+restorePlaybackSession();
 
 animate();
