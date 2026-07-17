@@ -1291,7 +1291,8 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1080px,cal
 .about-footer{margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07);font-size:10.5px;color:rgba(255,255,255,.32);line-height:1.5}
 .about-close{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:rgba(255,255,255,.66);font-size:18px;line-height:1;cursor:pointer}
 .about-close:hover{background:rgba(255,255,255,.09);color:#fff}
-.wallpaper-picker-modal{position:fixed;inset:0;z-index:1450;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.66);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.wallpaper-picker-modal{position:fixed;inset:0;z-index:1450;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.66);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:34px;overflow:hidden}
+body.desktop-shell.desktop-maximized .wallpaper-picker-modal,body.desktop-shell.desktop-fullscreen .wallpaper-picker-modal,html:fullscreen .wallpaper-picker-modal{border-radius:0!important}
 .wallpaper-picker-modal.show{display:flex}
 .wallpaper-picker-dialog{width:min(1080px,calc(100vw - 36px));max-height:min(820px,calc(100vh - 44px));border-radius:24px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(180deg,rgba(14,15,20,.96),rgba(5,6,8,.96));box-shadow:0 32px 110px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.08);padding:20px;color:#fff;overflow:auto}\n.wallpaper-picker-dialog::-webkit-scrollbar{width:3px}\n.wallpaper-picker-dialog::-webkit-scrollbar-thumb{background:rgba(var(--fc-accent-rgb),.24);border-radius:3px}
 .wallpaper-picker-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
@@ -1997,4 +1998,13 @@ body.empty-home-active.lyric-animation-stage-on #lyric-viz-stage-host.active{dis
 .wp-scroll-top-btn:active {
   transform: translateY(0) scale(.96);
   box-shadow: 0 4px 14px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+/* daily-review-video — 热评卡片视频背景 */
+.daily-review-video {
+  position: absolute !important;
+  z-index: 0 !important;
+  max-width: none !important;
+  pointer-events: none;
+  background: #050608;
 }

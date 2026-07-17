@@ -20454,6 +20454,7 @@ function closeAboutModal() {
   if (modal) modal.classList.remove('show');
 }
 var wallpaperPickerData = { roots: [], wallpapers: [], currentWallpaper: '', currentFolder: '', currentMedia: null };
+var wpPickerMode = 'apply'; // 'apply' | 'daily-review-video'
 var wpRatingFilter = 'all';
 var wpSearchText = '';
 function onWallpaperSearch() {
@@ -20803,9 +20804,20 @@ function renderWallpaperGrid() {
     if (fvBtn) card.appendChild(fvBtn);
     card.appendChild(img);
     card.appendChild(name);
-    card.addEventListener('click', function(){ console.log('[WP] card clicked:', wp.name); applyWallpaper(wp); });
+    card.addEventListener('click', function(){
+      console.log('[WP] card clicked:', wp.name, 'mode:', wpPickerMode);
+      if (wpPickerMode === 'daily-review-video') {
+        wpPickerMode = 'apply';
+        closeWallpaperPicker();
+        extractWpVideoForDailyReview(wp);
+      } else {
+        applyWallpaper(wp);
+      }
+    });
     gridEl.appendChild(card);
   });
+  // re-check scroll button visibility after grid renders
+  try { ensureWpScrollBtn(); } catch(_e) {}
 }
 
 var _wpScrollBtnCreated = false;
@@ -20815,7 +20827,7 @@ function ensureWpScrollBtn() {
   var scrollContainer = g.closest('.wallpaper-picker-dialog') || g;
   // helper: check if scrolled enough (check both dialog and grid)
   function _wpScrolled() {
-    return (scrollContainer.scrollTop > 200) || (g.scrollTop > 200);
+    return (scrollContainer.scrollTop > 80) || (g.scrollTop > 80);
   }
   // helper: scroll both containers to top
   function _wpScrollToTop() {
@@ -20839,7 +20851,7 @@ function ensureWpScrollBtn() {
     scrollContainer.addEventListener('scroll', _wpScrollHandler);
     g.addEventListener('scroll', _wpScrollHandler);
     // also re-check after grid content loads (delayed, since refreshWallpapers is async)
-    setTimeout(_wpScrollHandler, 1200);
+    setTimeout(_wpScrollHandler, 800); setTimeout(_wpScrollHandler, 2000); setTimeout(_wpScrollHandler, 4000);
   }
   var btn = document.getElementById('wp-scroll-top');
   if (btn) btn.style.display = _wpScrolled() ? 'flex' : 'none';
@@ -25732,6 +25744,9 @@ restoreWallpaper();
 // ═══════════════════════════════════════════
 var DAILY_REVIEW_QUOTES_KEY = 'mineradio-daily-review-quotes-v1';
 var DAILY_REVIEW_IMAGE_KEY = 'mineradio-daily-review-image-v1';
+var DAILY_REVIEW_VIDEO_META_KEY = 'mineradio-daily-review-video-meta-v1';
+var DAILY_REVIEW_VIDEO_BLOB_ID = 'daily-review-video-v1';
+var dailyReviewVideoObjectUrl = '';
 var dailyReviewPreviewOffset = 0;
 var dailyReviewClockTimer = null;
 var dailyReviewDefaults = [
@@ -25775,23 +25790,29 @@ function renderDailyReviewHero() {
   var quote = selectedDailyReview();
   var image = '';
   try { image = localStorage.getItem(DAILY_REVIEW_IMAGE_KEY) || ''; } catch (_) {}
+  var videoMeta = null;
+  try { videoMeta = JSON.parse(localStorage.getItem(DAILY_REVIEW_VIDEO_META_KEY) || 'null'); } catch(_e2){}
+  if (dailyReviewVideoObjectUrl) { URL.revokeObjectURL(dailyReviewVideoObjectUrl); dailyReviewVideoObjectUrl = ''; }
+  var hasMedia = image || videoMeta;
   hero.innerHTML =
-    '<div class="daily-review-card"' + (image ? ' style="background-image:url(' + cssImageUrl(image) + ');padding:0;margin:-28px;border-radius:28px;width:auto;height:calc(100% + 56px)"' : '') + '>' +
-      (image ? '<div style="display:flex;flex-direction:column;height:100%;justify-content:flex-end;padding:clamp(22px,3vw,38px)">' : '') +
+    '<div class="daily-review-card"' + (hasMedia ? ' style="' + (image ? 'background-image:url(' + cssImageUrl(image) + ');' : '') + 'padding:0;margin:-28px;border-radius:28px;width:auto;height:calc(100% + 56px)"' : '') + '>' +
+      (hasMedia ? '<div style="display:flex;flex-direction:column;height:100%;justify-content:flex-end;padding:clamp(22px,3vw,38px)">' : '') +
       '<div id="daily-review-date" class="daily-review-date"></div>' +
       '<div id="daily-review-time" class="daily-review-time">--:--</div>' +
       '<div class="daily-review-quote">' + escHtml(quote.text) + '</div>' +
       '<div class="daily-review-source">' + escHtml(quote.source || '每日热评') + '</div>' +
       '<div class="daily-review-actions">' +
-        '<button type="button" onclick="openDailyReviewImagePicker()">导入图片</button>' +
+        '<button type="button" onclick="openDailyReviewImagePicker()">导入图片/视频</button>' +
+        '<button type="button" onclick="openDailyReviewWallpaperVideo()">壁纸视频</button>' +
         '<button type="button" onclick="openDailyReviewManager()">管理热评</button>' +
         '<button type="button" onclick="nextDailyReview()">换一条</button>' +
       '</div>' +
-      (image ? '</div>' : '') +
+      (hasMedia ? '</div>' : '') +
     '</div>';
   updateDailyReviewClock();
   if (dailyReviewClockTimer) clearInterval(dailyReviewClockTimer);
   dailyReviewClockTimer = setInterval(updateDailyReviewClock, 15000);
+  if (videoMeta && !image) requestAnimationFrame(function(){ requestAnimationFrame(function(){ attachDailyReviewVideo(videoMeta); }); });
 }
 function nextDailyReview() { dailyReviewPreviewOffset += 1; renderDailyReviewHero(); }
 function openDailyReviewImagePicker() {
@@ -25800,12 +25821,13 @@ function openDailyReviewImagePicker() {
     input = document.createElement('input');
     input.id = 'daily-review-image-input';
     input.type = 'file';
-    input.accept = 'image/*';
+    input.accept = 'image/*,video/*';
     input.style.display = 'none';
     input.addEventListener('change', function(){
       var file = input.files && input.files[0];
       input.value = '';
       if (!file) return;
+      if (/^video\//i.test(file.type || '')) { openDailyReviewVideoCrop(file); return; }
       var reader = new FileReader();
       reader.onload = function(event){ openDailyReviewCrop(String(event.target.result || '')); };
       reader.readAsDataURL(file);
@@ -25813,6 +25835,101 @@ function openDailyReviewImagePicker() {
     document.body.appendChild(input);
   }
   input.click();
+}
+var dailyReviewHeroRendered = false;
+async function attachDailyReviewVideo(meta) {
+  try {
+    var card = document.querySelector('#empty-home .daily-review-card');
+    if (!card || !meta) return;
+    var blob = await getCustomBackgroundBlob(DAILY_REVIEW_VIDEO_BLOB_ID);
+    if (!blob || !card.isConnected) return;
+    if (dailyReviewVideoObjectUrl) URL.revokeObjectURL(dailyReviewVideoObjectUrl);
+    dailyReviewVideoObjectUrl = URL.createObjectURL(blob);
+    var video = document.createElement('video');
+    video.className = 'daily-review-video';
+    video.muted = true; video.loop = true; video.autoplay = true; video.playsInline = true; video.preload = 'metadata';
+    var zoom = Math.max(1, Math.min(3, Number(meta.zoom) || 1));
+    // 和图片 background-size:cover 完全同理：inset:0 撑满卡片，object-fit:cover 裁切
+    video.style.cssText = 'position:absolute!important;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;background:#050608;transform:scale(' + zoom + ');transform-origin:center;';
+    var opx = Number(meta.opx), opy = Number(meta.opy);
+    if (!isFinite(opx)) opx = 50; if (!isFinite(opy)) opy = 50;
+    video.style.objectPosition = opx + '% ' + opy + '%';
+    video.src = dailyReviewVideoObjectUrl;
+    card.insertBefore(video, card.firstChild);
+    video.play().catch(function(){});
+  } catch (_error) {}
+}
+function openDailyReviewVideoCrop(file) {
+  if (!file) return;
+  if (file.size > 300 * 1024 * 1024) { showToast('视频不能超过 300 MB'); return; }
+  var src = URL.createObjectURL(file);
+  var video = document.createElement('video');
+  video.muted = true; video.loop = true; video.playsInline = true; video.preload = 'metadata';
+  video.onloadedmetadata = function(){
+    closeDailyReviewCrop();
+    var mask = document.createElement('div');
+    mask.id = 'daily-review-crop-mask';
+    mask.className = 'playlist-select-mask';
+    mask.innerHTML =
+      '<div class="playlist-select-dialog daily-review-crop-dialog" role="dialog" aria-modal="true" aria-label="裁切每日视频">' +
+        '<div class="playlist-select-head" style="width:100%"><div><strong>裁切每日视频</strong><br><small>拖动视频调整位置，滑块缩放；以 3:4 静音循环播放</small></div><button class="fx-mini-btn ghost" data-crop-close="1">关闭</button></div>' +
+        '<canvas id="daily-review-crop-canvas" class="daily-review-crop-canvas" width="720" height="960"></canvas>' +
+        '<div class="daily-review-crop-controls"><span>缩放</span><input id="daily-review-crop-zoom" type="range" min="1" max="3" step="0.01" value="1"></div>' +
+        '<div class="playlist-import-actions" style="width:100%"><button class="fx-mini-btn ghost" data-crop-close="1">取消</button><button class="fx-mini-btn" id="daily-review-crop-save">保存视频</button></div>' +
+      '</div>';
+    document.body.appendChild(mask);
+    var canvas = mask.querySelector('#daily-review-crop-canvas');
+    var ctx = canvas.getContext('2d');
+    var zoomEl = mask.querySelector('#daily-review-crop-zoom');
+    var state = { x:0, y:0, zoom:1, dragging:false, px:0, py:0, raf:0 };
+    function bounds(){
+      var base = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+      var scale = base * state.zoom;
+      var width = video.videoWidth * scale, height = video.videoHeight * scale;
+      var maxX = Math.max(0, (width - canvas.width) / 2);
+      var maxY = Math.max(0, (height - canvas.height) / 2);
+      state.x = Math.max(-maxX, Math.min(maxX, state.x));
+      state.y = Math.max(-maxY, Math.min(maxY, state.y));
+      return { width: width, height: height };
+    }
+    function draw(){
+      var b = bounds();
+      ctx.fillStyle = '#050608';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      try { ctx.drawImage(video, (canvas.width - b.width) / 2 + state.x, (canvas.height - b.height) / 2 + state.y, b.width, b.height); } catch(_e){}
+      state.raf = requestAnimationFrame(draw);
+    }
+    zoomEl.addEventListener('input', function(){ state.zoom = Number(zoomEl.value) || 1; });
+    canvas.addEventListener('pointerdown', function(e){ state.dragging = true; state.px = e.clientX; state.py = e.clientY; canvas.classList.add('dragging'); canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', function(e){
+      if (!state.dragging) return;
+      var ratio = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
+      state.x += (e.clientX - state.px) * ratio;
+      state.y += (e.clientY - state.py) * ratio;
+      state.px = e.clientX; state.py = e.clientY;
+    });
+    function stopDrag(){ state.dragging = false; canvas.classList.remove('dragging'); }
+    canvas.addEventListener('pointerup', stopDrag);
+    canvas.addEventListener('pointercancel', stopDrag);
+    function close(){ cancelAnimationFrame(state.raf); video.pause(); URL.revokeObjectURL(src); closeDailyReviewCrop(); }
+    mask.addEventListener('click', function(e){ if(e.target === mask || e.target.closest('[data-crop-close]')) close(); });
+    mask.querySelector('#daily-review-crop-save').addEventListener('click', async function(){
+      try {
+        var b = bounds();
+        var overflowX = Math.max(0, b.width - canvas.width);
+        var overflowY = Math.max(0, b.height - canvas.height);
+        var opx = overflowX > 0 ? 50 - (state.x / overflowX) * 100 : 50;
+        var opy = overflowY > 0 ? 50 - (state.y / overflowY) * 100 : 50;
+        await putCustomBackgroundBlob(DAILY_REVIEW_VIDEO_BLOB_ID, file, { kind:'daily-review-video', name:file.name, type:file.type, size:file.size });
+        localStorage.setItem(DAILY_REVIEW_VIDEO_META_KEY, JSON.stringify({ zoom:state.zoom, opx:opx, opy:opy, name:file.name, type:file.type, naturalW:video.videoWidth, naturalH:video.videoHeight }));
+        localStorage.removeItem(DAILY_REVIEW_IMAGE_KEY);
+        close(); renderDailyReviewHero(); showToast('每日视频已按 3:4 裁切保存');
+      } catch(_error){ showToast('视频保存失败'); }
+    });
+    video.play().catch(function(){}); draw();
+  };
+  video.onerror = function(){ URL.revokeObjectURL(src); showToast('视频读取失败'); };
+  video.src = src;
 }
 function closeDailyReviewCrop() { var m = document.getElementById('daily-review-crop-mask'); if(m) m.remove(); }
 function openDailyReviewCrop(src) {
@@ -25861,12 +25978,104 @@ function openDailyReviewCrop(src) {
       oc.drawImage(img, (w - drawW) / 2 + offsetX, (h - drawH) / 2 + offsetY, drawW, drawH);
       var dataUrl = out.toDataURL('image/jpeg', 0.85);
       try { localStorage.setItem(DAILY_REVIEW_IMAGE_KEY, dataUrl); } catch(_) {}
+      try { localStorage.removeItem(DAILY_REVIEW_VIDEO_META_KEY); } catch(_) {}
       closeDailyReviewCrop();
       renderDailyReviewHero();
     });
   };
   img.src = src;
 }
+
+function openDailyReviewWallpaperVideo() {
+  wpPickerMode = 'daily-review-video';
+  openWallpaperPicker();
+}
+function extractWpVideoForDailyReview(wp) {
+  if (!wp || !wp.previewPath) return;
+  var api = window.desktopWindow;
+  if (!api || typeof api.readWallpaperFile !== 'function') { showToast('API 不可用'); return; }
+  showToast('正在提取壁纸...');
+
+  function dataUrlToFile(dataUrl, name, mime) {
+    return fetch(dataUrl).then(function(r){ return r.blob(); }).then(function(blob){
+      return new File([blob], name || 'wallpaper.mp4', { type: mime || 'video/mp4' });
+    });
+  }
+
+  function openAsVideo(dataUrl, name) {
+    dataUrlToFile(dataUrl, (name || 'wallpaper') + '.mp4', 'video/mp4').then(function(file){
+      openDailyReviewVideoCrop(file);
+    }).catch(function(){ showToast('视频转换失败'); });
+  }
+
+  function openAsImage(dataUrl) {
+    openDailyReviewCrop(dataUrl);
+  }
+
+  // 1) 优先 MP4 文件
+  var mp4List = wp.mp4Files || [];
+  if (mp4List.length > 0) {
+    var mp4Path = wp.folderPath + '/' + mp4List[0];
+    api.readWallpaperFile(mp4Path).then(function(res){
+      if (res && res.ok && res.dataUrl) { openAsVideo(res.dataUrl, wp.name); }
+      else { tryPkg(); }
+    }).catch(function(){ tryPkg(); });
+    return;
+  }
+  tryPkg();
+
+  // 2) PKG 解包
+  function tryPkg() {
+    if (!api.extractWallpaperScene) { showToast('PKG 解包不可用'); return; }
+    api.extractWallpaperScene(wp.folderPath).then(function(sr){
+      if (!sr || !sr.ok) { tryTexture(); return; }
+      // 有视频 → 直接用视频（不管几层）
+      if (sr.videos && sr.videos.length) {
+        api.readWallpaperFile(sr.videos[0].path).then(function(vr){
+          if (vr && vr.ok && vr.dataUrl) { openAsVideo(vr.dataUrl, wp.name); }
+          else { showToast('PKG 视频读取失败'); }
+        }).catch(function(){ showToast('PKG 视频读取失败'); });
+        return;
+      }
+      // 无视频：检查图层数
+      var layers = sr.layers || [];
+      if (layers.length === 1) {
+        // 单层 → 直接用这一层的图片
+        var layerPath = layers[0].path || layers[0].imagePath || layers[0].src || '';
+        if (layerPath) {
+          api.readWallpaperFile(layerPath).then(function(lr){
+            if (lr && lr.ok && lr.dataUrl) { openAsImage(lr.dataUrl); }
+            else { tryTexture(); }
+          }).catch(function(){ tryTexture(); });
+          return;
+        }
+      }
+      if (layers.length > 1) {
+        showToast('该壁纸为多层场景，请先前往壁纸选择页面录制本壁纸');
+        return;
+      }
+      // layers 为空或其他情况
+      tryTexture();
+    }).catch(function(){ tryTexture(); });
+  }
+
+  // 3) 最后尝试纹理提取
+  function tryTexture() {
+    if (!api.extractWallpaperTexture) { showToast('无法提取该壁纸'); return; }
+    api.extractWallpaperTexture(wp.folderPath).then(function(tr){
+      if (tr && tr.ok && tr.imagePath) {
+        var isVideo = /\.(mp4|webm)$/i.test(tr.imagePath);
+        api.readWallpaperFile(tr.imagePath).then(function(res){
+          if (res && res.ok && res.dataUrl) {
+            if (isVideo) { openAsVideo(res.dataUrl, wp.name); }
+            else { openAsImage(res.dataUrl); }
+          } else { showToast('壁纸读取失败'); }
+        }).catch(function(){ showToast('壁纸读取失败'); });
+      } else { showToast('无法提取该壁纸'); }
+    }).catch(function(){ showToast('提取失败'); });
+  }
+}
+
 function openDailyReviewManager() {
   var mask = document.getElementById('daily-review-manager-mask');
   if (mask) { mask.remove(); return; }
@@ -25878,12 +26087,16 @@ function openDailyReviewManager() {
   mask.innerHTML =
     '<div class="playlist-select-dialog daily-review-crop-dialog" role="dialog" aria-modal="true" aria-label="管理热评">' +
       '<textarea id="daily-review-editor" class="playlist-import-input" style="min-height:280px">' + escHtml(text) + '</textarea>' +
-      '<div class="playlist-import-actions"><button class="fx-mini-btn ghost" id="daily-review-clear-image">清除图片</button><button class="fx-mini-btn" id="daily-review-save">保存热评</button></div>' +
+      '<div class="playlist-import-actions"><button class="fx-mini-btn ghost" id="daily-review-clear-image">清除图片/视频</button><button class="fx-mini-btn" id="daily-review-save">保存热评</button></div>' +
     '</div>';
   document.body.appendChild(mask);
   mask.addEventListener('click', function(e){ if(e.target===mask) mask.remove(); });
   var clearBtn = document.getElementById('daily-review-clear-image');
-  clearBtn.addEventListener('click', function(){ try{localStorage.removeItem(DAILY_REVIEW_IMAGE_KEY)}catch(_){} mask.remove(); renderDailyReviewHero(); });
+  clearBtn.addEventListener('click', function(){
+    try{ localStorage.removeItem(DAILY_REVIEW_IMAGE_KEY); }catch(_){}
+    try{ localStorage.removeItem(DAILY_REVIEW_VIDEO_META_KEY); }catch(_){}
+    mask.remove(); renderDailyReviewHero(); showToast('已清除热评图片/视频');
+  });
   var saveBtn = document.getElementById('daily-review-save');
   saveBtn.addEventListener('click', function(){
     var lines = String(document.getElementById('daily-review-editor').value||'').split(/\n+/);
