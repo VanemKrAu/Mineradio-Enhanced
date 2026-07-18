@@ -2013,3 +2013,9 @@ body.empty-home-active.lyric-animation-stage-on #lyric-viz-stage-host.active{dis
   pointer-events: none;
   background: #050608;
 }
+
+/* Hide cursor during wallpaper recording */
+body.wr-cursor-hidden,
+body.wr-cursor-hidden * {
+  cursor: none !important;
+}

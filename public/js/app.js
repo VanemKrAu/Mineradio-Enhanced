@@ -2597,6 +2597,13 @@ function updateCinema(dt) {
 updateCamera();
 
 function recenterCamera() {
+  // [fix] force-refresh baseline from current preset before recentering
+  if (typeof fx !== "undefined" && fx && typeof orbit !== "undefined") {
+    var _rp = fx.preset;
+    var _cam = {1:[6.2,0.03],2:[7.0,0.15],3:[8.0,0.05],4:[6.5,0.04],5:[6.6,0.08],6:[7.4,0.10],7:[6.6,0.08],8:[8.8,-0.22],9:[6.6,0.08],10:[7.5,0.44]};
+    var _c = _cam[_rp] || [6.6, 0.08];
+    orbit.baselineRadius = _c[0]; orbit.baselinePhi = _c[1]; orbit.baselineTheta = (_rp === 6) ? 0.18 : (_rp === 8 ? -0.12 : 0.0);
+  }
   orbit.centerLocked = true;
   orbit.recentering = true;
   clearCenteredViewOffsets();
@@ -5121,7 +5128,7 @@ function updateLyricStarRiver(dt) {
   stageLyrics.starRiverHeight += (targetH - stageLyrics.starRiverHeight) * Math.min(1, dt * 4.6);
   u.uWidth.value = stageLyrics.starRiverWidth;
   u.uHeight.value = stageLyrics.starRiverHeight;
-  var lyricGlowStrength = fx.lyricGlow ? Math.min(0.85, Math.max(0, fx.lyricGlowStrength)) : 0;
+  var lyricGlowStrength = (fx.lyricGlow && fx.lyricAnimationMode !== 'off') ? Math.min(0.85, Math.max(0, fx.lyricGlowStrength)) : 0;
   var targetOpacity = (stageLyrics.current && fx.lyricGlowParticles)
     ? clampRange(0.22 + lyricGlowStrength * 0.58 + stageLyrics.highBloom * 0.16 + stageLyrics.beatGlow * 0.12, 0.16, 0.86)
     : 0;
@@ -6778,7 +6785,7 @@ function updateStageLyrics3D(dt) {
   if (!isFinite(stageLyrics.glowFollowY)) stageLyrics.glowFollowY = 0;
   if (!isFinite(stageLyrics.glowFollowRoll)) stageLyrics.glowFollowRoll = 0;
   var t = uniforms.uTime.value;
-  var lyricGlowStrength = fx.lyricGlow ? Math.min(0.85, Math.max(0, fx.lyricGlowStrength)) : 0;
+  var lyricGlowStrength = (fx.lyricGlow && fx.lyricAnimationMode !== 'off') ? Math.min(0.85, Math.max(0, fx.lyricGlowStrength)) : 0;
   var glowDrive = Math.min(1.7, Math.max(0, lyricGlowStrength / 0.50));
   var glowBreath = lyricGlowStrength > 0 ? (0.5 + 0.5 * Math.sin(t * 1.05)) : 0;
   var musicBloom = Math.max(lyricSunEnergy, beatPulse * 0.10);
@@ -13866,7 +13873,7 @@ function applyStartupStarfieldPreset() {
     var p = _startupPreset;
     if (typeof setPreset === 'function') setPreset(p, { silent: true, preserveCamera: false, skipTransition: true, noSave: true });
     if (typeof orbit !== 'undefined') {
-      var cam = {1:[6.2,0.03],2:[7.0,0.15],3:[8.0,0.05],4:[6.5,0.04],5:[6.6,0.08],6:[7.4,0.10],7:[6.6,0.08],8:[8.8,-0.22],9:[6.6,0.08],10:[7.5,0.15]};
+      var cam = {1:[6.2,0.03],2:[7.0,0.15],3:[8.0,0.05],4:[6.5,0.04],5:[6.6,0.08],6:[7.4,0.10],7:[6.6,0.08],8:[8.8,-0.22],9:[6.6,0.08],10:[7.5,0.44]};
       var c = cam[p] || [6.6, 0.08];
       orbit.userRadius = c[0]; orbit.userPhi = c[1]; orbit.userTheta = 0.0;
       orbit.baselineRadius = c[0]; orbit.baselinePhi = c[1]; orbit.baselineTheta = (p === 6) ? 0.18 : 0.0;
@@ -19476,7 +19483,7 @@ function setPreset(p, opts) {
     else if (p === 7) { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
     else if (p === 8) { orbit.userRadius = 8.8; orbit.userPhi = -0.22; orbit.userTheta = -0.12; orbit.baselineRadius = 8.8; orbit.baselinePhi = -0.22; }
     else if (p === 9) { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
-    else if (p === TERRAIN_PRESET_INDEX) { orbit.userRadius = 7.5; orbit.userPhi = 0.15; orbit.userTheta = 0.0; orbit.baselineRadius = 7.5; orbit.baselinePhi = 0.15; }
+    else if (p === TERRAIN_PRESET_INDEX) { orbit.userRadius = 7.5; orbit.userPhi = 0.44; orbit.userTheta = 0.0; orbit.baselineRadius = 7.5; orbit.baselinePhi = 0.44; }
     else              { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
     orbit.baselineTheta = (p === 6) ? 0.18 : (p === 8 ? -0.12 : 0.0);
   }
@@ -20490,6 +20497,8 @@ function ensureWallpaperRecordModal() {
   document.body.appendChild(modal);
   return modal;
 }
+function _wrHideCursor() { document.body.classList.add('wr-cursor-hidden'); }
+function _wrShowCursor() { document.body.classList.remove('wr-cursor-hidden'); }
 function setWallpaperRecordStatus(status, detail, progress) {
   var modal = ensureWallpaperRecordModal();
   modal.style.display = 'flex';
@@ -20510,18 +20519,18 @@ function closeWallpaperRecordModal() {
   modal.style.display = 'none';
 }
 function getScreenResolution() {
-  // Try desktopWindowState.displayBounds first (from main process)
-  if (typeof desktopWindowState !== 'undefined' && desktopWindowState.displayBounds) {
-    var db = desktopWindowState.displayBounds;
-    if (db.width > 0 && db.height > 0) return { width: db.width, height: db.height };
-  }
-  // Fallback to window.screen
-  if (window.screen) {
-    var w = window.screen.width || window.screen.availWidth || 1920;
-    var h = window.screen.height || window.screen.availHeight || 1080;
-    return { width: w, height: h };
-  }
-  return { width: 1920, height: 1080 };
+  // Force 2K minimum — larger resolution = sharper recording
+  var w = 2560, h = 1440;
+  try {
+    if (typeof desktopWindowState !== 'undefined' && desktopWindowState.displayBounds) {
+      w = Math.max(2560, desktopWindowState.displayBounds.width || 2560);
+      h = Math.max(1440, desktopWindowState.displayBounds.height || 1440);
+    } else if (window.screen) {
+      w = Math.max(2560, window.screen.width || window.screen.availWidth || 2560);
+      h = Math.max(1440, window.screen.height || window.screen.availHeight || 1440);
+    }
+  } catch(_e) {}
+  return { width: w, height: h };
 }
 
 async function clearCache() {
@@ -20738,7 +20747,11 @@ function openWallpaperPicker() {
 function closeWallpaperPicker() {
   var modal = document.getElementById('wallpaper-picker-modal');
   if (modal) modal.classList.remove('show');
-  wpPickerMode = 'apply'; // reset mode on close
+  wpPickerMode = 'apply';
+  var scrollTopBtn = document.getElementById('wp-scroll-top');
+  if (scrollTopBtn) scrollTopBtn.style.display = 'none';
+  _wpScrollCheckTimers.forEach(function(t) { clearTimeout(t); });
+  _wpScrollCheckTimers = [];
 }
 async function chooseWallpaperRoot() {
   var api = window.desktopWindow;
@@ -20987,6 +21000,7 @@ function renderWallpaperGrid() {
 }
 
 var _wpScrollBtnCreated = false;
+var _wpScrollCheckTimers = [];
 function ensureWpScrollBtn() {
   var g = document.getElementById('wp-grid');
   if (!g) return;
@@ -21013,14 +21027,28 @@ function ensureWpScrollBtn() {
     b.onclick = _wpScrollToTop;
     document.body.appendChild(b);
     // listen on both containers
-    var _wpScrollHandler = function() { b.style.display = _wpScrolled() ? 'flex' : 'none'; };
+    var _wpScrollHandler = function() {
+      // Don't show if picker is closed
+      var picker = document.getElementById('wallpaper-picker-modal');
+      if (!picker || !picker.classList.contains('show')) { b.style.display = 'none'; return; }
+      b.style.display = _wpScrolled() ? 'flex' : 'none';
+    };
     scrollContainer.addEventListener('scroll', _wpScrollHandler);
     g.addEventListener('scroll', _wpScrollHandler);
     // also re-check after grid content loads (delayed, since refreshWallpapers is async)
-    setTimeout(_wpScrollHandler, 800); setTimeout(_wpScrollHandler, 2000); setTimeout(_wpScrollHandler, 4000);
+    [800, 2000, 4000].forEach(function(ms) {
+      _wpScrollCheckTimers.push(setTimeout(_wpScrollHandler, ms));
+    });
   }
   var btn = document.getElementById('wp-scroll-top');
-  if (btn) btn.style.display = _wpScrolled() ? 'flex' : 'none';
+  if (btn) {
+    var picker = document.getElementById('wallpaper-picker-modal');
+    if (picker && picker.classList.contains('show')) {
+      btn.style.display = _wpScrolled() ? 'flex' : 'none';
+    } else {
+      btn.style.display = 'none';
+    }
+  }
 }
 function loadPreviewImage(img, filePath) {
   var api = window.desktopWindow;
@@ -26336,6 +26364,7 @@ function _execWallpaperRecording(wp, onMp4Ready) {
 
   (async function() {
     try {
+      _wrHideCursor(); // Hide cursor immediately when modal appears
       setWallpaperRecordStatus('启动中...', '正在启动 Wallpaper Engine · ' + screenRes.width + '×' + screenRes.height, 0);
       var projectPath = wp.folderPath + '\\project.json';
       var startResp = await fetch('/api/wallpaper/capture/start?id=' + encodeURIComponent(projectPath) + '&width=' + screenRes.width + '&height=' + screenRes.height, { method:'POST' });
@@ -26354,14 +26383,14 @@ function _execWallpaperRecording(wp, onMp4Ready) {
       var previewVideo = document.getElementById('wr-preview-video');
       if (previewVideo) { previewVideo.srcObject = stream; previewVideo.play().catch(function(){}); }
 
-      setWallpaperRecordStatus('预览中...', '录制区域在屏幕左上方 · 请勿将鼠标移入该区域 · ' + wallpaperRecordFps + ' FPS', 10);
+      setWallpaperRecordStatus('预览中...', '上方预览窗口内画面即为录制内容 · ' + wallpaperRecordFps + ' FPS', 10);
       await new Promise(function(r){ setTimeout(r, 2000); });
       if (wallpaperRecordAbortRequested) throw new Error('WALLPAPER_RECORD_CANCELLED');
 
-      setWallpaperRecordStatus('录制中 · 15秒', '⚠ 录制区域在屏幕左上方 · 请勿移动鼠标到该区域', 15);
+      setWallpaperRecordStatus('录制中 · 15秒', '上方预览窗口内画面即为录制内容', 15);
       var captureBlob = await recordWallpaperCaptureStream(stream, wallpaperRecordFps, function(remaining, elapsed) {
         var pct = 15 + Math.min(80, (elapsed / 15000) * 80);
-        setWallpaperRecordStatus('录制中 · 剩余 ' + remaining + 's', '⚠ 请勿将鼠标移入录制区域', pct);
+        setWallpaperRecordStatus('录制中 · 剩余 ' + remaining + 's', '上方预览窗口内画面即为录制内容', pct);
       });
       stream.getTracks().forEach(function(t){ try { t.stop(); } catch(_e) {} });
       stream = null;
@@ -26384,6 +26413,7 @@ function _execWallpaperRecording(wp, onMp4Ready) {
       wallpaperRecordActiveStream = null;
       try { await desktopApi.finishWallpaperCapture(); } catch(_e) {}
       try { await fetch('/api/wallpaper/capture/stop', { method:'POST' }); } catch(_e) {}
+      _wrShowCursor();
       wallpaperSceneRecordBusy = false;
       wallpaperRecordAbortRequested = false;
     }
@@ -26401,9 +26431,14 @@ function recordWallpaperForDailyReview(wp) {
 function recordWallpaperScene(wp) {
   console.warn("[WP] >>> recordWallpaperScene called:", wp.name);
   _execWallpaperRecording(wp, async function(mp4Blob, wp) {
-    var blobId = 'wallpaper-scene-recording-' + Date.now();
-    await putCustomBackgroundBlob(blobId, mp4Blob, { name:wp.name || 'Wallpaper', mime:'video/mp4', size:mp4Blob.size });
-    setCustomBackgroundMedia({ type:'video', id:blobId, name:(wp.name || 'Wallpaper') + '（录制）', title:wp.name || '', wallpaper:true });
+    // Convert blob to data URL for immediate playback (IndexedDB may have timing issues)
+    var dataUrl = await new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function() { resolve(reader.result); };
+      reader.onerror = function() { reject(new Error('BLOB_READ_FAILED')); };
+      reader.readAsDataURL(mp4Blob);
+    });
+    setCustomBackgroundMedia({ type:'video', src:dataUrl, name:(wp.name || 'Wallpaper') + '（录制）', title:wp.name || '', wallpaper:true });
     closeWallpaperPicker();
     showToast('录制完成并已应用');
   });
