@@ -1,5 +1,43 @@
 # 更新日志
 
+## [1.1.2] - 2026-07-18
+
+### 新增
+
+- **壁纸录制功能** — 从 LX v1.5.5 移植完整录制流水线：desktopCapturer 捕获 Wallpaper Engine 窗口 → MediaRecorder 录制 15 秒（VP8/WebM） → FFmpeg 转码 H.264 MP4
+  - **录制预览模态框**：实时视频预览 + 状态胶囊 + 进度条 + 取消按钮
+  - **自动分辨率检测**：从 `displayBounds` 读取屏幕实际分辨率，回退 `window.screen`，不再硬编码 1920×1080
+  - **硬件编码自动检测**：nvenc → qsv → amf → libx264 软件回退
+  - **FFmpeg 自动检测**：搜索 `build/tools/`、WinGet、`where.exe` 等路径
+  - **开箱即用**：ffmpeg.exe (97MB) 已打包到 `build/tools/`
+- **热评卡片视频导入** — 从 LX v1.5.5 移植
+  - **导入图片/视频**：`accept="image/*,video/*"`，自动识别文件类型
+  - **视频裁切对话框**：Canvas 实时预览 + 拖拽定位 + 缩放滑块，3:4 比例裁切
+  - **壁纸视频选择**：复用壁纸选择器（年龄分级/搜索/收藏/回顶），点击壁纸提取视频
+  - **壁纸场景录制**：多层纹理壁纸一键录制 15 秒视频，自动裁切应用
+  - **视频存储**：IndexedDB 存 blob，localStorage 存元数据（zoom/position），图片/视频互斥
+- **壁纸选择器解包/录制切换** — 头部 segment 开关，解包为默认模式，录制为手动切换
+- **清除缓存下拉菜单** — 分「解包缓存」（RePKG 纹理）和「录制缓存」（录制 MP4 + 转码临时文件）两个选项
+- **预设新增**：海啸（原海啮）、龙卷风、行星 3 个视觉预设（GLSL 着色器 + 相机基线）
+- **壁纸星标收藏** — ★/☆ 按钮 + 置顶排序 + localStorage 持久化
+
+### 修复
+
+- **预设持久化不生效** — 根因：`presetMeta` 在模块初始化时未定义，`presetMeta.length` 抛 TypeError 被 catch 吞掉，导致 `readSavedPlaybackVisualPreset` 和 `readSavedLyricLayout` 永远返回默认值。修复：`clampRange(num, 0, 100)` 安全回退
+- **壁纸回顶按钮不显示** — scroll 事件只绑定在 dialog 上，grid 也可能独立滚动。修复：双重 scroll 监听器 + 延迟重检查
+- **壁纸回顶按钮不消失** — `closeWallpaperPicker()` 未隐藏按钮。修复：关闭时设置 `display:none`
+- **壁纸回顶按钮 UI** — 从硬编码蓝色改为 `.wp-scroll-top-btn` CSS class，使用 `--fc-accent` 主题色 + 毛玻璃 + 渐变 + 14px 圆角
+- **壁纸选择器丢失窗口圆角** — modal 未继承 `border-radius:34px`。修复：添加圆角 + 最大化时自动为 0
+- **ObjectURL 内存泄漏** — `closeDailyReviewCrop` 未 revoke video blob URL。修复：移除 mask 前检查并 revoke
+- **僵尸 video 元素** — 快速点"换一条"产生残留 `<video>`。修复：`attachDailyReviewVideo` 插入前移除已有元素
+- **录制错误提示不友好** — 英文错误码改为中文提示
+- **presetMeta.length 安全防护** — `saveLyricLayout` 和 `normalizeFxArchiveSnapshot` 中的 `presetMeta.length` 加 `typeof` 检查
+
+### 变更
+
+- **海啮 → 海啸** — 预设显示名修正
+- **CSS `.daily-review-video`** — 补全 `object-fit:cover`、`width:100%`、`height:100%`、`left:50%`、`top:50%`
+
 ## [1.1.1-9] - 2025-07-14
 
 ### 新增
