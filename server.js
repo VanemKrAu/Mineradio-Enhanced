@@ -53,6 +53,8 @@ const tls = require('tls');
 const { once } = require('events');
 const { fileURLToPath } = require('url');
 const { analyzePodcastDjStream, analyzePodcastDjIntro } = require('./dj-analyzer');
+const { spawn } = require('child_process');
+const { WallpaperConverter } = require('./wallpaper-converter');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -65,6 +67,17 @@ const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(__dirname,
 const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.join(UPDATE_WORK_DIR, 'downloads');
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
 const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || 'D:\\MineradioEnhancedCache\\beatmaps';
+const DEFAULT_WALLPAPER_CACHE_DIR = fs.existsSync('D:\\')
+  ? 'D:\\MineradioCache\\wallpapers'
+  : path.join(process.env.LOCALAPPDATA || __dirname, 'MineradioCache', 'wallpapers');
+const WALLPAPER_TRANSCODE_CACHE_DIR = process.env.MINERADIO_WALLPAPER_CACHE_DIR || DEFAULT_WALLPAPER_CACHE_DIR;
+const WALLPAPER_CAPTURE_WINDOW_TITLE = 'Mineradio Wallpaper Capture';
+const wallpaperConverter = new WallpaperConverter({
+  appDir:__dirname,
+  cacheDir:WALLPAPER_TRANSCODE_CACHE_DIR,
+  resourcesPath:process.resourcesPath,
+  execPath:process.execPath,
+});
 const APP_PACKAGE = readPackageInfo();
 const APP_VERSION = process.env.MINERADIO_VERSION || APP_PACKAGE.version || '0.9.11';
 const UPDATE_CONFIG = readUpdateConfig(APP_PACKAGE);
@@ -1926,10 +1939,10 @@ async function resolveOpenMeteoLocation(query) {
   const raw = String(query || '').trim();
   if (!raw) return WEATHER_DEFAULT_LOCATION;
   const u = new URL(OPEN_METEO_GEOCODE_URL);
-  u.searchParams.set('name', raw);
-  u.searchParams.set('count', '1');
-  u.searchParams.set('language', 'zh');
-  u.searchParams.set('format', 'json');
+  url.searchParams.set('name', raw);
+  url.searchParams.set('count', '1');
+  url.searchParams.set('language', 'zh');
+  url.searchParams.set('format', 'json');
   const body = await requestJson(u.toString(), { headers: { 'User-Agent': UA } });
   const first = body && Array.isArray(body.results) && body.results[0];
   if (!first) return { ...WEATHER_DEFAULT_LOCATION, query: raw, fallback: true };
@@ -1960,12 +1973,12 @@ async function fetchOpenMeteoWeather(params) {
     location = await resolveOpenMeteoLocation(params.city || params.q || params.location);
   }
   const u = new URL(OPEN_METEO_FORECAST_URL);
-  u.searchParams.set('latitude', String(location.latitude));
-  u.searchParams.set('longitude', String(location.longitude));
-  u.searchParams.set('current', 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m');
-  u.searchParams.set('hourly', 'precipitation_probability,weather_code,temperature_2m');
-  u.searchParams.set('forecast_days', '1');
-  u.searchParams.set('timezone', location.timezone || 'auto');
+  url.searchParams.set('latitude', String(location.latitude));
+  url.searchParams.set('longitude', String(location.longitude));
+  url.searchParams.set('current', 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m');
+  url.searchParams.set('hourly', 'precipitation_probability,weather_code,temperature_2m');
+  url.searchParams.set('forecast_days', '1');
+  url.searchParams.set('timezone', location.timezone || 'auto');
   const body = await requestJson(u.toString(), { headers: { 'User-Agent': UA } });
   const cur = body && body.current || {};
   const weather = {
@@ -1998,8 +2011,8 @@ async function fetchOpenMeteoWeather(params) {
 
 async function fetchIpWeatherLocation() {
   const u = new URL(WEATHER_IP_LOCATION_URL);
-  u.searchParams.set('fields', 'status,message,country,regionName,city,lat,lon,timezone,query');
-  u.searchParams.set('lang', 'zh-CN');
+  url.searchParams.set('fields', 'status,message,country,regionName,city,lat,lon,timezone,query');
+  url.searchParams.set('lang', 'zh-CN');
   const body = await requestJson(u.toString(), { headers: { 'User-Agent': UA } });
   if (!body || body.status !== 'success' || !Number.isFinite(Number(body.lat)) || !Number.isFinite(Number(body.lon))) {
     const err = new Error(body && body.message || 'IP_LOCATION_FAILED');
@@ -2308,18 +2321,18 @@ async function getQQLoginInfo() {
   const fallback = normalizeQQProfile(null, cookieObj);
   try {
     const u = new URL('https://c.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg');
-    u.searchParams.set('cid', '205360838');
-    u.searchParams.set('userid', uin);
-    u.searchParams.set('reqfrom', '1');
-    u.searchParams.set('g_tk', '5381');
-    u.searchParams.set('loginUin', uin);
-    u.searchParams.set('hostUin', '0');
-    u.searchParams.set('format', 'json');
-    u.searchParams.set('inCharset', 'utf8');
-    u.searchParams.set('outCharset', 'utf-8');
-    u.searchParams.set('notice', '0');
-    u.searchParams.set('platform', 'yqq.json');
-    u.searchParams.set('needNewCode', '0');
+    url.searchParams.set('cid', '205360838');
+    url.searchParams.set('userid', uin);
+    url.searchParams.set('reqfrom', '1');
+    url.searchParams.set('g_tk', '5381');
+    url.searchParams.set('loginUin', uin);
+    url.searchParams.set('hostUin', '0');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('inCharset', 'utf8');
+    url.searchParams.set('outCharset', 'utf-8');
+    url.searchParams.set('notice', '0');
+    url.searchParams.set('platform', 'yqq.json');
+    url.searchParams.set('needNewCode', '0');
     const text = await requestText(u.toString(), {
       headers: { ...QQ_HEADERS, Cookie: qqCookie },
     });
@@ -2339,7 +2352,7 @@ async function qqGetJSON(targetUrl, params, opts) {
   opts = opts || {};
   const u = new URL(targetUrl);
   Object.keys(params || {}).forEach(k => {
-    if (params[k] != null) u.searchParams.set(k, String(params[k]));
+    if (params[k] != null) url.searchParams.set(k, String(params[k]));
   });
   const headers = { ...QQ_HEADERS, ...(opts.headers || {}) };
   if (opts.cookie !== false && qqCookie) headers.Cookie = qqCookie;
@@ -2562,16 +2575,16 @@ function mapQQTrack(track, fallback) {
 
 async function qqSmartboxSearch(keywords, limit) {
   const u = new URL(QQ_SMARTBOX_URL);
-  u.searchParams.set('format', 'json');
-  u.searchParams.set('key', keywords);
-  u.searchParams.set('g_tk', '5381');
-  u.searchParams.set('loginUin', '0');
-  u.searchParams.set('hostUin', '0');
-  u.searchParams.set('inCharset', 'utf8');
-  u.searchParams.set('outCharset', 'utf-8');
-  u.searchParams.set('notice', '0');
-  u.searchParams.set('platform', 'yqq.json');
-  u.searchParams.set('needNewCode', '0');
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('key', keywords);
+  url.searchParams.set('g_tk', '5381');
+  url.searchParams.set('loginUin', '0');
+  url.searchParams.set('hostUin', '0');
+  url.searchParams.set('inCharset', 'utf8');
+  url.searchParams.set('outCharset', 'utf-8');
+  url.searchParams.set('notice', '0');
+  url.searchParams.set('platform', 'yqq.json');
+  url.searchParams.set('needNewCode', '0');
   const text = await requestText(u.toString(), { headers: QQ_HEADERS });
   const json = parseJSONText(text);
   const items = json && json.data && json.data.song && json.data.song.itemlist;
@@ -3248,6 +3261,68 @@ async function getLoginInfo() {
 // ====================================================================
 //  HTTP Server
 // ====================================================================
+
+function findWallpaperEngineExecutable() {
+  const candidates = [];
+  try {
+    const regOutput = require('child_process').execFileSync('reg.exe',
+      ['query', 'HKCU\\Software\\Valve\\Steam', '/v', 'SteamPath'],
+      { encoding:'utf8', windowsHide:true, timeout:2500 });
+    const match = regOutput.match(/SteamPath\s+REG_\w+\s+(.+)$/mi);
+    if (match) {
+      const steamPath = match[1].trim().replace(/\//g, '\\');
+      candidates.push(path.join(steamPath, 'steamapps', 'common', 'wallpaper_engine', 'wallpaper64.exe'));
+      candidates.push(path.join(steamPath, 'steamapps', 'common', 'wallpaper_engine', 'wallpaper32.exe'));
+    }
+  } catch (_e) {}
+  ['C:\\Program Files\\Steam', 'C:\\Program Files (x86)\\Steam', 'D:\\Steam', 'E:\\Steam'].forEach(root => {
+    candidates.push(path.join(root, 'steamapps', 'common', 'wallpaper_engine', 'wallpaper64.exe'));
+  });
+  try {
+    const localAppData = process.env.LOCALAPPDATA || '';
+    if (localAppData) {
+      const vdfPath = path.join(localAppData, 'Steam', 'steamapps', 'libraryfolders.vdf');
+      if (fs.existsSync(vdfPath)) {
+        const vdf = fs.readFileSync(vdfPath, 'utf8');
+        const libMatches = vdf.matchAll(/"path"\s+"([^"]+)"/g);
+        for (const m of libMatches) {
+          candidates.push(path.join(m[1].replace(/\\\\/g, '\\'), 'steamapps', 'common', 'wallpaper_engine', 'wallpaper64.exe'));
+        }
+      }
+    }
+  } catch (_e) {}
+  return candidates.find(c => { try { return fs.existsSync(c) && fs.statSync(c).isFile(); } catch (_e) { return false; } }) || '';
+}
+function runWallpaperEngineControl(args) {
+  const executable = findWallpaperEngineExecutable();
+  if (!executable) throw new Error('WALLPAPER_ENGINE_NOT_FOUND');
+  const child = spawn(executable, args, { windowsHide:true, detached:true, stdio:'ignore' });
+  child.unref();
+  return executable;
+}
+function readBinaryRequestBody(req, maxBytes) {
+  const limit = Math.max(1, Number(maxBytes) || 192 * 1024 * 1024);
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    let settled = false;
+    req.on('data', chunk => {
+      if (settled) return;
+      const data = Buffer.from(chunk);
+      total += data.length;
+      if (total > limit) { settled = true; reject(new Error('WALLPAPER_RECORDING_TOO_LARGE')); return; }
+      chunks.push(data);
+    });
+    req.on('end', () => { if (!settled) { settled = true; resolve(Buffer.concat(chunks)); } });
+    req.on('error', error => { if (!settled) { settled = true; reject(error); } });
+  });
+}
+function sendJSON(res, data, status) {
+  const body = JSON.stringify(data);
+  res.writeHead(status || 200, { 'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*' });
+  res.end(body);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost:' + PORT);
   var kg = null;
@@ -4252,6 +4327,102 @@ const server = http.createServer(async (req, res) => {
       while (true) { const c = await reader.read(); if (c.done) break; res.write(c.value); }
       res.end();
     } catch (err) { console.error('[Audio]', err); res.writeHead(500); res.end(); }
+    return;
+  }
+
+  // ---------- 壁纸录制 API ----------
+
+  if (pn === '/api/wallpaper/capture/start' && req.method === 'POST') {
+    try {
+      const id = String(url.searchParams.get('id') || '');
+      const width = Math.max(640, Math.min(3840, Number(url.searchParams.get('width')) || 1920));
+      const height = Math.max(360, Math.min(2160, Number(url.searchParams.get('height')) || 1080));
+      // Validate: id must be a .json file path containing 'wallpaper_engine' or 'workshop'
+      if (!id || !/\.json$/i.test(id) || /\.\./.test(id)) {
+        sendJSON(res, { ok:false, error:'INVALID_CAPTURE_ID' }, 400);
+        return;
+      }
+      if (!/[\\/](wallpaper_engine|workshop)[\\/]/i.test(id) && !/[\\/]steamapps[\\/]/i.test(id)) {
+        sendJSON(res, { ok:false, error:'CAPTURE_ID_NOT_IN_ALLOWED_PATH' }, 403);
+        return;
+      }
+      runWallpaperEngineControl([
+        '-control', 'openWallpaper',
+        '-file', id,
+        '-playInWindow', WALLPAPER_CAPTURE_WINDOW_TITLE,
+        '-width', String(Math.round(width)),
+        '-height', String(Math.round(height)),
+        '-borderless',
+      ]);
+      sendJSON(res, { ok:true, windowTitle:WALLPAPER_CAPTURE_WINDOW_TITLE, width, height });
+    } catch (error) {
+      sendJSON(res, { ok:false, error:error.message || 'WALLPAPER_CAPTURE_START_FAILED' }, 503);
+    }
+    return;
+  }
+
+  if (pn === '/api/wallpaper/capture/stop' && req.method === 'POST') {
+    try {
+      runWallpaperEngineControl(['-control', 'closeWallpaper', '-location', WALLPAPER_CAPTURE_WINDOW_TITLE]);
+      sendJSON(res, { ok:true });
+    } catch (error) {
+      sendJSON(res, { ok:false, error:error.message || 'WALLPAPER_CAPTURE_STOP_FAILED' }, 503);
+    }
+    return;
+  }
+
+  if (pn === '/api/wallpaper/convert/recording' && req.method === 'POST') {
+    let inputFile = '';
+    let outputFile = '';
+    try {
+      const fps = Math.max(30, Math.min(60, Math.round(Number(url.searchParams.get('fps')) || 60)));
+      const raw = await readBinaryRequestBody(req, 192 * 1024 * 1024);
+      if (raw.length < 1024) throw new Error('WALLPAPER_RECORDING_EMPTY');
+      await fs.promises.mkdir(WALLPAPER_TRANSCODE_CACHE_DIR, { recursive:true });
+      inputFile = path.join(WALLPAPER_TRANSCODE_CACHE_DIR, 'capture-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + '.webm');
+      await fs.promises.writeFile(inputFile, raw);
+      const converted = await wallpaperConverter.convertRecordingFile(inputFile, { id:'scene', fps });
+      outputFile = converted.file;
+      const stat = fs.statSync(outputFile);
+      res.writeHead(200, {
+        'Content-Type':'video/mp4',
+        'Content-Length':String(stat.size),
+        'Cache-Control':'no-store',
+        'X-Mineradio-Format':converted.format,
+        'X-Mineradio-Encoder':converted.encoder,
+        'X-Mineradio-Fps':String(converted.fps),
+      });
+      const stream = fs.createReadStream(outputFile);
+      stream.pipe(res);
+      await once(stream, 'close');
+    } catch (error) {
+      if (!res.headersSent) sendJSON(res, { ok:false, error:error.message || 'WALLPAPER_RECORDING_CONVERT_FAILED' }, 500);
+      else if (!res.writableEnded) { try { res.end(); } catch(_e) {} }
+    } finally {
+      if (inputFile) try { await fs.promises.unlink(inputFile); } catch (_e) {}
+      if (outputFile) try { await fs.promises.unlink(outputFile); } catch (_e) {}
+    }
+    return;
+  }
+
+  if (pn === '/api/wallpaper/clear-transcode-cache' && req.method === 'POST') {
+    try {
+      let cleaned = 0, bytes = 0;
+      if (fs.existsSync(WALLPAPER_TRANSCODE_CACHE_DIR)) {
+        const files = await fs.promises.readdir(WALLPAPER_TRANSCODE_CACHE_DIR);
+        for (const f of files) {
+          if (!/^scene-|^capture-/.test(f)) continue;
+          const fp = path.join(WALLPAPER_TRANSCODE_CACHE_DIR, f);
+          try {
+            const stat = await fs.promises.stat(fp);
+            if (stat.isFile()) { bytes += stat.size; await fs.promises.unlink(fp); cleaned++; }
+          } catch (_e) {}
+        }
+      }
+      sendJSON(res, { ok:true, cleaned, bytes });
+    } catch (error) {
+      sendJSON(res, { ok:false, error:error.message || 'CLEAR_TRANSCODE_CACHE_FAILED' }, 500);
+    }
     return;
   }
 

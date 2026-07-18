@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   extractWallpaperTexture: (folderPath) => ipcRenderer.invoke('mineradio-wallpaper-extract-texture', folderPath),
   extractWallpaperScene: (folderPath) => ipcRenderer.invoke('mineradio-wallpaper-extract-scene', folderPath),
   autoDetectWallpapers: () => ipcRenderer.invoke('mineradio-wallpaper-auto-detect'),
+  prepareWallpaperCapture: (payload) => ipcRenderer.invoke('mineradio-wallpaper-capture-prepare', payload || {}),
+  finishWallpaperCapture: () => ipcRenderer.invoke('mineradio-wallpaper-capture-finish'),
   getTraySettings: () => ipcRenderer.invoke('mineradio-tray-get-settings'),
   setCloseToTray: (enabled) => ipcRenderer.invoke('mineradio-tray-set-close-to-tray', !!enabled),
   setStartupLaunch: (enabled) => ipcRenderer.invoke('mineradio-tray-set-startup-launch', !!enabled),

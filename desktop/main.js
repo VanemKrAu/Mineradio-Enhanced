@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, screen, session, globalShortcut, dialog, protocol } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, screen, session, globalShortcut, dialog, protocol, desktopCapturer } = require('electron');
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
@@ -28,6 +28,8 @@ let _quitting = false;
 let trayRightClickGuardUntil = 0;
 let trayPlaybackState = { title: '', artist: '', playing: false, volume: 100 };
 let closeToTrayEnabled = true;
+let preferredDisplayMediaSourceId = '';
+let preferredDisplayMediaSourceTitle = '';
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell.json';
 const registeredGlobalHotkeys = new Map();
 
@@ -1716,6 +1718,36 @@ ipcMain.handle('mineradio-wallpaper-update', async (_event, payload) => {
   }
 });
 
+
+// --- Wallpaper Recording Capture ---
+ipcMain.handle('mineradio-wallpaper-capture-prepare', async (_event, payload) => {
+  preferredDisplayMediaSourceId = '';
+  preferredDisplayMediaSourceTitle = String(payload && payload.windowTitle || '').trim().slice(0, 160);
+  if (!preferredDisplayMediaSourceTitle) return { ok:false, error:'WALLPAPER_CAPTURE_TITLE_REQUIRED' };
+  const deadline = Date.now() + 10000;
+  do {
+    try {
+      const sources = await desktopCapturer.getSources({ types:['window'], thumbnailSize:{ width:0, height:0 } });
+      const wanted = preferredDisplayMediaSourceTitle.toLowerCase();
+      const source = sources.find(item => String(item && item.name || '').toLowerCase() === wanted)
+        || sources.find(item => String(item && item.name || '').toLowerCase().includes(wanted));
+      if (source) {
+        preferredDisplayMediaSourceId = source.id;
+        return { ok:true, sourceId:source.id, sourceName:source.name };
+      }
+    } catch (_error) {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  } while (Date.now() < deadline);
+  preferredDisplayMediaSourceTitle = '';
+  return { ok:false, error:'WALLPAPER_CAPTURE_WINDOW_NOT_FOUND' };
+});
+
+ipcMain.handle('mineradio-wallpaper-capture-finish', async () => {
+  preferredDisplayMediaSourceId = '';
+  preferredDisplayMediaSourceTitle = '';
+  return { ok:true };
+});
+
 async function createWindow() {
   htmlFullscreenActive = false;
   windowFullscreenActive = false;
@@ -1847,6 +1879,23 @@ if (!gotSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
+  // --- Wallpaper Recording: auto-select capture window ---
+  if (session && session.defaultSession && typeof session.defaultSession.setDisplayMediaRequestHandler === 'function') {
+    session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+      const types = preferredDisplayMediaSourceId ? ['window', 'screen'] : ['screen'];
+      desktopCapturer.getSources({ types, thumbnailSize: { width:0, height:0 } })
+        .then((sources) => {
+          const source = preferredDisplayMediaSourceId
+            ? sources.find(item => item && item.id === preferredDisplayMediaSourceId)
+            : sources[0];
+          if (!source) { callback({}); return; }
+          callback(preferredDisplayMediaSourceId ? { video:source } : { video:source, audio:'loopback' });
+        })
+        .catch(() => callback({}));
+    });
+  }
+
+
     screen.on('display-metrics-changed', () => {
       positionDesktopLyricsWindow();
       positionWallpaperWindow();

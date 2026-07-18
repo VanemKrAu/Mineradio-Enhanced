@@ -5348,7 +5348,7 @@ function saveLyricLayout() {
   try {
     var presetForSave = startupVisualPreviewActive && !playing && currentIdx < 0
       ? playbackVisualPreset
-      : clampRange(Number(fx.preset) || 0, 0, presetMeta.length - 1);
+      : clampRange(Number(fx.preset) || 0, 0, (typeof presetMeta !== 'undefined' && presetMeta.length) ? presetMeta.length - 1 : 12);
     localStorage.setItem(LYRIC_LAYOUT_STORE_KEY, JSON.stringify({
       visualPresetSchema: VISUAL_PRESET_SCHEMA,
       desktopLyricsSchema: 'desktop-lyrics-v3',
@@ -18332,7 +18332,7 @@ function archiveMode(raw, key, pattern, fallback) {
 }
 function normalizeFxArchiveSnapshot(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  var savedPreset = clampRange(Number(raw.preset) || 0, 0, presetMeta.length - 1);
+  var savedPreset = clampRange(Number(raw.preset) || 0, 0, (typeof presetMeta !== 'undefined' && presetMeta.length) ? presetMeta.length - 1 : 12);
   if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) savedPreset = 5;
   return {
     visualPresetSchema: VISUAL_PRESET_SCHEMA,
@@ -20344,6 +20344,7 @@ function ensureHotkeyModal() {
     var resetBtn = e.target.closest('[data-hotkey-reset]');
     if (resetBtn) resetHotkeyBinding(resetBtn.getAttribute('data-hotkey-action'), resetBtn.getAttribute('data-hotkey-reset'));
   });
+
   return modal;
 }
 function hotkeyStatusMarkup(scope, actionKey, binding, duplicate) {
@@ -20454,15 +20455,101 @@ function closeAboutModal() {
   if (modal) modal.classList.remove('show');
 }
 var wallpaperPickerData = { roots: [], wallpapers: [], currentWallpaper: '', currentFolder: '', currentMedia: null };
-var wpPickerMode = 'apply'; // 'apply' | 'daily-review-video'
+var wpPickerMode = 'apply';
+var wpExtractMode = 'extract'; // 'extract' | 'record'
+var wallpaperSceneRecordBusy = false;
+var wallpaperRecordAbortRequested = false;
+var wallpaperRecordFps = 60;
+var wallpaperRecordActiveStream = null; // 'apply' | 'daily-review-video'
 var wpRatingFilter = 'all';
 var wpSearchText = '';
 function onWallpaperSearch() {
   wpSearchText = (document.getElementById('wp-search-input').value || '').trim().toLowerCase();
   renderWallpaperGrid();
 }
+// === Recording Preview Modal ===
+function ensureWallpaperRecordModal() {
+  var existing = document.getElementById('wallpaper-record-modal');
+  if (existing) return existing;
+  var modal = document.createElement('div');
+  modal.id = 'wallpaper-record-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:2600;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)';
+  modal.innerHTML =
+    '<div style="width:min(720px,calc(100vw - 36px));max-height:calc(100vh - 44px);border-radius:20px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(180deg,rgba(14,15,20,.96),rgba(5,6,8,.96));box-shadow:0 32px 110px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.08);padding:20px;color:#fff;display:flex;flex-direction:column;gap:14px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+        '<div style="font-size:15px;font-weight:800">Scene 实时录制</div>' +
+        '<button id="wr-cancel-btn" type="button" style="height:30px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:rgba(255,255,255,.78);font:700 11px inherit;cursor:pointer" onclick="wallpaperRecordAbortRequested=true">取消</button>' +
+      '</div>' +
+      '<div style="position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:16px;border:1px solid rgba(255,255,255,.16);background:#050608">' +
+        '<video id="wr-preview-video" muted autoplay playsinline style="display:block;width:100%;height:100%;object-fit:contain;background:#000"></video>' +
+        '<div id="wr-preview-status" style="position:absolute;left:12px;bottom:12px;padding:7px 11px;border-radius:999px;background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.16);color:#fff;font-size:12px;font-weight:800;backdrop-filter:blur(10px)">准备中...</div>' +
+      '</div>' +
+      '<div style="height:8px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.10)"><i id="wr-progress-fill" style="display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#65d6ff,#8cffc8);box-shadow:0 0 18px rgba(101,214,255,.36);transition:width .22s linear"></i></div>' +
+      '<div id="wr-detail" style="min-height:20px;color:rgba(255,255,255,.66);font-size:12px;text-align:center">准备中</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  return modal;
+}
+function setWallpaperRecordStatus(status, detail, progress) {
+  var modal = ensureWallpaperRecordModal();
+  modal.style.display = 'flex';
+  var statusEl = document.getElementById('wr-preview-status');
+  var detailEl = document.getElementById('wr-detail');
+  var fill = document.getElementById('wr-progress-fill');
+  if (statusEl && status != null) statusEl.textContent = String(status);
+  if (detailEl && detail != null) detailEl.textContent = String(detail);
+  if (fill && progress != null) fill.style.width = Math.max(0, Math.min(100, Number(progress) || 0)) + '%';
+}
+function closeWallpaperRecordModal() {
+  var modal = document.getElementById('wallpaper-record-modal');
+  if (!modal) return;
+  var video = document.getElementById('wr-preview-video');
+  if (video) { video.srcObject = null; }
+  var fill = document.getElementById('wr-progress-fill');
+  if (fill) fill.style.width = '0%';
+  modal.style.display = 'none';
+}
+function getScreenResolution() {
+  // Try desktopWindowState.displayBounds first (from main process)
+  if (typeof desktopWindowState !== 'undefined' && desktopWindowState.displayBounds) {
+    var db = desktopWindowState.displayBounds;
+    if (db.width > 0 && db.height > 0) return { width: db.width, height: db.height };
+  }
+  // Fallback to window.screen
+  if (window.screen) {
+    var w = window.screen.width || window.screen.availWidth || 1920;
+    var h = window.screen.height || window.screen.availHeight || 1080;
+    return { width: w, height: h };
+  }
+  return { width: 1920, height: 1080 };
+}
+
 async function clearCache() {
-  if (!confirm("确定要清理所有提取的高清壁纸纹理缓存吗？\\n\\n清理后需要重新提取。")) return;
+  // Show dropdown menu with cache type options
+  var btn = document.getElementById('wp-clear-cache');
+  if (!btn) return;
+  var existing = document.getElementById('wp-clear-cache-menu');
+  if (existing) { existing.remove(); return; }
+  var menu = document.createElement('div');
+  menu.id = 'wp-clear-cache-menu';
+  menu.style.cssText = 'position:absolute;top:calc(100% + 4px);left:0;min-width:140px;background:rgba(14,15,20,.98);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:4px;z-index:20;box-shadow:0 12px 32px rgba(0,0,0,.45)';
+  menu.innerHTML = '<button class="wp-rating-item" type="button" data-clear="extract" title="清理 RePKG 提取的高清壁纸纹理缓存">解包缓存</button><button class="wp-rating-item" type="button" data-clear="record" title="清理录制的视频（壁纸场景录制和热评视频背景）">录制缓存</button>';
+  btn.style.position = 'relative';
+  btn.appendChild(menu);
+  var closeMenu = function() { if (menu.isConnected) menu.remove(); document.removeEventListener('click', closeMenu); };
+  setTimeout(function() { document.addEventListener('click', closeMenu); }, 50);
+  menu.addEventListener('click', function(e) {
+    var item = e.target.closest('[data-clear]');
+    if (!item) return;
+    e.stopPropagation();
+    closeMenu();
+    var type = item.getAttribute('data-clear');
+    if (type === 'extract') clearExtractCache();
+    else if (type === 'record') clearRecordCache();
+  });
+}
+async function clearExtractCache() {
+  if (!confirm("确定要清理所有提取的高清壁纸纹理缓存吗？\n\n清理后需要重新提取。")) return;
   var api = window.desktopWindow;
   if (!api || typeof api.clearWallpaperCache !== "function") { showToast("API 不可用"); return; }
   showToast("正在清理缓存...");
@@ -20475,6 +20562,46 @@ async function clearCache() {
       showToast("清理失败");
     }
   } catch(e) { showToast("清理失败"); }
+}
+async function clearRecordCache() {
+  if (!confirm("确定要清理所有录制的视频缓存吗？\n\n包括壁纸场景录制和热评视频背景，清理后无法恢复。")) return;
+  showToast("正在清理录制缓存...");
+  try {
+    // 1. Clear IndexedDB recording blobs
+    var db = await openCustomBackgroundDb();
+    var cleared = 0;
+    await new Promise(function(resolve, reject) {
+      var tx = db.transaction(CUSTOM_BG_STORE, 'readwrite');
+      var store = tx.objectStore(CUSTOM_BG_STORE);
+      var req = store.openCursor();
+      req.onsuccess = function(e) {
+        var cursor = e.target.result;
+        if (cursor) {
+          var val = cursor.value;
+          if (val && (val.kind === 'daily-review-video' || (val.id && val.id.indexOf('wallpaper-scene-recording-') === 0))) {
+            cursor.delete();
+            cleared++;
+          }
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+    // 2. Clear daily review video meta
+    try { localStorage.removeItem('mineradio-daily-review-video-meta-v1'); } catch(_e) {}
+    // 3. Clear scene recordings metadata
+    try { localStorage.removeItem('mineradio-wallpaper-scene-recordings-v1'); } catch(_e) {}
+    // 4. Clear FFmpeg transcode cache (server-side)
+    try {
+      var resp = await fetch('/api/wallpaper/clear-transcode-cache', { method:'POST' });
+      await resp.json().catch(function(){});
+    } catch(_e) {}
+    showToast("已清理 " + cleared + " 个录制缓存");
+  } catch(e) {
+    console.warn('[clearRecordCache]', e);
+    showToast("清理录制缓存失败");
+  }
 }
 function setWpRatingFilter(rating) {
   wpRatingFilter = rating;
@@ -20503,6 +20630,10 @@ function ensureWallpaperPickerModal() {
           '<button class="wp-btn" id="wp-refresh" type="button">刷新</button>' +
           '<button class="wp-btn" id="wp-clear-cache" type="button" title="清理提取的高清纹理缓存">清理缓存</button>' +
           '<button class="wp-btn" id="wp-reset-layers" type="button" title="恢复当前壁纸所有图层为初始可见状态">重置图层</button>' +
+          '<div class="wp-mode-toggle" id="wp-mode-toggle" style="display:flex;gap:0;margin-left:8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);overflow:hidden">' +
+            '<button class="wp-mode-btn active" data-mode="extract" type="button" style="height:28px;padding:0 12px;border:0;background:rgba(var(--fc-accent-rgb),.12);color:var(--fc-accent);font:700 11px inherit;cursor:pointer;transition:background .18s,color .18s">解包</button>' +
+            '<button class="wp-mode-btn" data-mode="record" type="button" style="height:28px;padding:0 12px;border:0;background:transparent;color:rgba(255,255,255,.50);font:700 11px inherit;cursor:pointer;transition:background .18s,color .18s">录制</button>' +
+          '</div>' +
           '<button class="wallpaper-picker-close" type="button" id="wp-close" aria-label="关闭">×</button>' +
         '</div>' +
       '</div>' +
@@ -20564,9 +20695,36 @@ function ensureWallpaperPickerModal() {
       });
     });
   }
+  // --- Wallpaper mode toggle (extract/record) ---
+  var wpModeToggle = document.getElementById("wp-mode-toggle");
+  if (wpModeToggle) {
+    wpModeToggle.addEventListener("click", function(e) {
+      var btn = e.target.closest("[data-mode]");
+      if (!btn) return;
+      var mode = btn.getAttribute("data-mode");
+      console.warn("[WP] TOGGLE CLICK:", mode, "was:", wpExtractMode); if (mode === wpExtractMode) return;
+      wpExtractMode = mode;
+      try { localStorage.setItem("mineradio-wp-extract-mode", mode); } catch(_e) {}
+      wpModeToggle.querySelectorAll(".wp-mode-btn").forEach(function(b) {
+        var active = b.getAttribute("data-mode") === mode;
+        b.classList.toggle("active", active);
+        b.style.background = active ? "rgba(var(--fc-accent-rgb),.12)" : "transparent";
+        b.style.color = active ? "var(--fc-accent)" : "rgba(255,255,255,.50)";
+      });
+      renderWallpaperGrid();
+    });
+  }
+  // Restore saved mode
+  // Always default to extract mode — record mode is per-session opt-in
+  wpExtractMode = "extract";
+  // Sync toggle UI with restored mode (directly, not via .click() which has early-return guard)
+  if (wpModeToggle) { wpModeToggle.querySelectorAll(".wp-mode-btn").forEach(function(b) { var active = b.getAttribute("data-mode") === wpExtractMode; b.classList.toggle("active", active); b.style.background = active ? "rgba(var(--fc-accent-rgb),.12)" : "transparent"; b.style.color = active ? "var(--fc-accent)" : "rgba(255,255,255,.50)"; }); }
+
   return modal;
 }
 function openWallpaperPicker() {
+  console.warn("[WP] openWallpaperPicker: wpExtractMode=" + wpExtractMode + " wpPickerMode=" + wpPickerMode);
+  if (wallpaperSceneRecordBusy) { showToast('录制进行中，请稍候'); return; }
   var modal = ensureWallpaperPickerModal();
   modal.classList.add('show');
   var labelMap = { all:'全部', Everyone:'全年龄', Questionable:'可疑', Mature:'成人' };
@@ -20580,6 +20738,7 @@ function openWallpaperPicker() {
 function closeWallpaperPicker() {
   var modal = document.getElementById('wallpaper-picker-modal');
   if (modal) modal.classList.remove('show');
+  wpPickerMode = 'apply'; // reset mode on close
 }
 async function chooseWallpaperRoot() {
   var api = window.desktopWindow;
@@ -20778,6 +20937,7 @@ function renderWallpaperGrid() {
     if (wp.hasPkg) tags.push('PKG');
     if (wp.mp4Files && wp.mp4Files.length) tags.push('视频');
     if (tags.length === 0) tags.push('图片');
+    var showRecordBtn = wpExtractMode === 'record' && wp.hasPkg;
     var rating = { Everyone: '全年龄', Questionable: '可疑', Mature: '成人' }[wp.rating] || '';
     if (rating) tags.push(rating);
     sub.textContent = tags.join(' · ');
@@ -20805,13 +20965,19 @@ function renderWallpaperGrid() {
     card.appendChild(img);
     card.appendChild(name);
     card.addEventListener('click', function(){
-      console.log('[WP] card clicked:', wp.name, 'mode:', wpPickerMode);
+      console.warn('[WP] CARD CLICK:', wp.name, 'wpPickerMode=' + wpPickerMode, 'wpExtractMode=' + wpExtractMode, 'hasPkg=' + wp.hasPkg, 'mp4Files=' + (wp.mp4Files ? wp.mp4Files.length : 0));
       if (wpPickerMode === 'daily-review-video') {
         wpPickerMode = 'apply';
         closeWallpaperPicker();
+        // 热评视频模式：始终走解包逻辑，多层纹理时提示切换录制模式
         extractWpVideoForDailyReview(wp);
       } else {
-        applyWallpaper(wp);
+        // 背景壁纸模式：根据解包/录制切换分流
+        if (wpExtractMode === 'record' && wp.hasPkg) {
+          recordWallpaperScene(wp);
+        } else {
+          applyWallpaper(wp);
+        }
       }
     });
     gridEl.appendChild(card);
@@ -20877,6 +21043,7 @@ function loadImageAsDataUrl(filePath) {
   });
 }
 function applyWallpaper(wp) {
+  console.warn("[WP] >>> applyWallpaper called:", wp.name);
   if (!wp || !wp.previewPath) return;
   wallpaperPickerData.currentWallpaper = wp.previewPath;
   wallpaperPickerData.currentFolder = wp.folderPath || '';
@@ -25843,6 +26010,9 @@ async function attachDailyReviewVideo(meta) {
     if (!card || !meta) return;
     var blob = await getCustomBackgroundBlob(DAILY_REVIEW_VIDEO_BLOB_ID);
     if (!blob || !card.isConnected) return;
+    // Remove any existing video element (prevents zombie elements on rapid re-render)
+    var existingVideo = card.querySelector('.daily-review-video');
+    if (existingVideo) { if (existingVideo.src && existingVideo.src.startsWith('blob:')) { try { URL.revokeObjectURL(existingVideo.src); } catch(_e) {} } existingVideo.remove(); }
     if (dailyReviewVideoObjectUrl) URL.revokeObjectURL(dailyReviewVideoObjectUrl);
     dailyReviewVideoObjectUrl = URL.createObjectURL(blob);
     var video = document.createElement('video');
@@ -25931,7 +26101,7 @@ function openDailyReviewVideoCrop(file) {
   video.onerror = function(){ URL.revokeObjectURL(src); showToast('视频读取失败'); };
   video.src = src;
 }
-function closeDailyReviewCrop() { var m = document.getElementById('daily-review-crop-mask'); if(m) m.remove(); }
+function closeDailyReviewCrop() { var m = document.getElementById('daily-review-crop-mask'); if(m) { var v = m.querySelector('video'); if(v && v.src && v.src.startsWith('blob:')) { try { URL.revokeObjectURL(v.src); } catch(_e) {} } m.remove(); } }
 function openDailyReviewCrop(src) {
   var img = new Image();
   img.onload = function(){
@@ -26051,7 +26221,7 @@ function extractWpVideoForDailyReview(wp) {
         }
       }
       if (layers.length > 1) {
-        showToast('该壁纸为多层场景，请先前往壁纸选择页面录制本壁纸');
+        showToast('该壁纸为多层场景，请切换到录制模式后重试');
         return;
       }
       // layers 为空或其他情况
@@ -26074,6 +26244,169 @@ function extractWpVideoForDailyReview(wp) {
       } else { showToast('无法提取该壁纸'); }
     }).catch(function(){ showToast('提取失败'); });
   }
+}
+
+
+// === Wallpaper Recording Functions ===
+function wallpaperRecorderMimeType() {
+  var candidates = ['video/webm;codecs=vp8', 'video/webm', 'video/webm;codecs=vp9'];
+  if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== 'function') return 'video/webm';
+  return candidates.find(function(type){ return MediaRecorder.isTypeSupported(type); }) || 'video/webm';
+}
+
+async function openWallpaperCaptureStream(sourceId, fps, screenW, screenH) {
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function' || !sourceId) {
+    throw new Error('WALLPAPER_CAPTURE_UNSUPPORTED');
+  }
+  var maxFrameRate = Math.max(24, Math.min(60, Number(fps) || 30));
+  var sw = Math.max(640, Number(screenW) || 1920);
+  var sh = Math.max(360, Number(screenH) || 1080);
+  // Try legacy desktop source first (more stable on Windows)
+  try {
+    var legacyStream = await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{ mandatory:{ chromeMediaSource:'desktop', chromeMediaSourceId:String(sourceId), maxWidth:sw, maxHeight:sh, maxFrameRate:maxFrameRate } }
+    });
+    if (legacyStream && legacyStream.getVideoTracks && legacyStream.getVideoTracks().length) return legacyStream;
+    if (legacyStream) legacyStream.getTracks().forEach(function(track){ try { track.stop(); } catch(_e) {} });
+  } catch (error) {
+    console.warn('[WallpaperCapture:legacy]', error);
+  }
+  // Fallback: getDisplayMedia (main process auto-selects via setDisplayMediaRequestHandler)
+  try {
+    var gdmStream = await navigator.mediaDevices.getDisplayMedia({ video:{ width:{ideal:sw}, height:{ideal:sh}, frameRate:{ideal:maxFrameRate} }, audio:false });
+    if (gdmStream && gdmStream.getVideoTracks && gdmStream.getVideoTracks().length) return gdmStream;
+    if (gdmStream) gdmStream.getTracks().forEach(function(track){ try { track.stop(); } catch(_e) {} });
+  } catch (error) {
+    console.warn('[WallpaperCapture:gdm]', error);
+  }
+  throw new Error('WALLPAPER_CAPTURE_STREAM_FAILED');
+}
+
+function recordWallpaperCaptureStream(stream, fps, onProgress) {
+  return new Promise(function(resolve, reject) {
+    var mimeType = wallpaperRecorderMimeType();
+    var bitsPerSecond = fps >= 60 ? 8000000 : 5000000;
+    var recorder;
+    try { recorder = new MediaRecorder(stream, { mimeType:mimeType, videoBitsPerSecond:bitsPerSecond }); }
+    catch(e) { recorder = new MediaRecorder(stream); }
+    var chunks = [];
+    recorder.ondataavailable = function(e) { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onerror = function(e) { reject(new Error('MEDIA_RECORDER_ERROR')); };
+    recorder.onstop = function() { resolve(new Blob(chunks, { type:mimeType })); };
+    recorder.start(500);
+    var duration = 15000;
+    var startTime = Date.now();
+    var pollTimer = setInterval(function() {
+      if (wallpaperRecordAbortRequested) { clearInterval(pollTimer); try { recorder.stop(); } catch(_e) {} return; }
+      var elapsed = Date.now() - startTime;
+      var remaining = Math.max(0, Math.ceil((duration - elapsed) / 1000));
+      if (onProgress) onProgress(remaining, elapsed);
+      if (elapsed >= duration) { clearInterval(pollTimer); try { recorder.stop(); } catch(_e) {} }
+    }, 160);
+  });
+}
+
+async function convertWallpaperRecordingBlob(blob, fps) {
+  var api = window.desktopWindow;
+  if (!api) throw new Error('API_UNAVAILABLE');
+  var resp = await fetch('/api/wallpaper/convert/recording?fps=' + encodeURIComponent(fps || 60), {
+    method:'POST',
+    headers:{ 'Content-Type':blob.type || 'video/webm' },
+    body:blob
+  });
+  if (!resp.ok) {
+    var errBody = await resp.json().catch(function(){ return {}; });
+    throw new Error(errBody.error || 'CONVERT_FAILED_' + resp.status);
+  }
+  return await resp.blob();
+}
+
+// Shared recording helper — captures 15s of Wallpaper Engine → MP4 blob
+function _execWallpaperRecording(wp, onMp4Ready) {
+  if (wallpaperSceneRecordBusy) { showToast('录制进行中'); return; }
+  if (!window.desktopWindow || typeof window.desktopWindow.prepareWallpaperCapture !== 'function') {
+    showToast('录制功能不可用'); return;
+  }
+  wallpaperSceneRecordBusy = true;
+  wallpaperRecordAbortRequested = false;
+  var desktopApi = window.desktopWindow;
+  var stream = null;
+  var screenRes = getScreenResolution();
+
+  (async function() {
+    try {
+      setWallpaperRecordStatus('启动中...', '正在启动 Wallpaper Engine · ' + screenRes.width + '×' + screenRes.height, 0);
+      var projectPath = wp.folderPath + '\\project.json';
+      var startResp = await fetch('/api/wallpaper/capture/start?id=' + encodeURIComponent(projectPath) + '&width=' + screenRes.width + '&height=' + screenRes.height, { method:'POST' });
+      var start = await startResp.json();
+      if (!start || start.ok === false) throw new Error(start && start.error || 'CAPTURE_START_FAILED');
+
+      setWallpaperRecordStatus('连接中...', 'Wallpaper Engine 已启动，正在寻找录制窗口', 5);
+      var prepared = await desktopApi.prepareWallpaperCapture({ windowTitle:start.windowTitle || 'Mineradio Wallpaper Capture' });
+      if (!prepared || !prepared.ok) throw new Error(prepared && prepared.error || 'CAPTURE_WINDOW_NOT_FOUND');
+
+      stream = await openWallpaperCaptureStream(prepared.sourceId, wallpaperRecordFps, screenRes.width, screenRes.height);
+      if (!stream || !stream.getVideoTracks || !stream.getVideoTracks().length) throw new Error('STREAM_EMPTY');
+      wallpaperRecordActiveStream = stream;
+
+      // Attach live preview
+      var previewVideo = document.getElementById('wr-preview-video');
+      if (previewVideo) { previewVideo.srcObject = stream; previewVideo.play().catch(function(){}); }
+
+      setWallpaperRecordStatus('预览中...', '录制区域在屏幕左上方 · 请勿将鼠标移入该区域 · ' + wallpaperRecordFps + ' FPS', 10);
+      await new Promise(function(r){ setTimeout(r, 2000); });
+      if (wallpaperRecordAbortRequested) throw new Error('WALLPAPER_RECORD_CANCELLED');
+
+      setWallpaperRecordStatus('录制中 · 15秒', '⚠ 录制区域在屏幕左上方 · 请勿移动鼠标到该区域', 15);
+      var captureBlob = await recordWallpaperCaptureStream(stream, wallpaperRecordFps, function(remaining, elapsed) {
+        var pct = 15 + Math.min(80, (elapsed / 15000) * 80);
+        setWallpaperRecordStatus('录制中 · 剩余 ' + remaining + 's', '⚠ 请勿将鼠标移入录制区域', pct);
+      });
+      stream.getTracks().forEach(function(t){ try { t.stop(); } catch(_e) {} });
+      stream = null;
+      wallpaperRecordActiveStream = null;
+
+      setWallpaperRecordStatus('编码中...', 'FFmpeg 正在输出 H.264 · ' + screenRes.width + '×' + screenRes.height, 95);
+      var mp4Blob = await convertWallpaperRecordingBlob(captureBlob, wallpaperRecordFps);
+      setWallpaperRecordStatus('完成', '录制完成', 100);
+      await new Promise(function(r){ setTimeout(r, 400); });
+      closeWallpaperRecordModal();
+      await onMp4Ready(mp4Blob, wp);
+
+    } catch (error) {
+      console.error('[WallpaperRecord]', error);
+      closeWallpaperRecordModal();
+      var errMsg = { WALLPAPER_ENGINE_NOT_FOUND:'未检测到 Wallpaper Engine，请先安装', FFMPEG_NOT_FOUND:'未找到 FFmpeg，视频编码不可用', WALLPAPER_CAPTURE_WINDOW_NOT_FOUND:'未找到录制窗口', WALLPAPER_CAPTURE_STREAM_FAILED:'录屏流打开失败', CAPTURE_START_FAILED:'启动 Wallpaper Engine 失败', MEDIA_RECORDER_ERROR:'录制器错误', WALLPAPER_RECORD_CANCELLED:'录制已取消' };
+      showToast(errMsg[error.message] || ('录制失败: ' + (error.message || error)));
+    } finally {
+      if (stream) stream.getTracks().forEach(function(t){ try { t.stop(); } catch(_e) {} });
+      wallpaperRecordActiveStream = null;
+      try { await desktopApi.finishWallpaperCapture(); } catch(_e) {}
+      try { await fetch('/api/wallpaper/capture/stop', { method:'POST' }); } catch(_e) {}
+      wallpaperSceneRecordBusy = false;
+      wallpaperRecordAbortRequested = false;
+    }
+  })();
+}
+
+function recordWallpaperForDailyReview(wp) {
+  _execWallpaperRecording(wp, function(mp4Blob, wp) {
+    var file = new File([mp4Blob], (wp.name || 'wallpaper') + '.mp4', { type:'video/mp4' });
+    openDailyReviewVideoCrop(file);
+    showToast('录制完成，请裁切');
+  });
+}
+
+function recordWallpaperScene(wp) {
+  console.warn("[WP] >>> recordWallpaperScene called:", wp.name);
+  _execWallpaperRecording(wp, async function(mp4Blob, wp) {
+    var blobId = 'wallpaper-scene-recording-' + Date.now();
+    await putCustomBackgroundBlob(blobId, mp4Blob, { name:wp.name || 'Wallpaper', mime:'video/mp4', size:mp4Blob.size });
+    setCustomBackgroundMedia({ type:'video', id:blobId, name:(wp.name || 'Wallpaper') + '（录制）', title:wp.name || '', wallpaper:true });
+    closeWallpaperPicker();
+    showToast('录制完成并已应用');
+  });
 }
 
 function openDailyReviewManager() {
