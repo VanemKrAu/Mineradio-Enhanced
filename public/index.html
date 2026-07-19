@@ -84,6 +84,7 @@
       <button id="search-mode-netease" type="button" onclick="setSearchMode('netease')" aria-selected="false">NE</button>
       <button id="search-mode-qq" type="button" onclick="setSearchMode('qq')" aria-selected="false">QQ</button>
       <button id="search-mode-kugou" type="button" onclick="setSearchMode('kugou')" aria-selected="false">KG</button>
+      <button id="search-mode-qishui" type="button" onclick="setSearchMode('qishui')" aria-selected="false">QS</button>
     </div>
     <div id="search-results"></div>
   </div>
@@ -313,7 +314,6 @@
       <div class="fx-toggle-grid">
         <div class="fx-toggle" id="t-lyricTranslation" onclick="toggleFx('lyricTranslation')" title="显示歌词翻译行"><span>歌词翻译</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-lyricMotion" onclick="toggleFx('lyricMotion')" title="歌词文字的错位、漂浮和节拍摆动"><span>歌词错位动感</span><span class="dot"></span></div>
-        <div class="fx-toggle" id="t-lyricMultiSentence" onclick="toggleFx('lyricMultiSentence')" title="同时显示当前句和后续两句"><span>多句歌词</span><span class="dot"></span></div>
       </div>
       <div class="fx-slider"><label>歌词时间微调</label><input id="fx-lyrictimeoffset" type="range" min="-3" max="3" step="0.05"><output></output></div>
       <div class="fx-slider"><label>桌面歌词左右</label><input id="fx-desktoplyricsx" type="range" min="0.02" max="0.98" step="0.01"><output></output></div>
@@ -795,6 +795,7 @@
       <button id="login-provider-netease" class="netease active" type="button" onclick="setLoginProvider('netease')">网易云</button>
       <button id="login-provider-qq" class="qq" type="button" onclick="setLoginProvider('qq')">QQ 音乐</button>
       <button id="login-provider-kugou" class="kugou" type="button" onclick="setLoginProvider('kugou')">酷狗音乐</button>
+      <button id="login-provider-qishui" class="qishui" type="button" onclick="setLoginProvider('qishui')">汽水音乐</button>
     </div>
     
     <div class="login-intro">
@@ -838,11 +839,13 @@
       <button id="user-provider-netease" class="netease active" type="button" onclick="setActiveAccountProvider('netease')">网易云</button>
       <button id="user-provider-qq" class="qq" type="button" onclick="setActiveAccountProvider('qq')">QQ 音乐</button>
       <button id="user-provider-kugou" class="kugou" type="button" onclick="setActiveAccountProvider('kugou')">酷狗音乐</button>
+      <button id="user-provider-qishui" class="qishui" type="button" onclick="setActiveAccountProvider('qishui')">汽水音乐</button>
     </div>
     <div class="account-modal-actions">
       <button id="account-add-netease" class="modal-btn" onclick="openProviderLogin('netease')">补登网易云</button>
       <button id="account-add-qq" class="modal-btn" onclick="openProviderLogin('qq')">补登 QQ 音乐</button>
       <button id="account-add-kugou" class="modal-btn" onclick="openProviderLogin('kugou')">补登酷狗音乐</button>
+      <button id="account-add-qishui" class="modal-btn" onclick="openProviderLogin('qishui')">补登汽水音乐</button>
     </div>
     <div id="account-hint" class="account-hint">QQ 音乐真实登录暂未接入，当前先预览双平台账号交互。</div>
     <div class="btn-row">

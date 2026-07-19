@@ -62,7 +62,6 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const COOKIE_FILE = process.env.COOKIE_FILE || path.join(__dirname, '.cookie');
 const QQ_COOKIE_FILE = process.env.QQ_COOKIE_FILE || path.join(__dirname, '.qq-cookie');
 const KUGOU_COOKIE_FILE = process.env.KUGOU_COOKIE_FILE || path.join(__dirname, '.kugou-cookie');
-const KUGOU_LITE_COOKIE_FILE = process.env.KUGOU_LITE_COOKIE_FILE || path.join(__dirname, '.kugou-cookie-concept');
 const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(__dirname, 'updates');
 const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.join(UPDATE_WORK_DIR, 'downloads');
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
@@ -1939,10 +1938,10 @@ async function resolveOpenMeteoLocation(query) {
   const raw = String(query || '').trim();
   if (!raw) return WEATHER_DEFAULT_LOCATION;
   const u = new URL(OPEN_METEO_GEOCODE_URL);
-  url.searchParams.set('name', raw);
-  url.searchParams.set('count', '1');
-  url.searchParams.set('language', 'zh');
-  url.searchParams.set('format', 'json');
+  u.searchParams.set('name', raw);
+  u.searchParams.set('count', '1');
+  u.searchParams.set('language', 'zh');
+  u.searchParams.set('format', 'json');
   const body = await requestJson(u.toString(), { headers: { 'User-Agent': UA } });
   const first = body && Array.isArray(body.results) && body.results[0];
   if (!first) return { ...WEATHER_DEFAULT_LOCATION, query: raw, fallback: true };
@@ -1973,12 +1972,12 @@ async function fetchOpenMeteoWeather(params) {
     location = await resolveOpenMeteoLocation(params.city || params.q || params.location);
   }
   const u = new URL(OPEN_METEO_FORECAST_URL);
-  url.searchParams.set('latitude', String(location.latitude));
-  url.searchParams.set('longitude', String(location.longitude));
-  url.searchParams.set('current', 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m');
-  url.searchParams.set('hourly', 'precipitation_probability,weather_code,temperature_2m');
-  url.searchParams.set('forecast_days', '1');
-  url.searchParams.set('timezone', location.timezone || 'auto');
+  u.searchParams.set('latitude', String(location.latitude));
+  u.searchParams.set('longitude', String(location.longitude));
+  u.searchParams.set('current', 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m');
+  u.searchParams.set('hourly', 'precipitation_probability,weather_code,temperature_2m');
+  u.searchParams.set('forecast_days', '1');
+  u.searchParams.set('timezone', location.timezone || 'auto');
   const body = await requestJson(u.toString(), { headers: { 'User-Agent': UA } });
   const cur = body && body.current || {};
   const weather = {
@@ -2011,8 +2010,8 @@ async function fetchOpenMeteoWeather(params) {
 
 async function fetchIpWeatherLocation() {
   const u = new URL(WEATHER_IP_LOCATION_URL);
-  url.searchParams.set('fields', 'status,message,country,regionName,city,lat,lon,timezone,query');
-  url.searchParams.set('lang', 'zh-CN');
+  u.searchParams.set('fields', 'status,message,country,regionName,city,lat,lon,timezone,query');
+  u.searchParams.set('lang', 'zh-CN');
   const body = await requestJson(u.toString(), { headers: { 'User-Agent': UA } });
   if (!body || body.status !== 'success' || !Number.isFinite(Number(body.lat)) || !Number.isFinite(Number(body.lon))) {
     const err = new Error(body && body.message || 'IP_LOCATION_FAILED');
@@ -2321,18 +2320,18 @@ async function getQQLoginInfo() {
   const fallback = normalizeQQProfile(null, cookieObj);
   try {
     const u = new URL('https://c.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg');
-    url.searchParams.set('cid', '205360838');
-    url.searchParams.set('userid', uin);
-    url.searchParams.set('reqfrom', '1');
-    url.searchParams.set('g_tk', '5381');
-    url.searchParams.set('loginUin', uin);
-    url.searchParams.set('hostUin', '0');
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('inCharset', 'utf8');
-    url.searchParams.set('outCharset', 'utf-8');
-    url.searchParams.set('notice', '0');
-    url.searchParams.set('platform', 'yqq.json');
-    url.searchParams.set('needNewCode', '0');
+    u.searchParams.set('cid', '205360838');
+    u.searchParams.set('userid', uin);
+    u.searchParams.set('reqfrom', '1');
+    u.searchParams.set('g_tk', '5381');
+    u.searchParams.set('loginUin', uin);
+    u.searchParams.set('hostUin', '0');
+    u.searchParams.set('format', 'json');
+    u.searchParams.set('inCharset', 'utf8');
+    u.searchParams.set('outCharset', 'utf-8');
+    u.searchParams.set('notice', '0');
+    u.searchParams.set('platform', 'yqq.json');
+    u.searchParams.set('needNewCode', '0');
     const text = await requestText(u.toString(), {
       headers: { ...QQ_HEADERS, Cookie: qqCookie },
     });
@@ -2352,7 +2351,7 @@ async function qqGetJSON(targetUrl, params, opts) {
   opts = opts || {};
   const u = new URL(targetUrl);
   Object.keys(params || {}).forEach(k => {
-    if (params[k] != null) url.searchParams.set(k, String(params[k]));
+    if (params[k] != null) u.searchParams.set(k, String(params[k]));
   });
   const headers = { ...QQ_HEADERS, ...(opts.headers || {}) };
   if (opts.cookie !== false && qqCookie) headers.Cookie = qqCookie;
@@ -2575,16 +2574,16 @@ function mapQQTrack(track, fallback) {
 
 async function qqSmartboxSearch(keywords, limit) {
   const u = new URL(QQ_SMARTBOX_URL);
-  url.searchParams.set('format', 'json');
-  url.searchParams.set('key', keywords);
-  url.searchParams.set('g_tk', '5381');
-  url.searchParams.set('loginUin', '0');
-  url.searchParams.set('hostUin', '0');
-  url.searchParams.set('inCharset', 'utf8');
-  url.searchParams.set('outCharset', 'utf-8');
-  url.searchParams.set('notice', '0');
-  url.searchParams.set('platform', 'yqq.json');
-  url.searchParams.set('needNewCode', '0');
+  u.searchParams.set('format', 'json');
+  u.searchParams.set('key', keywords);
+  u.searchParams.set('g_tk', '5381');
+  u.searchParams.set('loginUin', '0');
+  u.searchParams.set('hostUin', '0');
+  u.searchParams.set('inCharset', 'utf8');
+  u.searchParams.set('outCharset', 'utf-8');
+  u.searchParams.set('notice', '0');
+  u.searchParams.set('platform', 'yqq.json');
+  u.searchParams.set('needNewCode', '0');
   const text = await requestText(u.toString(), { headers: QQ_HEADERS });
   const json = parseJSONText(text);
   const items = json && json.data && json.data.song && json.data.song.itemlist;
@@ -3323,10 +3322,28 @@ function sendJSON(res, data, status) {
   res.end(body);
 }
 
+// Initialize Kugou module once at startup
+var kg = null;
+try {
+  kg = require('./server-kugou');
+  kg._initDeps({ parseCookieString, normalizeCookieHeader, rawCookieFallback, requestText, requestJson });
+  console.log('[Kugou] Module loaded successfully');
+} catch(e) {
+  console.warn('[Kugou] Module load failed:', e.message);
+}
+
+// Initialize Qishui module once at startup
+var qs = null;
+try {
+  qs = require('./server-qishui');
+  qs._initDeps({ parseCookieString, normalizeCookieHeader, rawCookieFallback, requestText, requestJson });
+  console.log('[Qishui] Module loaded successfully');
+} catch(e) {
+  console.warn('[Qishui] Module load failed:', e.message);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost:' + PORT);
-  var kg = null;
-  try { kg = require('./server-kugou'); kg._initDeps({ parseCookieString, normalizeCookieHeader, rawCookieFallback, requestText, requestJson }); } catch(e) {}
 
   const pn = url.pathname;
 
@@ -4247,10 +4264,18 @@ const server = http.createServer(async (req, res) => {
 
 
   // ---------- 酷狗音乐 ----------
+  if (!kg) {
+    if (pn.startsWith('/api/kugou/')) {
+      sendJSON(res, { error: 'Kugou module not loaded', provider: 'kugou' }, 500);
+      return;
+    }
+  }
   if (pn === '/api/kugou/search') {
-    var songs = await kg.handleSearch(url.searchParams.get('keywords')||'', url.searchParams.get('limit')||'12');
-    console.log('[KugouSearch] route: found', songs.length, 'songs');
-    sendJSON(res, { songs: songs });
+    try {
+      var songs = await kg.handleSearch(url.searchParams.get('keywords')||'', url.searchParams.get('limit')||'12');
+      console.log('[KugouSearch] route: found', songs.length, 'songs');
+      sendJSON(res, { songs: songs });
+    } catch(e) { sendJSON(res, { songs: [], error: e.message }, 500); }
     return;
   }
   if (pn === '/api/kugou/login/status') {
@@ -4269,7 +4294,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readRequestBody(req);
       const raw = body.cookie||body.data||body.text||'';
-      const c = kg.normalizeCookie(raw);
+      let c = kg.normalizeCookie(raw);
       console.log('[KugouLogin] raw cookie length:', (raw||'').length, 'normalized:', c ? c.substring(0,100) : 'EMPTY');
       if (!c) { sendJSON(res, { ok:false, error:'EMPTY_COOKIE' }, 400); return; }
       // Append nickname/avatar from DOM extraction if provided
@@ -4297,12 +4322,104 @@ const server = http.createServer(async (req, res) => {
     try {
       var kgQualityHashes = null;
       try { var rh = url.searchParams.get('qualityHashes')||''; kgQualityHashes = rh ? JSON.parse(rh) : null; } catch(_) {}
-      sendJSON(res, await kg.handleSongUrl(url.searchParams.get('hash')||'', url.searchParams.get('albumAudioId')||'', url.searchParams.get('albumId')||'', url.searchParams.get('quality')||'', kgQualityHashes));
+      sendJSON(res, await kg.handleSongUrl(url.searchParams.get('hash')||'', url.searchParams.get('albumAudioId')||'', url.searchParams.get('albumId')||url.searchParams.get('kgAlbumId')||'', url.searchParams.get('quality')||'', kgQualityHashes));
     } catch(e) { sendJSON(res, { url:'', error:e.message }); }
     return;
   }
   if (pn === '/api/kugou/lyric') {
-    try { sendJSON(res, await kg.handleLyric(url.searchParams.get('hash')||'', url.searchParams.get('duration')||'')); } catch(e) { sendJSON(res, { lrc:'', tlyric:'' }); }
+    try { sendJSON(res, await kg.handleLyric(url.searchParams.get('hash')||'', url.searchParams.get('albumId')||'')); } catch(e) { sendJSON(res, { lyric:'', tlyric:'' }); }
+    return;
+  }
+
+
+  // ---------- 汽水音乐 ----------
+  if (!qs) {
+    if (pn.startsWith('/api/qishui/')) {
+      sendJSON(res, { error: 'Qishui module not loaded', provider: 'qishui' }, 500);
+      return;
+    }
+  }
+  if (pn === '/api/qishui/login/status') {
+    try { sendJSON(res, await qs.getLoginInfo()); } catch(e) { sendJSON(res, { provider:'qishui', loggedIn:false, error:e.message }, 500); }
+    return;
+  }
+  if (pn === '/api/qishui/login/cookie') {
+    try {
+      const body = await readRequestBody(req);
+      const raw = body.cookie||body.data||body.text||'';
+      let c = qs.normalizeCookie(raw);
+      if (!c) { sendJSON(res, { ok:false, error:'EMPTY_COOKIE' }, 400); return; }
+      if (body.nickname) c = c + '; nickname=' + body.nickname;
+      if (body.avatar) c = c + '; avatar=' + body.avatar;
+      qs.saveCookie(c);
+      const info = await qs.getLoginInfo();
+      sendJSON(res, { ok:true, loginInfo:info });
+    } catch(e) { sendJSON(res, { ok:false, error:e.message }, 500); }
+    return;
+  }
+  if (pn === '/api/qishui/logout') {
+    qs.saveCookie(''); sendJSON(res, { ok:true, provider:'qishui', loggedIn:false }); return;
+  }
+  if (pn === '/api/qishui/search') {
+    try {
+      const songs = await qs.handleSearch(url.searchParams.get('keywords')||'', url.searchParams.get('limit')||'20');
+      sendJSON(res, { songs });
+    } catch(e) { sendJSON(res, { songs:[], error:e.message }, 500); }
+    return;
+  }
+  if (pn === '/api/qishui/download') {
+    try {
+      const result = await qs.handleDownload(url.searchParams.get('trackId')||'', url.searchParams.get('force')==='true');
+      sendJSON(res, result);
+    } catch(e) { sendJSON(res, { url:'', error:e.message }, 500); }
+    return;
+  }
+  if (pn === '/api/qishui/lyric') {
+    try { sendJSON(res, await qs.handleLyric(url.searchParams.get('trackId')||'')); } catch(e) { sendJSON(res, { lyric:'', yrc:'' }); }
+    return;
+  }
+  if (pn === '/api/qishui/user/playlists') {
+    try { sendJSON(res, await qs.handlePlaylists()); } catch(e) { sendJSON(res, { provider:'qishui', loggedIn:false, playlists:[], error:e.message }); }
+    return;
+  }
+  if (pn === '/api/qishui/playlist/tracks') {
+    try { sendJSON(res, await qs.handlePlaylistTracks(url.searchParams.get('id')||'')); } catch(e) { sendJSON(res, { tracks:[], error:e.message }); }
+    return;
+  }
+
+
+  // ---------- 汽水音乐缓存文件 ----------
+  if (pn.startsWith('/qs-cache/')) {
+    try {
+      const cacheDir = qs ? qs.getCacheDir() : path.join(__dirname, 'qs-cache');
+      const fileName = pn.replace('/qs-cache/', '');
+      if (!fileName || fileName.includes('..')) { res.writeHead(400); res.end('Invalid path'); return; }
+      const filePath = path.join(cacheDir, fileName);
+      if (!fs.existsSync(filePath)) { res.writeHead(404); res.end('Not found'); return; }
+      const stat = fs.statSync(filePath);
+      const range = req.headers.range || '';
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+        res.writeHead(206, {
+          'Content-Type': 'audio/mp4',
+          'Content-Range': 'bytes ' + start + '-' + end + '/' + stat.size,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': end - start + 1,
+          'Access-Control-Allow-Origin': '*',
+        });
+        fs.createReadStream(filePath, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Type': 'audio/mp4',
+          'Content-Length': stat.size,
+          'Accept-Ranges': 'bytes',
+          'Access-Control-Allow-Origin': '*',
+        });
+        fs.createReadStream(filePath).pipe(res);
+      }
+    } catch(e) { res.writeHead(500); res.end(); }
     return;
   }
 
@@ -4381,26 +4498,21 @@ const server = http.createServer(async (req, res) => {
       await fs.promises.mkdir(WALLPAPER_TRANSCODE_CACHE_DIR, { recursive:true });
       inputFile = path.join(WALLPAPER_TRANSCODE_CACHE_DIR, 'capture-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + '.webm');
       await fs.promises.writeFile(inputFile, raw);
-      const converted = await wallpaperConverter.convertRecordingFile(inputFile, { id:'scene', fps });
+      const converted = await wallpaperConverter.convertRecordingFile(inputFile, { id:'rec', fps });
       outputFile = converted.file;
-      const stat = fs.statSync(outputFile);
-      res.writeHead(200, {
-        'Content-Type':'video/mp4',
-        'Content-Length':String(stat.size),
-        'Cache-Control':'no-store',
-        'X-Mineradio-Format':converted.format,
-        'X-Mineradio-Encoder':converted.encoder,
-        'X-Mineradio-Fps':String(converted.fps),
-      });
-      const stream = fs.createReadStream(outputFile);
-      stream.pipe(res);
-      await once(stream, 'close');
+      // Rename to permanent name with wp-rec- prefix for cache management
+      const permanentName = 'wp-rec-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + '.mp4';
+      const permanentPath = path.join(WALLPAPER_TRANSCODE_CACHE_DIR, permanentName);
+      await fs.promises.rename(outputFile, permanentPath);
+      outputFile = permanentPath;
+      const stat = fs.statSync(permanentPath);
+      sendJSON(res, { ok:true, filePath:permanentPath, size:stat.size, format:converted.format, encoder:converted.encoder, fps:converted.fps });
     } catch (error) {
       if (!res.headersSent) sendJSON(res, { ok:false, error:error.message || 'WALLPAPER_RECORDING_CONVERT_FAILED' }, 500);
       else if (!res.writableEnded) { try { res.end(); } catch(_e) {} }
     } finally {
       if (inputFile) try { await fs.promises.unlink(inputFile); } catch (_e) {}
-      if (outputFile) try { await fs.promises.unlink(outputFile); } catch (_e) {}
+      // Don't delete outputFile — it's the permanent recording
     }
     return;
   }
@@ -4411,7 +4523,7 @@ const server = http.createServer(async (req, res) => {
       if (fs.existsSync(WALLPAPER_TRANSCODE_CACHE_DIR)) {
         const files = await fs.promises.readdir(WALLPAPER_TRANSCODE_CACHE_DIR);
         for (const f of files) {
-          if (!/^scene-|^capture-/.test(f)) continue;
+          if (!/^scene-|^capture-|^wp-rec-/.test(f)) continue;
           const fp = path.join(WALLPAPER_TRANSCODE_CACHE_DIR, f);
           try {
             const stat = await fs.promises.stat(fp);

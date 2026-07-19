@@ -47,6 +47,8 @@ const QQ_LOGIN_PARTITION = 'persist:mineradio-qqmusic-login';
 const QQ_LOGIN_URL = 'https://y.qq.com/n/ryqq/profile';
 const KUGOU_LOGIN_PARTITION = 'persist:mineradio-kugou-login';
 const KUGOU_LOGIN_URL = 'https://www.kugou.com/';
+const QISHUI_LOGIN_PARTITION = 'persist:mineradio-qishui-login';
+const QISHUI_LOGIN_URL = 'https://www.qishui.com/';
 
 const CHROMIUM_PERFORMANCE_SWITCHES = [
   ['autoplay-policy', 'no-user-gesture-required'],
@@ -102,6 +104,8 @@ const NETEASE_LOGIN_COOKIE_PRIORITY = [
 ];
 const KUGOU_LOGIN_COOKIE_PRIORITY = ['KuGoo','kg_mid','kg_dfid','KugooID','userid','token','t','nickname','avatar','user_name','head_img','img','m_name','pic'];
 const KUGOU_LOGIN_COOKIE_DOMAINS = ['kugou.com','kgimg.com'];
+const QISHUI_LOGIN_COOKIE_PRIORITY = ['sessionid','session_id','sid','uid','user_id','nickname','avatar'];
+const QISHUI_LOGIN_COOKIE_DOMAINS = ['qishui.com','douyin.com','bytedance.com','toutiao.com'];
 
 function findOpenPort(startPort) {
   return new Promise((resolve, reject) => {
@@ -380,12 +384,25 @@ function kugouCookieHasLogin(cookieText) {
   return !!(uid && token);
 }
 function isKugouCookieDomain(domain) {
-  var normalized = String(domain || '').replace(/^./, '').toLowerCase();
+  var normalized = String(domain || '').replace(/^\./, '').toLowerCase();
   return normalized === 'kugou.com' || normalized.endsWith('.kugou.com') || normalized === 'kgimg.com' || normalized.endsWith('.kgimg.com');
 }
 async function readKugouLoginCookieHeader(cookieSession) {
   var cookies = await cookieSession.cookies.get({});
   return buildCookieHeaderFor(cookies, isKugouCookieDomain, KUGOU_LOGIN_COOKIE_PRIORITY);
+}
+function isQishuiCookieDomain(domain) {
+  var normalized = String(domain || '').replace(/^./, '').toLowerCase();
+  return normalized === 'qishui.com' || normalized.endsWith('.qishui.com') || normalized === 'douyin.com' || normalized.endsWith('.douyin.com') || normalized === 'bytedance.com' || normalized.endsWith('.bytedance.com') || normalized === 'toutiao.com' || normalized.endsWith('.toutiao.com');
+}
+function qishuiCookieHasLogin(cookieText) {
+  var obj = parseCookieHeader(cookieText);
+  var sid = obj.sessionid || obj.session_id || obj.sid || '';
+  return !!(sid && sid.length >= 20);
+}
+async function readQishuiLoginCookieHeader(cookieSession) {
+  var cookies = await cookieSession.cookies.get({});
+  return buildCookieHeaderFor(cookies, isQishuiCookieDomain, QISHUI_LOGIN_COOKIE_PRIORITY);
 }
 
 
@@ -1341,6 +1358,61 @@ async function clearKugouMusicLoginSession() {
   } catch(e) { return { ok: false, error: e.message }; }
 }
 
+async function openQishuiMusicLoginWindow(owner) {
+  var cookieSession = session.fromPartition(QISHUI_LOGIN_PARTITION);
+  var initialCookie = await readQishuiLoginCookieHeader(cookieSession);
+  if (qishuiCookieHasLogin(initialCookie)) return { ok: true, cookie: initialCookie, reused: true };
+  return new Promise(function(resolve) {
+    var settled = false;
+    var pollTimer = null;
+    var loginWindow = new BrowserWindow({
+      width: 420, height: 760, minWidth: 380, minHeight: 600,
+      parent: owner && !owner.isDestroyed() ? owner : undefined,
+      modal: false, show: false, autoHideMenuBar: true,
+      title: '汽水音乐登录', backgroundColor: '#111111',
+      icon: APP_ICON_ICO,
+      webPreferences: { partition: QISHUI_LOGIN_PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true }
+    });
+    var finish = async function(result) {
+      if (settled) return; settled = true;
+      if (pollTimer) clearInterval(pollTimer);
+      if (loginWindow && !loginWindow.isDestroyed()) loginWindow.close();
+      resolve(result);
+    };
+    var checkCookies = async function() {
+      try {
+        var cookie = await readQishuiLoginCookieHeader(cookieSession);
+        if (qishuiCookieHasLogin(cookie)) {
+          finish({ ok: true, cookie: cookie });
+        }
+      } catch(e) { console.warn('Qishui login cookie check failed:', e.message); }
+    };
+    loginWindow.webContents.setWindowOpenHandler(function() { return { action: 'deny' }; });
+    loginWindow.on('ready-to-show', function() { loginWindow.show(); });
+    loginWindow.on('closed', async function() {
+      if (settled) return;
+      if (pollTimer) clearInterval(pollTimer);
+      try {
+        var cookie = await readQishuiLoginCookieHeader(cookieSession);
+        resolve(qishuiCookieHasLogin(cookie) ? { ok: true, cookie: cookie } : { ok: false, cancelled: true, message: '汽水登录窗口已关闭' });
+      } catch(e) { resolve({ ok: false, error: e.message || '汽水登录窗口已关闭' }); }
+    });
+    // ★ 模拟手机 UA 访问汽水官网，确保显示手机版（含二维码扫码）
+    var mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+    loginWindow.webContents.setUserAgent(mobileUA);
+    pollTimer = setInterval(checkCookies, 1500);
+    loginWindow.loadURL(QISHUI_LOGIN_URL).catch(function(e) { finish({ ok: false, error: e.message }); });
+  });
+}
+async function clearQishuiMusicLoginSession() {
+  try {
+    var ses = session.fromPartition(QISHUI_LOGIN_PARTITION);
+    await ses.clearStorageData({ storages: ['cookies','localstorage'] });
+    return { ok: true };
+  } catch(e) { return { ok: false, error: e.message }; }
+}
+
+
 
 ipcMain.handle('mineradio-tray-get-settings', async () => {
   try { return { ok: true, closeToTray: closeToTrayEnabled, startup: isStartupEnabled() }; }
@@ -1449,6 +1521,13 @@ ipcMain.handle('kugou-music-open-login', async (event) => {
 ipcMain.handle('kugou-music-clear-login', async () => {
   return clearKugouMusicLoginSession();
 });
+ipcMain.handle('qishui-music-open-login', async (event) => {
+  return openQishuiMusicLoginWindow(getSenderWindow(event));
+});
+ipcMain.handle('qishui-music-clear-login', async () => {
+  return clearQishuiMusicLoginSession();
+});
+
 
 
 ipcMain.handle('mineradio-open-update-installer', async (_event, filePath) => {
@@ -1759,6 +1838,7 @@ async function createWindow() {
   process.env.COOKIE_FILE = path.join(app.getPath('userData'), '.cookie');
   process.env.QQ_COOKIE_FILE = path.join(app.getPath('userData'), '.qq-cookie');
   process.env.KUGOU_COOKIE_FILE = path.join(app.getPath('userData'), '.kugou-cookie');
+  process.env.QISHUI_COOKIE_FILE = path.join(app.getPath('userData'), '.qishui-cookie');
   process.env.MINERADIO_UPDATE_DIR = getUpdateDownloadDir();
   try {
     const legacyQQCookie = path.join(__dirname, '..', '.qq-cookie');
